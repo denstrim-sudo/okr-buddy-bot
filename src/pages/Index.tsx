@@ -6,7 +6,7 @@ import { OkrValidator } from "@/components/aimbot/OkrValidator";
 import { SolutionCard } from "@/components/aimbot/SolutionCard";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/aimbot/Logo";
-import type { GeneratedPlan } from "@/types/okr";
+import type { GeneratedPlan, ValidationDraft } from "@/types/okr";
 
 const fallbackSolutions = [
   {
@@ -44,6 +44,7 @@ const fallbackSolutions = [
 const Index = () => {
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
   const [objective, setObjective] = useState<string>("Стать самым любимым онбордингом");
+  const [validatorDraft, setValidatorDraft] = useState<ValidationDraft | null>(null);
 
   const allSolutions = useMemo(() => {
     if (!plan) return fallbackSolutions;
@@ -109,9 +110,13 @@ const Index = () => {
               onGenerated={(p, obj) => {
                 setPlan(p);
                 setObjective(p.objective_refined || obj);
+                setValidatorDraft({
+                  objective: p.objective_refined || obj,
+                  key_results: p.key_results.map((k) => k.text),
+                });
               }}
             />
-            <OkrValidator />
+            <OkrValidator draft={validatorDraft} />
           </section>
 
           <section>

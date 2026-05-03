@@ -3,6 +3,9 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  fontFamily: {
+    sans: ["Inter", "system-ui", "sans-serif"],
+  },
   prefix: "",
   theme: {
     container: {
@@ -38,6 +41,25 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          soft: "hsl(var(--success-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+          soft: "hsl(var(--warning-soft))",
+        },
+        hypothesis: {
+          DEFAULT: "hsl(var(--hypothesis))",
+          foreground: "hsl(var(--hypothesis-foreground))",
+          soft: "hsl(var(--hypothesis-soft))",
+        },
+        navy: {
+          DEFAULT: "hsl(var(--navy))",
+          foreground: "hsl(var(--navy-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",

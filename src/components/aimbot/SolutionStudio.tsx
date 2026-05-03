@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Star, RotateCcw, Target } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Star, RotateCcw, Target, Download, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -254,6 +254,53 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
   const updateAudit = (k: keyof GeneratedSolution, v: string) =>
     setAudit({ ...slice.audit, [k]: v as any });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const exportJson = () => {
+    try {
+      const payload = {
+        app: "aimbot.solutionStudio",
+        version: 2,
+        exported_at: new Date().toISOString(),
+        objective,
+        activeKey,
+        slices: state,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.href = url;
+      a.download = `aimbot-module3-${stamp}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Экспорт готов");
+    } catch (e: any) {
+      toast.error(e?.message || "Не удалось экспортировать");
+    }
+  };
+
+  const importJson = async (file: File) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || typeof data !== "object" || !data.slices || typeof data.slices !== "object") {
+        throw new Error("Неверный формат файла");
+      }
+      const mode = confirm("OK — заменить все данные модуля 3.\nОтмена — объединить с текущими (новые KR добавятся, существующие обновятся).");
+      const incomingSlices = data.slices as Record<string, KrSlice>;
+      const nextState = mode ? incomingSlices : { ...state, ...incomingSlices };
+      setState(nextState);
+      if (typeof data.objective === "string") setObjective(data.objective);
+      if (typeof data.activeKey === "string" && nextState[data.activeKey]) setActiveKey(data.activeKey);
+      toast.success(mode ? "Данные импортированы (заменено)" : "Данные импортированы (объединено)");
+    } catch (e: any) {
+      toast.error(e?.message || "Не удалось импортировать");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card className="border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft/40 via-card to-card p-6 shadow-md">
@@ -267,7 +314,20 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
               <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · сохраняется автоматически</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <Button onClick={exportJson} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Экспорт
+            </Button>
+            <Button onClick={() => fileInputRef.current?.click()} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Upload className="mr-1.5 h-3.5 w-3.5" /> Импорт
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); }}
+            />
             <Button onClick={resetActive} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Сброс KR
             </Button>

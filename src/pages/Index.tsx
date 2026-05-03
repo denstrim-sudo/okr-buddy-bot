@@ -149,6 +149,13 @@ const Index = () => {
                 />
               ))}
             </div>
+
+            <div className="mt-8">
+              <SolutionStudio
+                defaultObjective={objective}
+                defaultKeyResult={plan?.key_results?.[0]?.text || ""}
+              />
+            </div>
           </section>
         </div>
       </main>

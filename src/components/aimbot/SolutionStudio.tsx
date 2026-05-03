@@ -37,6 +37,40 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
   const [report, setReport] = useState<SolutionReport | null>(null);
   const [valLoading, setValLoading] = useState(false);
 
+  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>({});
+  const [cardLoading, setCardLoading] = useState<Record<number, boolean>>({});
+
+  const validateCard = async (idx: number, s: GeneratedSolution) => {
+    setCardLoading((p) => ({ ...p, [idx]: true }));
+    setCardReports((p) => { const n = { ...p }; delete n[idx]; return n; });
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-solution", {
+        body: { objective, key_result: keyResult, solution: s },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setCardReports((p) => ({ ...p, [idx]: data as SolutionReport }));
+      toast.success(`Аудит ${s.id || `S${idx + 1}`} · ${(data as SolutionReport).score}/100`);
+    } catch (e: any) {
+      const msg = e?.message || "Ошибка валидации";
+      if (msg.includes("Rate")) toast.error("Слишком много запросов.");
+      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты.");
+      else toast.error(msg);
+    } finally {
+      setCardLoading((p) => ({ ...p, [idx]: false }));
+    }
+  };
+
+  const applyCardRewrite = (idx: number) => {
+    const r = cardReports[idx];
+    if (!r?.rewritten_solution) return;
+    const cur = solutions[idx];
+    const next: GeneratedSolution = { ...cur, ...r.rewritten_solution, id: cur.id };
+    setSolutions((p) => p.map((x, i) => (i === idx ? next : x)));
+    toast.success("Применена AI-версия. Перепроверяю...");
+    validateCard(idx, next);
+  };
+
   const handleGenerate = async () => {
     if (objective.trim().length < 3) return toast.error("Введите Objective");
     if (keyResult.trim().length < 3) return toast.error("Введите Key Result");

@@ -3,12 +3,12 @@ import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
-  { icon: Target, label: "OKRs", key: "okrs", active: true },
-  { icon: Lightbulb, label: "Solutions", key: "solutions" },
-  { icon: BarChart3, label: "Analytics", key: "analytics" },
-  { icon: History, label: "History", key: "history" },
-  { icon: Settings, label: "Settings", key: "settings" },
+  { icon: LayoutDashboard, label: "Дашборд", key: "dashboard" },
+  { icon: Target, label: "Цели OKR", key: "okrs", active: true },
+  { icon: Lightbulb, label: "Решения", key: "solutions" },
+  { icon: BarChart3, label: "Аналитика", key: "analytics" },
+  { icon: History, label: "История", key: "history" },
+  { icon: Settings, label: "Настройки", key: "settings" },
 ];
 
 export const Sidebar = () => (
@@ -43,9 +43,9 @@ export const Sidebar = () => (
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold text-foreground">AIMBOT Pro</span>
       </div>
-      <p className="text-xs text-muted-foreground">Unlimited generations & PI Day mode</p>
+      <p className="text-xs text-muted-foreground">Безлимитные генерации и режим PI Day</p>
       <button className="mt-3 w-full rounded-lg bg-gradient-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-transform hover:scale-[1.02]">
-        Upgrade
+        Улучшить тариф
       </button>
     </div>
   </aside>

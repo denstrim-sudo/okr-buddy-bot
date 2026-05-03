@@ -19,6 +19,12 @@ const confColor = {
   High: "bg-success-soft text-success",
 } as const;
 
+const confLabel = {
+  Low: "Низкая",
+  Medium: "Средняя",
+  High: "Высокая",
+} as const;
+
 export const SolutionCard = ({ id, problem, bet, resultImage, metric, confidence, effort, validation, badge }: Props) => (
   <article className="group relative overflow-hidden rounded-2xl border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft via-card to-card p-5 shadow-md transition-all hover:border-hypothesis/60 hover:shadow-elegant">
     <div className="absolute right-0 top-0 h-24 w-24 -translate-y-12 translate-x-12 rounded-full bg-hypothesis/10 blur-2xl" />
@@ -29,8 +35,8 @@ export const SolutionCard = ({ id, problem, bet, resultImage, metric, confidence
           <Lightbulb className="h-4 w-4" strokeWidth={2.5} />
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-hypothesis">Solution · {id}</p>
-          <p className="text-xs font-medium text-muted-foreground">Strategic hypothesis</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-hypothesis">Решение · {id}</p>
+          <p className="text-xs font-medium text-muted-foreground">Стратегическая гипотеза</p>
         </div>
       </div>
       {badge && (
@@ -42,22 +48,22 @@ export const SolutionCard = ({ id, problem, bet, resultImage, metric, confidence
 
     <div className="relative space-y-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Problem / JTBD</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Проблема / JTBD</p>
         <p className="mt-0.5 text-sm font-semibold text-foreground">{problem}</p>
       </div>
       <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hypothesis</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Гипотеза</p>
         <p className="mt-1 text-sm leading-relaxed text-foreground">
-          <span className="font-medium">We believe that</span> {bet}, <span className="font-medium">which will lead to</span> {resultImage}.
+          <span className="font-medium">Мы верим, что</span> {bet}, <span className="font-medium">что приведёт к</span> {resultImage}.
         </p>
       </div>
     </div>
 
     <footer className="relative mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
-      <Stat icon={<TrendingUp className="h-3.5 w-3.5" />} label="Leading metric" value={metric} />
-      <Stat icon={<Sparkles className="h-3.5 w-3.5" />} label="Confidence" valueClass={cn("font-bold", confColor[confidence])} value={confidence} />
-      <Stat icon={<TargetIcon className="h-3.5 w-3.5" />} label="Effort" value={effort} />
-      <Stat icon={<FlaskConical className="h-3.5 w-3.5" />} label="Validation" value={validation} />
+      <Stat icon={<TrendingUp className="h-3.5 w-3.5" />} label="Опережающая метрика" value={metric} />
+      <Stat icon={<Sparkles className="h-3.5 w-3.5" />} label="Уверенность" valueClass={cn("font-bold", confColor[confidence])} value={confLabel[confidence]} />
+      <Stat icon={<TargetIcon className="h-3.5 w-3.5" />} label="Затраты" value={effort} />
+      <Stat icon={<FlaskConical className="h-3.5 w-3.5" />} label="Валидация" value={validation} />
     </footer>
   </article>
 );

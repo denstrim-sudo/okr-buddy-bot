@@ -326,53 +326,6 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
           </div>
         )}
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const exportJson = () => {
-    try {
-      const payload = {
-        app: "aimbot.solutionStudio",
-        version: 2,
-        exported_at: new Date().toISOString(),
-        objective,
-        activeKey,
-        slices: state,
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      a.href = url;
-      a.download = `aimbot-module3-${stamp}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Экспорт готов");
-    } catch (e: any) {
-      toast.error(e?.message || "Не удалось экспортировать");
-    }
-  };
-
-  const importJson = async (file: File) => {
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data || typeof data !== "object" || !data.slices || typeof data.slices !== "object") {
-        throw new Error("Неверный формат файла");
-      }
-      const mode = confirm("OK — заменить все данные модуля 3.\nОтмена — объединить с текущими (новые KR добавятся, существующие обновятся).");
-      const incomingSlices = data.slices as Record<string, KrSlice>;
-      const nextState = mode ? incomingSlices : { ...state, ...incomingSlices };
-      setState(nextState);
-      if (typeof data.objective === "string") setObjective(data.objective);
-      if (typeof data.activeKey === "string" && nextState[data.activeKey]) setActiveKey(data.activeKey);
-      toast.success(mode ? "Данные импортированы (заменено)" : "Данные импортированы (объединено)");
-    } catch (e: any) {
-      toast.error(e?.message || "Не удалось импортировать");
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">

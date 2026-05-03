@@ -224,8 +224,13 @@ export const OkrValidator = ({ draft }: Props) => {
       )}
 
       {report && (report.rewritten_objective || report.rewritten_key_results?.length > 0) && (
-        <Button onClick={applyRewrite} variant="outline" className="border-primary/30 text-primary hover:bg-accent">
-          <Wand2 className="mr-2 h-4 w-4" /> Применить переработку AI
+        <Button
+          onClick={applyAndRevalidate}
+          disabled={loading}
+          variant="outline"
+          className="border-primary/30 text-primary hover:bg-accent"
+        >
+          <Wand2 className="mr-2 h-4 w-4" /> Применить AI-версию и перепроверить
         </Button>
       )}
     </Card>

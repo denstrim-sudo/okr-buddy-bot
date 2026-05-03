@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2, Star, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

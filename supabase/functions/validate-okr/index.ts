@@ -23,7 +23,7 @@ Deno.serve(async (req: Request) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { objective, key_results } = await req.json();
+    const { objective, key_results, extra_context } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return new Response(JSON.stringify({ error: "Objective is required (min 3 chars)" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -40,7 +40,11 @@ Deno.serve(async (req: Request) => {
       .filter((s) => s.length > 4)
       .join("\n");
 
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS:\n${krList}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology.`;
+    const extraBlock = typeof extra_context === "string" && extra_context.trim().length > 20
+      ? `\n\nЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):\n${extra_context.trim().slice(0, 12000)}`
+      : "";
+
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS:\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology.`;
 
     const tool = {
       type: "function",

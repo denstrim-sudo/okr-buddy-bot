@@ -25,7 +25,7 @@ Deno.serve(async (req: Request) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { objective, key_result, solution } = await req.json();
+    const { objective, key_result, solution, extra_context } = await req.json();
     if (!solution || typeof solution !== "object") {
       return new Response(JSON.stringify({ error: "solution object is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -42,7 +42,11 @@ Deno.serve(async (req: Request) => {
 
     const krText = typeof key_result === "string" ? key_result : key_result?.text;
 
-    const userPrompt = `OBJECTIVE: ${objective || "(not provided)"}\nKEY RESULT: ${krText || "(not provided)"}\n\nSOLUTION:\n- Problem: ${solution.problem}\n- Bet: ${solution.bet}\n- Result image: ${solution.result_image}\n- Leading metric: ${solution.leading_metric}\n- Confidence: ${solution.confidence ?? "-"}\n- Effort: ${solution.effort ?? "-"}\n- Validation: ${solution.validation ?? "-"}\n\nAudit and return the report.`;
+    const extraBlock = typeof extra_context === "string" && extra_context.trim().length > 20
+      ? `\n\nЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология и база знаний — используй при аудите):\n${extra_context.trim().slice(0, 12000)}`
+      : "";
+
+    const userPrompt = `OBJECTIVE: ${objective || "(not provided)"}\nKEY RESULT: ${krText || "(not provided)"}\n\nSOLUTION:\n- Problem: ${solution.problem}\n- Bet: ${solution.bet}\n- Result image: ${solution.result_image}\n- Leading metric: ${solution.leading_metric}\n- Confidence: ${solution.confidence ?? "-"}\n- Effort: ${solution.effort ?? "-"}\n- Validation: ${solution.validation ?? "-"}${extraBlock}\n\nAudit and return the report.`;
 
     const tool = {
       type: "function",

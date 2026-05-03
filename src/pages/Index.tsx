@@ -154,6 +154,7 @@ const Index = () => {
               <SolutionStudio
                 defaultObjective={objective}
                 defaultKeyResult={plan?.key_results?.[0]?.text || ""}
+                keyResults={plan?.key_results?.map((k) => k.text) ?? []}
               />
             </div>
           </section>

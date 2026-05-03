@@ -183,15 +183,40 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
   return (
     <div className="space-y-6">
       <Card className="border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft/40 via-card to-card p-6 shadow-md">
-        <header className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-hypothesis text-hypothesis-foreground shadow-sm">
-            <Sparkles className="h-4.5 w-4.5" />
+        <header className="mb-4 flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-hypothesis text-hypothesis-foreground shadow-sm">
+              <Sparkles className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Генератор стратегических решений</h3>
+              <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · сохраняется автоматически</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-semibold text-foreground">Генератор стратегических решений</h3>
-            <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · из Objective + KR</p>
-          </div>
+          <Button onClick={resetAll} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Сброс
+          </Button>
         </header>
+
+        {selected.size > 0 && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-accent/40 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">В проекте · {selected.size}</p>
+            <ul className="space-y-1 text-sm text-foreground">
+              {Array.from(selected).sort((a, b) => a - b).map((idx) => {
+                const s = solutions[idx]; if (!s) return null;
+                const rep = cardReports[idx];
+                return (
+                  <li key={idx} className="flex items-start gap-2">
+                    <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 fill-primary text-primary" />
+                    <span className="flex-1"><span className="font-mono text-xs text-muted-foreground">{s.id || `S${idx + 1}`}</span> · {s.bet}</span>
+                    {rep && <span className="text-xs font-bold text-primary">{rep.score}/100</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">

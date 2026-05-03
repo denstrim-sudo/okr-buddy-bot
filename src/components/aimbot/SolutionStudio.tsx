@@ -314,7 +314,20 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
               <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · сохраняется автоматически</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <Button onClick={exportJson} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Экспорт
+            </Button>
+            <Button onClick={() => fileInputRef.current?.click()} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Upload className="mr-1.5 h-3.5 w-3.5" /> Импорт
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); }}
+            />
             <Button onClick={resetActive} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Сброс KR
             </Button>

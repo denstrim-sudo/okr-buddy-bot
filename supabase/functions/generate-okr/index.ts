@@ -36,6 +36,8 @@ Given an Objective and team context, you must:
    - Includes confidence (Low/Medium/High), effort (S/M/L/XL), and a lightweight validation approach (prototype, A/B test, discovery sprint, spike, etc.)
    - Never use implementation language ("build", "launch", "develop", "ship") as the core verb
 
+IMPORTANT: All generated text content (objective_refined, KR text, baseline, target, metric, problem, bet, result_image, leading_metric, validation) MUST be written in RUSSIAN language. Only the enum values (kr_type, confidence, effort) stay in English as they map to UI codes.
+
 Return STRICT JSON only via the provided tool.`;
 
 Deno.serve(async (req: Request) => {

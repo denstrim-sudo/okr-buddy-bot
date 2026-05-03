@@ -145,8 +145,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
                 </span>
               </div>
               <div className="mt-2.5 grid grid-cols-3 gap-2 text-xs">
-                <Stat icon={<Target className="h-3 w-3" />} label="База" value={kr.baseline} />
-                <Stat icon={<TrendingUp className="h-3 w-3" />} label="Цель" value={kr.target} />
+                <Stat icon={<Target className="h-3 w-3" />} label="Базовое значение" value={kr.baseline} />
+                <Stat icon={<TrendingUp className="h-3 w-3" />} label="Целевое значение" value={kr.target} />
                 <Stat icon={<ChevronRight className="h-3 w-3" />} label="Метрика" value={kr.metric} />
               </div>
             </div>

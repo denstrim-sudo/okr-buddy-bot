@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2, Star, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,19 +26,61 @@ const EMPTY_SOL: GeneratedSolution = {
   validation: "",
 };
 
+const STORAGE_KEY = "aimbot.solutionStudio.v1";
+
+interface PersistedState {
+  objective: string;
+  keyResult: string;
+  context: string;
+  solutions: GeneratedSolution[];
+  audit: GeneratedSolution;
+  report: SolutionReport | null;
+  cardReports: Record<number, SolutionReport>;
+  selected: number[];
+}
+
 export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }: Props) => {
-  const [objective, setObjective] = useState(defaultObjective);
-  const [keyResult, setKeyResult] = useState(defaultKeyResult);
-  const [context, setContext] = useState("");
-  const [solutions, setSolutions] = useState<GeneratedSolution[]>([]);
+  const initial = (() => {
+    if (typeof window === "undefined") return null;
+    try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? (JSON.parse(raw) as PersistedState) : null; } catch { return null; }
+  })();
+
+  const [objective, setObjective] = useState(initial?.objective ?? defaultObjective);
+  const [keyResult, setKeyResult] = useState(initial?.keyResult ?? defaultKeyResult);
+  const [context, setContext] = useState(initial?.context ?? "");
+  const [solutions, setSolutions] = useState<GeneratedSolution[]>(initial?.solutions ?? []);
   const [genLoading, setGenLoading] = useState(false);
 
-  const [audit, setAudit] = useState<GeneratedSolution>(EMPTY_SOL);
-  const [report, setReport] = useState<SolutionReport | null>(null);
+  const [audit, setAudit] = useState<GeneratedSolution>(initial?.audit ?? EMPTY_SOL);
+  const [report, setReport] = useState<SolutionReport | null>(initial?.report ?? null);
   const [valLoading, setValLoading] = useState(false);
 
-  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>({});
+  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>(initial?.cardReports ?? {});
   const [cardLoading, setCardLoading] = useState<Record<number, boolean>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set(initial?.selected ?? []));
+
+  useEffect(() => {
+    try {
+      const data: PersistedState = { objective, keyResult, context, solutions, audit, report, cardReports, selected: Array.from(selected) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+  }, [objective, keyResult, context, solutions, audit, report, cardReports, selected]);
+
+  const toggleSelected = (idx: number) => {
+    setSelected((p) => {
+      const n = new Set(p);
+      if (n.has(idx)) n.delete(idx); else n.add(idx);
+      return n;
+    });
+  };
+
+  const resetAll = () => {
+    if (!confirm("Очистить сохранённые результаты модуля 3?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    setSolutions([]); setCardReports({}); setReport(null); setAudit(EMPTY_SOL); setSelected(new Set());
+    toast.success("Сохранённые данные очищены");
+  };
+
 
   const validateCard = async (idx: number, s: GeneratedSolution) => {
     setCardLoading((p) => ({ ...p, [idx]: true }));
@@ -141,15 +183,40 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
   return (
     <div className="space-y-6">
       <Card className="border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft/40 via-card to-card p-6 shadow-md">
-        <header className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-hypothesis text-hypothesis-foreground shadow-sm">
-            <Sparkles className="h-4.5 w-4.5" />
+        <header className="mb-4 flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-hypothesis text-hypothesis-foreground shadow-sm">
+              <Sparkles className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Генератор стратегических решений</h3>
+              <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · сохраняется автоматически</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-semibold text-foreground">Генератор стратегических решений</h3>
-            <p className="text-xs text-muted-foreground">Модуль 3 · OKR-PI · из Objective + KR</p>
-          </div>
+          <Button onClick={resetAll} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Сброс
+          </Button>
         </header>
+
+        {selected.size > 0 && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-accent/40 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">В проекте · {selected.size}</p>
+            <ul className="space-y-1 text-sm text-foreground">
+              {Array.from(selected).sort((a, b) => a - b).map((idx) => {
+                const s = solutions[idx]; if (!s) return null;
+                const rep = cardReports[idx];
+                return (
+                  <li key={idx} className="flex items-start gap-2">
+                    <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 fill-primary text-primary" />
+                    <span className="flex-1"><span className="font-mono text-xs text-muted-foreground">{s.id || `S${idx + 1}`}</span> · {s.bet}</span>
+                    {rep && <span className="text-xs font-bold text-primary">{rep.score}/100</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
@@ -188,15 +255,19 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
                     validation={s.validation}
                     badge={rep ? `${rep.score}/100` : undefined}
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Button onClick={() => validateCard(i, s)} disabled={loading} variant="outline" size="sm" className="border-navy/30 text-navy hover:bg-secondary">
-                      {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
-                      Проверить здесь
+                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Проверить</>}
                     </Button>
                     <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
-                      <Wand2 className="mr-2 h-3.5 w-3.5" /> В детальный аудит
+                      <Wand2 className="mr-1.5 h-3.5 w-3.5" /> В аудит
+                    </Button>
+                    <Button onClick={() => toggleSelected(i)} variant={selected.has(i) ? "default" : "outline"} size="sm" className={selected.has(i) ? "bg-primary text-primary-foreground" : "border-primary/30 text-primary hover:bg-accent"}>
+                      <Star className={cn("mr-1.5 h-3.5 w-3.5", selected.has(i) && "fill-current")} />
+                      {selected.has(i) ? "В проекте" : "Выбрать"}
                     </Button>
                   </div>
+
                   {rep && (
                     <div className="rounded-lg border border-border bg-secondary/30 p-3">
                       {rep.summary && <p className="mb-2 text-xs text-foreground">{rep.summary}</p>}

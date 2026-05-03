@@ -37,6 +37,40 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
   const [report, setReport] = useState<SolutionReport | null>(null);
   const [valLoading, setValLoading] = useState(false);
 
+  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>({});
+  const [cardLoading, setCardLoading] = useState<Record<number, boolean>>({});
+
+  const validateCard = async (idx: number, s: GeneratedSolution) => {
+    setCardLoading((p) => ({ ...p, [idx]: true }));
+    setCardReports((p) => { const n = { ...p }; delete n[idx]; return n; });
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-solution", {
+        body: { objective, key_result: keyResult, solution: s },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setCardReports((p) => ({ ...p, [idx]: data as SolutionReport }));
+      toast.success(`Аудит ${s.id || `S${idx + 1}`} · ${(data as SolutionReport).score}/100`);
+    } catch (e: any) {
+      const msg = e?.message || "Ошибка валидации";
+      if (msg.includes("Rate")) toast.error("Слишком много запросов.");
+      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты.");
+      else toast.error(msg);
+    } finally {
+      setCardLoading((p) => ({ ...p, [idx]: false }));
+    }
+  };
+
+  const applyCardRewrite = (idx: number) => {
+    const r = cardReports[idx];
+    if (!r?.rewritten_solution) return;
+    const cur = solutions[idx];
+    const next: GeneratedSolution = { ...cur, ...r.rewritten_solution, id: cur.id };
+    setSolutions((p) => p.map((x, i) => (i === idx ? next : x)));
+    toast.success("Применена AI-версия. Перепроверяю...");
+    validateCard(idx, next);
+  };
+
   const handleGenerate = async () => {
     if (objective.trim().length < 3) return toast.error("Введите Objective");
     if (keyResult.trim().length < 3) return toast.error("Введите Key Result");
@@ -138,23 +172,62 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
 
         {solutions.length > 0 && (
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {solutions.map((s, i) => (
-              <div key={i} className="space-y-2">
-                <SolutionCard
-                  id={s.id || `S${i + 1}`}
-                  problem={s.problem}
-                  bet={s.bet}
-                  resultImage={s.result_image}
-                  metric={s.leading_metric}
-                  confidence={s.confidence}
-                  effort={s.effort}
-                  validation={s.validation}
-                />
-                <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="w-full border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
-                  <ShieldCheck className="mr-2 h-3.5 w-3.5" /> Проверить это решение
-                </Button>
-              </div>
-            ))}
+            {solutions.map((s, i) => {
+              const rep = cardReports[i];
+              const loading = cardLoading[i];
+              return (
+                <div key={i} className="space-y-2">
+                  <SolutionCard
+                    id={s.id || `S${i + 1}`}
+                    problem={s.problem}
+                    bet={s.bet}
+                    resultImage={s.result_image}
+                    metric={s.leading_metric}
+                    confidence={s.confidence}
+                    effort={s.effort}
+                    validation={s.validation}
+                    badge={rep ? `${rep.score}/100` : undefined}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={() => validateCard(i, s)} disabled={loading} variant="outline" size="sm" className="border-navy/30 text-navy hover:bg-secondary">
+                      {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                      Проверить здесь
+                    </Button>
+                    <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
+                      <Wand2 className="mr-2 h-3.5 w-3.5" /> В детальный аудит
+                    </Button>
+                  </div>
+                  {rep && (
+                    <div className="rounded-lg border border-border bg-secondary/30 p-3">
+                      {rep.summary && <p className="mb-2 text-xs text-foreground">{rep.summary}</p>}
+                      <ul className="space-y-1.5">
+                        {rep.rules.map((r) => (
+                          <li key={r.id} className="flex items-start gap-2 text-xs">
+                            {r.pass ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />}
+                            <div className="flex-1">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="font-mono text-[10px] font-bold text-muted-foreground">[{r.id}]</span>
+                                <span>{r.label}</span>
+                              </div>
+                              {!r.pass && r.hint && (
+                                <p className="mt-0.5 flex items-start gap-1 text-[11px] text-muted-foreground">
+                                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />{r.hint}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      {rep.rewritten_solution && (
+                        <Button onClick={() => applyCardRewrite(i)} disabled={loading} variant="outline" size="sm" className="mt-3 w-full border-primary/30 text-primary hover:bg-accent">
+                          <Wand2 className="mr-2 h-3.5 w-3.5" /> Применить AI-версию и перепроверить
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

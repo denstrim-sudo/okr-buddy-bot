@@ -255,15 +255,19 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
                     validation={s.validation}
                     badge={rep ? `${rep.score}/100` : undefined}
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Button onClick={() => validateCard(i, s)} disabled={loading} variant="outline" size="sm" className="border-navy/30 text-navy hover:bg-secondary">
-                      {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
-                      Проверить здесь
+                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Проверить</>}
                     </Button>
                     <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
-                      <Wand2 className="mr-2 h-3.5 w-3.5" /> В детальный аудит
+                      <Wand2 className="mr-1.5 h-3.5 w-3.5" /> В аудит
+                    </Button>
+                    <Button onClick={() => toggleSelected(i)} variant={selected.has(i) ? "default" : "outline"} size="sm" className={selected.has(i) ? "bg-primary text-primary-foreground" : "border-primary/30 text-primary hover:bg-accent"}>
+                      <Star className={cn("mr-1.5 h-3.5 w-3.5", selected.has(i) && "fill-current")} />
+                      {selected.has(i) ? "В проекте" : "Выбрать"}
                     </Button>
                   </div>
+
                   {rep && (
                     <div className="rounded-lg border border-border bg-secondary/30 p-3">
                       {rep.summary && <p className="mb-2 text-xs text-foreground">{rep.summary}</p>}

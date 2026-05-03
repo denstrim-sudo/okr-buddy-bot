@@ -1,27 +1,51 @@
 import { useState } from "react";
-import { Sparkles, Wand2, CheckCircle2, ChevronRight } from "lucide-react";
+import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import type { GeneratedPlan } from "@/types/okr";
 import { cn } from "@/lib/utils";
 
-const draftOkrs = [
-  {
-    id: "o1",
-    title: "Become the most loved onboarding experience in our segment",
-    krs: ["Increase D7 retention from 32% → 48%", "Lift activation rate from 41% → 60%", "NPS from 28 → 42"],
-    score: 86,
-  },
-  {
-    id: "o2",
-    title: "Make Beta the team's launchpad for product-market fit signals",
-    krs: ["Collect 50+ qualitative interviews", "Reach 1,200 weekly active beta users", "Convert 25% beta → paid"],
-    score: 74,
-  },
-];
+interface Props {
+  onGenerated: (plan: GeneratedPlan, objective: string) => void;
+}
 
-export const OkrGenerator = () => {
-  const [selected, setSelected] = useState("o1");
+export const OkrGenerator = ({ onGenerated }: Props) => {
+  const [objective, setObjective] = useState("");
+  const [context, setContext] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [plan, setPlan] = useState<GeneratedPlan | null>(null);
+
+  const generate = async () => {
+    if (objective.trim().length < 3) {
+      toast.error("Введите Objective (мин. 3 символа)");
+      return;
+    }
+    setLoading(true);
+    setPlan(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-okr", {
+        body: { objective, context },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+
+      const result = data as GeneratedPlan;
+      setPlan(result);
+      onGenerated(result, objective);
+      toast.success(`Сгенерировано ${result.key_results.length} KR · score ${result.score}`);
+    } catch (e: any) {
+      const msg = e?.message || "Generation failed";
+      if (msg.includes("Rate")) toast.error("Слишком много запросов. Подождите немного.");
+      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты. Пополните в Settings → Usage.");
+      else toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Card className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
@@ -35,81 +59,109 @@ export const OkrGenerator = () => {
             <p className="text-xs text-muted-foreground">Module 1 · Doerr methodology</p>
           </div>
         </div>
-        <button className="text-xs font-medium text-primary hover:underline">Generate OKRs with AI</button>
+        {plan && (
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[11px] font-bold",
+              plan.score >= 80 ? "bg-success-soft text-success" : plan.score >= 50 ? "bg-warning-soft text-warning" : "bg-destructive/10 text-destructive",
+            )}
+          >
+            Score {plan.score}/100
+          </span>
+        )}
       </header>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground">
-          Context <span className="font-normal text-muted-foreground">— describe your team's goals, strategy, or challenge</span>
-        </label>
-        <Textarea
-          placeholder="e.g. Our retention team needs to reduce first-week churn while preparing for Q3 expansion to enterprise..."
-          className="min-h-[110px] resize-none rounded-xl border-border bg-secondary/40 text-sm focus-visible:ring-primary"
-        />
-      </div>
-
-      <Button className="w-full bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95">
-        <Wand2 className="mr-2 h-4 w-4" /> Generate OKRs
-      </Button>
-
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-foreground">Generated Draft OKRs</h4>
-          <span className="text-xs text-muted-foreground">2 candidates</span>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>
+          <Input
+            value={objective}
+            onChange={(e) => setObjective(e.target.value)}
+            placeholder="e.g. Become the most loved onboarding experience in our segment"
+            className="rounded-lg bg-secondary/40"
+          />
         </div>
 
-        {draftOkrs.map((okr) => {
-          const active = selected === okr.id;
-          return (
-            <button
-              key={okr.id}
-              onClick={() => setSelected(okr.id)}
-              className={cn(
-                "group w-full rounded-xl border p-4 text-left transition-all",
-                active
-                  ? "border-primary/40 bg-accent/40 shadow-sm"
-                  : "border-border bg-background hover:border-primary/30 hover:bg-accent/20",
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Context <span className="font-normal normal-case text-muted-foreground/70">— команда, сегмент, известные боли</span>
+          </label>
+          <Textarea
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="e.g. Retention squad, B2B SaaS, churn 45% на первой неделе, готовимся к Q3 enterprise expansion..."
+            className="min-h-[90px] resize-none rounded-xl border-border bg-secondary/40 text-sm focus-visible:ring-primary"
+          />
+        </div>
+      </div>
+
+      <Button
+        onClick={generate}
+        disabled={loading}
+        className="w-full bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI генерирует KR и Solutions...
+          </>
+        ) : (
+          <>
+            <Wand2 className="mr-2 h-4 w-4" /> Generate OKR + Solutions
+          </>
+        )}
+      </Button>
+
+      {(plan || loading) && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-foreground">Generated Key Results</h4>
+            {plan && <span className="text-xs text-muted-foreground">{plan.key_results.length} KRs</span>}
+          </div>
+
+          {loading && (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-xl bg-secondary/60" />
+              ))}
+            </div>
+          )}
+
+          {plan?.key_results.map((kr, idx) => (
+            <div key={idx} className="rounded-xl border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 inline-flex h-5 min-w-[2rem] items-center justify-center rounded-md bg-primary/10 px-1.5 text-[10px] font-bold text-primary">
+                    KR{idx + 1}
+                  </span>
+                  <p className="text-sm font-semibold text-foreground">{kr.text}</p>
+                </div>
+                <span
                   className={cn(
-                    "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                    active ? "border-primary bg-primary" : "border-border",
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                    kr.kr_type === "leading" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {active && <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={3} />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-semibold text-foreground">{okr.title}</p>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold",
-                        okr.score >= 80
-                          ? "bg-success-soft text-success"
-                          : okr.score >= 50
-                            ? "bg-warning-soft text-warning"
-                            : "bg-destructive/10 text-destructive",
-                      )}
-                    >
-                      {okr.score}/100
-                    </span>
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    {okr.krs.map((kr, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-primary/60" />
-                        <span>{kr}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  {kr.kr_type}
+                </span>
               </div>
-            </button>
-          );
-        })}
-      </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-2 text-xs">
+                <Stat icon={<Target className="h-3 w-3" />} label="Baseline" value={kr.baseline} />
+                <Stat icon={<TrendingUp className="h-3 w-3" />} label="Target" value={kr.target} />
+                <Stat icon={<ChevronRight className="h-3 w-3" />} label="Metric" value={kr.metric} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 };
+
+const Stat = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+  <div className="rounded-md border border-border/60 bg-secondary/30 px-2 py-1.5">
+    <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+      {icon} {label}
+    </div>
+    <p className="mt-0.5 truncate text-xs font-semibold text-foreground">{value}</p>
+  </div>
+);

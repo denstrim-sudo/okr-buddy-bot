@@ -36,11 +36,11 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       const result = data as GeneratedPlan;
       setPlan(result);
       onGenerated(result, objective);
-      toast.success(`Сгенерировано ${result.key_results.length} KR · score ${result.score}`);
+      toast.success(`Сгенерировано ${result.key_results.length} KR · оценка ${result.score}`);
     } catch (e: any) {
-      const msg = e?.message || "Generation failed";
+      const msg = e?.message || "Ошибка генерации";
       if (msg.includes("Rate")) toast.error("Слишком много запросов. Подождите немного.");
-      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты. Пополните в Settings → Usage.");
+      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты. Пополните в Настройках → Использование.");
       else toast.error(msg);
     } finally {
       setLoading(false);
@@ -55,8 +55,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             <Sparkles className="h-4.5 w-4.5" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-foreground">AI OKR Generator</h3>
-            <p className="text-xs text-muted-foreground">Module 1 · Doerr methodology</p>
+            <h3 className="text-base font-semibold text-foreground">AI-генератор OKR</h3>
+            <p className="text-xs text-muted-foreground">Модуль 1 · Методология Дорра</p>
           </div>
         </div>
         {plan && (
@@ -66,30 +66,30 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               plan.score >= 80 ? "bg-success-soft text-success" : plan.score >= 50 ? "bg-warning-soft text-warning" : "bg-destructive/10 text-destructive",
             )}
           >
-            Score {plan.score}/100
+            Оценка {plan.score}/100
           </span>
         )}
       </header>
 
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective (Цель)</label>
           <Input
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
-            placeholder="e.g. Become the most loved onboarding experience in our segment"
+            placeholder="напр. Стать самым любимым онбордингом в нашем сегменте"
             className="rounded-lg bg-secondary/40"
           />
         </div>
 
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Context <span className="font-normal normal-case text-muted-foreground/70">— команда, сегмент, известные боли</span>
+            Контекст <span className="font-normal normal-case text-muted-foreground/70">— команда, сегмент, известные боли</span>
           </label>
           <Textarea
             value={context}
             onChange={(e) => setContext(e.target.value)}
-            placeholder="e.g. Retention squad, B2B SaaS, churn 45% на первой неделе, готовимся к Q3 enterprise expansion..."
+            placeholder="напр. Retention-команда, B2B SaaS, отток 45% на первой неделе, готовимся к Q3 enterprise expansion..."
             className="min-h-[90px] resize-none rounded-xl border-border bg-secondary/40 text-sm focus-visible:ring-primary"
           />
         </div>
@@ -102,11 +102,11 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       >
         {loading ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI генерирует KR и Solutions...
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI генерирует KR и решения...
           </>
         ) : (
           <>
-            <Wand2 className="mr-2 h-4 w-4" /> Generate OKR + Solutions
+            <Wand2 className="mr-2 h-4 w-4" /> Сгенерировать OKR и решения
           </>
         )}
       </Button>
@@ -114,8 +114,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       {(plan || loading) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-foreground">Generated Key Results</h4>
-            {plan && <span className="text-xs text-muted-foreground">{plan.key_results.length} KRs</span>}
+            <h4 className="text-sm font-semibold text-foreground">Ключевые результаты (KR)</h4>
+            {plan && <span className="text-xs text-muted-foreground">{plan.key_results.length} KR</span>}
           </div>
 
           {loading && (
@@ -141,13 +141,13 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
                     kr.kr_type === "leading" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {kr.kr_type}
+                  {kr.kr_type === "leading" ? "опережающий" : "запаздывающий"}
                 </span>
               </div>
               <div className="mt-2.5 grid grid-cols-3 gap-2 text-xs">
-                <Stat icon={<Target className="h-3 w-3" />} label="Baseline" value={kr.baseline} />
-                <Stat icon={<TrendingUp className="h-3 w-3" />} label="Target" value={kr.target} />
-                <Stat icon={<ChevronRight className="h-3 w-3" />} label="Metric" value={kr.metric} />
+                <Stat icon={<Target className="h-3 w-3" />} label="База" value={kr.baseline} />
+                <Stat icon={<TrendingUp className="h-3 w-3" />} label="Цель" value={kr.target} />
+                <Stat icon={<ChevronRight className="h-3 w-3" />} label="Метрика" value={kr.metric} />
               </div>
             </div>
           ))}

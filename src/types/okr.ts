@@ -23,3 +23,24 @@ export interface GeneratedPlan {
   score: number;
   key_results: GeneratedKR[];
 }
+
+export interface ValidationRule {
+  id: string;
+  label: string;
+  pass: boolean;
+  hint: string;
+}
+
+export interface ValidationReport {
+  score: number;
+  status: "pass" | "warn" | "fail";
+  summary: string;
+  rules: ValidationRule[];
+  rewritten_objective: string;
+  rewritten_key_results: string[];
+}
+
+export interface ValidationDraft {
+  objective: string;
+  key_results: string[];
+}

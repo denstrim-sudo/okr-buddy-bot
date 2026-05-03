@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useEffect as _useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, Loader2, ShieldCheck, Wand2, CheckCircle2, XCircle, AlertTriangle, Star, RotateCcw, Target, Download, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

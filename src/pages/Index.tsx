@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/aimbot/Sidebar";
 import { OkrGenerator } from "@/components/aimbot/OkrGenerator";
 import { OkrValidator } from "@/components/aimbot/OkrValidator";
 import { SolutionCard } from "@/components/aimbot/SolutionCard";
+import { SolutionStudio } from "@/components/aimbot/SolutionStudio";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/aimbot/Logo";
 import type { GeneratedPlan, ValidationDraft } from "@/types/okr";

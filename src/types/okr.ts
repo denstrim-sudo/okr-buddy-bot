@@ -44,3 +44,11 @@ export interface ValidationDraft {
   objective: string;
   key_results: string[];
 }
+
+export interface SolutionReport {
+  score: number;
+  status: "pass" | "warn" | "fail";
+  summary: string;
+  rules: ValidationRule[];
+  rewritten_solution: GeneratedSolution;
+}

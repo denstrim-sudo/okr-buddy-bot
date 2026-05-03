@@ -172,23 +172,62 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }:
 
         {solutions.length > 0 && (
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {solutions.map((s, i) => (
-              <div key={i} className="space-y-2">
-                <SolutionCard
-                  id={s.id || `S${i + 1}`}
-                  problem={s.problem}
-                  bet={s.bet}
-                  resultImage={s.result_image}
-                  metric={s.leading_metric}
-                  confidence={s.confidence}
-                  effort={s.effort}
-                  validation={s.validation}
-                />
-                <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="w-full border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
-                  <ShieldCheck className="mr-2 h-3.5 w-3.5" /> Проверить это решение
-                </Button>
-              </div>
-            ))}
+            {solutions.map((s, i) => {
+              const rep = cardReports[i];
+              const loading = cardLoading[i];
+              return (
+                <div key={i} className="space-y-2">
+                  <SolutionCard
+                    id={s.id || `S${i + 1}`}
+                    problem={s.problem}
+                    bet={s.bet}
+                    resultImage={s.result_image}
+                    metric={s.leading_metric}
+                    confidence={s.confidence}
+                    effort={s.effort}
+                    validation={s.validation}
+                    badge={rep ? `${rep.score}/100` : undefined}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={() => validateCard(i, s)} disabled={loading} variant="outline" size="sm" className="border-navy/30 text-navy hover:bg-secondary">
+                      {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                      Проверить здесь
+                    </Button>
+                    <Button onClick={() => sendToAudit(s)} variant="outline" size="sm" className="border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft">
+                      <Wand2 className="mr-2 h-3.5 w-3.5" /> В детальный аудит
+                    </Button>
+                  </div>
+                  {rep && (
+                    <div className="rounded-lg border border-border bg-secondary/30 p-3">
+                      {rep.summary && <p className="mb-2 text-xs text-foreground">{rep.summary}</p>}
+                      <ul className="space-y-1.5">
+                        {rep.rules.map((r) => (
+                          <li key={r.id} className="flex items-start gap-2 text-xs">
+                            {r.pass ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />}
+                            <div className="flex-1">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="font-mono text-[10px] font-bold text-muted-foreground">[{r.id}]</span>
+                                <span>{r.label}</span>
+                              </div>
+                              {!r.pass && r.hint && (
+                                <p className="mt-0.5 flex items-start gap-1 text-[11px] text-muted-foreground">
+                                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />{r.hint}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      {rep.rewritten_solution && (
+                        <Button onClick={() => applyCardRewrite(i)} disabled={loading} variant="outline" size="sm" className="mt-3 w-full border-primary/30 text-primary hover:bg-accent">
+                          <Wand2 className="mr-2 h-3.5 w-3.5" /> Применить AI-версию и перепроверить
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

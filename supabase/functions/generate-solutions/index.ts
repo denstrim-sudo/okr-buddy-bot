@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { objective, key_result, context } = await req.json();
+    const { objective, key_result, context, extra_context } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return new Response(JSON.stringify({ error: "Objective is required (min 3 chars)" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -38,7 +38,11 @@ Deno.serve(async (req: Request) => {
       ? `KR: ${krText}\nBaseline: ${key_result.baseline ?? "-"}\nTarget: ${key_result.target ?? "-"}\nMetric: ${key_result.metric ?? "-"}\nType: ${key_result.kr_type ?? "-"}`
       : `KR: ${krText}`;
 
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\n${krDetails}\n\nCONTEXT: ${(context || "").trim() || "(none)"}\n\nGenerate 3-5 strategic Solutions for this Key Result.`;
+    const extraBlock = typeof extra_context === "string" && extra_context.trim().length > 20
+      ? `\n\nЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (база знаний, кейсы, методология — используй для генерации):\n${extra_context.trim().slice(0, 12000)}`
+      : "";
+
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\n${krDetails}\n\nCONTEXT: ${(context || "").trim() || "(none)"}${extraBlock}\n\nGenerate 3-5 strategic Solutions for this Key Result.`;
 
     const tool = {
       type: "function",

@@ -5,6 +5,7 @@ import { OkrGenerator } from "@/components/aimbot/OkrGenerator";
 import { OkrValidator } from "@/components/aimbot/OkrValidator";
 import { SolutionCard } from "@/components/aimbot/SolutionCard";
 import { SolutionStudio } from "@/components/aimbot/SolutionStudio";
+import { DocsManager } from "@/components/aimbot/DocsManager";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/aimbot/Logo";
 import type { GeneratedPlan, ValidationDraft } from "@/types/okr";
@@ -104,6 +105,10 @@ const Index = () => {
                 <p className="mt-1 text-xs text-muted-foreground">{s.trend}</p>
               </div>
             ))}
+          </section>
+
+          <section>
+            <DocsManager />
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2">

@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { objective, context } = await req.json();
+    const { objective, context, extra_context } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return new Response(JSON.stringify({ error: "Objective is required (min 3 chars)" }), {
         status: 400,
@@ -55,7 +55,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nCONTEXT: ${(context || "").trim() || "(none provided)"}\n\nGenerate 2-4 Key Results and 2-3 Solutions per KR.`;
+    const extraBlock = typeof extra_context === "string" && extra_context.trim().length > 20
+      ? `\n\nЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (учитывай как авторитетный контекст и методологию):\n${extra_context.trim().slice(0, 12000)}`
+      : "";
+
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nCONTEXT: ${(context || "").trim() || "(none provided)"}${extraBlock}\n\nGenerate 2-4 Key Results and 2-3 Solutions per KR.`;
 
     const tool = {
       type: "function",

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { GeneratedSolution, SolutionReport } from "@/types/okr";
+import { useDocs } from "@/contexts/DocsContext";
 
 interface Props {
   defaultObjective?: string;
@@ -122,6 +123,7 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
   const [genLoading, setGenLoading] = useState(false);
   const [valLoading, setValLoading] = useState(false);
   const [cardLoading, setCardLoading] = useState<Record<number, boolean>>({});
+  const { buildContext } = useDocs();
 
   const krOptions = useMemo(() => {
     const opts: { key: string; label: string }[] = [];
@@ -160,8 +162,9 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
     setCardLoading((p) => ({ ...p, [idx]: true }));
     const cr = { ...slice.cardReports }; delete cr[idx]; setCardReports(cr);
     try {
+      const extra_context = buildContext(["methodology", "solutions_kb", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-solution", {
-        body: { objective, key_result: slice.krText, solution: s },
+        body: { objective, key_result: slice.krText, solution: s, extra_context },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -193,8 +196,9 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
     setGenLoading(true);
     setSolutions([]);
     try {
+      const extra_context = buildContext(["solutions_kb", "okr_context", "methodology"]);
       const { data, error } = await supabase.functions.invoke("generate-solutions", {
-        body: { objective, key_result: slice.krText, context: slice.context },
+        body: { objective, key_result: slice.krText, context: slice.context, extra_context },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -225,8 +229,9 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
     setValLoading(true);
     setReport(null);
     try {
+      const extra_context = buildContext(["methodology", "solutions_kb", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-solution", {
-        body: { objective, key_result: slice.krText, solution: s },
+        body: { objective, key_result: slice.krText, solution: s, extra_context },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

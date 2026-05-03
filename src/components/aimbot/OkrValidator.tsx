@@ -153,7 +153,7 @@ export const OkrValidator = ({ draft }: Props) => {
       </div>
 
       <Button
-        onClick={validate}
+        onClick={() => validate()}
         disabled={loading}
         className="w-full bg-navy text-navy-foreground shadow-md hover:opacity-95"
       >

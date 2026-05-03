@@ -35,16 +35,18 @@ export const OkrValidator = ({ draft }: Props) => {
   const addKr = () => setKrs((p) => [...p, ""]);
   const removeKr = (i: number) => setKrs((p) => (p.length > 1 ? p.filter((_, idx) => idx !== i) : p));
 
-  const validate = async () => {
-    const cleaned = krs.map((k) => k.trim()).filter(Boolean);
-    if (objective.trim().length < 3) return toast.error("Введите Objective (мин. 3 символа)");
+  const validate = async (overrideObjective?: string, overrideKrs?: string[]) => {
+    const obj = overrideObjective ?? objective;
+    const sourceKrs = overrideKrs ?? krs;
+    const cleaned = sourceKrs.map((k) => k.trim()).filter(Boolean);
+    if (obj.trim().length < 3) return toast.error("Введите Objective (мин. 3 символа)");
     if (cleaned.length === 0) return toast.error("Добавьте хотя бы один Key Result");
 
     setLoading(true);
     setReport(null);
     try {
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective, key_results: cleaned },
+        body: { objective: obj, key_results: cleaned },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -62,11 +64,16 @@ export const OkrValidator = ({ draft }: Props) => {
 
   const applyRewrite = () => {
     if (!report) return;
-    setObjective(report.rewritten_objective);
-    setKrs(report.rewritten_key_results.length ? report.rewritten_key_results : krs);
+    const newObjective = report.rewritten_objective || objective;
+    const newKrs = report.rewritten_key_results?.length ? report.rewritten_key_results : krs;
+    setObjective(newObjective);
+    setKrs(newKrs);
     setReport(null);
-    toast.success("Применена AI-переработка. Запустите аудит ещё раз.");
+    toast.success("Применена AI-версия. Запускаю повторный аудит...");
+    validate(newObjective, newKrs);
   };
+
+  const applyAndRevalidate = applyRewrite;
 
   const score = report?.score;
   const statusLabel =
@@ -146,7 +153,7 @@ export const OkrValidator = ({ draft }: Props) => {
       </div>
 
       <Button
-        onClick={validate}
+        onClick={() => validate()}
         disabled={loading}
         className="w-full bg-navy text-navy-foreground shadow-md hover:opacity-95"
       >
@@ -217,8 +224,13 @@ export const OkrValidator = ({ draft }: Props) => {
       )}
 
       {report && (report.rewritten_objective || report.rewritten_key_results?.length > 0) && (
-        <Button onClick={applyRewrite} variant="outline" className="border-primary/30 text-primary hover:bg-accent">
-          <Wand2 className="mr-2 h-4 w-4" /> Применить переработку AI
+        <Button
+          onClick={applyAndRevalidate}
+          disabled={loading}
+          variant="outline"
+          className="border-primary/30 text-primary hover:bg-accent"
+        >
+          <Wand2 className="mr-2 h-4 w-4" /> Применить AI-версию и перепроверить
         </Button>
       )}
     </Card>

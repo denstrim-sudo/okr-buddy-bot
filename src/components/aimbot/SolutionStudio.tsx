@@ -26,19 +26,61 @@ const EMPTY_SOL: GeneratedSolution = {
   validation: "",
 };
 
+const STORAGE_KEY = "aimbot.solutionStudio.v1";
+
+interface PersistedState {
+  objective: string;
+  keyResult: string;
+  context: string;
+  solutions: GeneratedSolution[];
+  audit: GeneratedSolution;
+  report: SolutionReport | null;
+  cardReports: Record<number, SolutionReport>;
+  selected: number[];
+}
+
 export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "" }: Props) => {
-  const [objective, setObjective] = useState(defaultObjective);
-  const [keyResult, setKeyResult] = useState(defaultKeyResult);
-  const [context, setContext] = useState("");
-  const [solutions, setSolutions] = useState<GeneratedSolution[]>([]);
+  const initial = (() => {
+    if (typeof window === "undefined") return null;
+    try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? (JSON.parse(raw) as PersistedState) : null; } catch { return null; }
+  })();
+
+  const [objective, setObjective] = useState(initial?.objective ?? defaultObjective);
+  const [keyResult, setKeyResult] = useState(initial?.keyResult ?? defaultKeyResult);
+  const [context, setContext] = useState(initial?.context ?? "");
+  const [solutions, setSolutions] = useState<GeneratedSolution[]>(initial?.solutions ?? []);
   const [genLoading, setGenLoading] = useState(false);
 
-  const [audit, setAudit] = useState<GeneratedSolution>(EMPTY_SOL);
-  const [report, setReport] = useState<SolutionReport | null>(null);
+  const [audit, setAudit] = useState<GeneratedSolution>(initial?.audit ?? EMPTY_SOL);
+  const [report, setReport] = useState<SolutionReport | null>(initial?.report ?? null);
   const [valLoading, setValLoading] = useState(false);
 
-  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>({});
+  const [cardReports, setCardReports] = useState<Record<number, SolutionReport>>(initial?.cardReports ?? {});
   const [cardLoading, setCardLoading] = useState<Record<number, boolean>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set(initial?.selected ?? []));
+
+  useEffect(() => {
+    try {
+      const data: PersistedState = { objective, keyResult, context, solutions, audit, report, cardReports, selected: Array.from(selected) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+  }, [objective, keyResult, context, solutions, audit, report, cardReports, selected]);
+
+  const toggleSelected = (idx: number) => {
+    setSelected((p) => {
+      const n = new Set(p);
+      if (n.has(idx)) n.delete(idx); else n.add(idx);
+      return n;
+    });
+  };
+
+  const resetAll = () => {
+    if (!confirm("Очистить сохранённые результаты модуля 3?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    setSolutions([]); setCardReports({}); setReport(null); setAudit(EMPTY_SOL); setSelected(new Set());
+    toast.success("Сохранённые данные очищены");
+  };
+
 
   const validateCard = async (idx: number, s: GeneratedSolution) => {
     setCardLoading((p) => ({ ...p, [idx]: true }));

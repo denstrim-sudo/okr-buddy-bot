@@ -254,6 +254,44 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         </div>
       )}
 
+      {report && onSendToSolutions && (() => {
+        const ready = report.score >= 70;
+        const cleanedKrs = krs.map((k) => k.trim()).filter(Boolean);
+        const handleSend = () => {
+          if (!ready) {
+            toast.error(`Оценка ${report.score}/100 ниже порога 70. Доработайте OKR перед генерацией решений.`);
+            return;
+          }
+          onSendToSolutions(objective.trim(), cleanedKrs);
+          toast.success("OKR передан в Генератор решений");
+          requestAnimationFrame(() => {
+            document.getElementById("solution-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        };
+        return (
+          <div className={cn(
+            "flex items-center justify-between gap-3 rounded-xl border p-3",
+            ready ? "border-hypothesis/30 bg-hypothesis-soft/30" : "border-border bg-secondary/30",
+          )}>
+            <div className="flex-1 text-xs">
+              {ready ? (
+                <p className="text-foreground"><span className="font-semibold text-hypothesis">Готово к генерации решений.</span> Оценка {report.score}/100 ≥ 70.</p>
+              ) : (
+                <p className="text-muted-foreground">Передача в Решения доступна при оценке ≥ 70/100. Сейчас: <span className="font-semibold text-warning">{report.score}/100</span>.</p>
+              )}
+            </div>
+            <Button
+              onClick={handleSend}
+              disabled={!ready}
+              size="sm"
+              className="shrink-0 bg-gradient-hypothesis text-hypothesis-foreground shadow-md hover:opacity-95 disabled:opacity-50"
+            >
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Передать в Решения
+            </Button>
+          </div>
+        );
+      })()}
+
       {report && (report.rewritten_objective || report.rewritten_key_results?.some((x) => x && x.trim())) && (
         <div className="space-y-3 rounded-xl border border-primary/20 bg-accent/30 p-4">
           <div className="flex items-center gap-2">

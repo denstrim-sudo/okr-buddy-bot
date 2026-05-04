@@ -25,23 +25,28 @@ const Index = () => {
 
   const krTexts = useMemo(() => plan?.key_results?.map((k) => k.text) ?? [], [plan]);
 
+  const buildDraft = (p: GeneratedPlan, obj: string): ValidationDraft => ({
+    objective: p.objective_refined || obj,
+    key_results: p.key_results.map((k) => k.text),
+    key_results_full: p.key_results.map((k) => ({
+      text: k.text,
+      baseline: k.baseline,
+      target: k.target,
+      metric: k.metric,
+      kr_type: k.kr_type,
+    })),
+  });
+
   const handleGenerated = useCallback((p: GeneratedPlan, obj: string) => {
     setPlan(p);
     setObjective(p.objective_refined || obj);
-    setValidatorDraft({
-      objective: p.objective_refined || obj,
-      key_results: p.key_results.map((k) => k.text),
-    });
+    setValidatorDraft(buildDraft(p, obj));
   }, []);
 
   const handleSendToSolutions = useCallback((p: GeneratedPlan, obj: string) => {
     setPlan(p);
     setObjective(p.objective_refined || obj);
-    setValidatorDraft({
-      objective: p.objective_refined || obj,
-      key_results: p.key_results.map((k) => k.text),
-    });
-    // smooth-scroll to the Solution Studio
+    setValidatorDraft(buildDraft(p, obj));
     requestAnimationFrame(() => {
       document.getElementById("solution-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });

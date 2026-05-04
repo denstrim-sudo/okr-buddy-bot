@@ -23,7 +23,7 @@ const formatDate = (iso: string) => {
   }
 };
 
-export const SavedOkrsList = () => {
+export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
   const { items, remove, clear } = useSavedOkrs();
 
   if (!items.length) return null;

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target } from "lucide-react";
+import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target, BookmarkPlus } from "lucide-react";
+import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
   const { buildContext, byCategory } = useDocs();
+  const { save: saveOkr } = useSavedOkrs();
   const docCount = byCategory("okr_context").length + byCategory("methodology").length;
 
   const generate = async () => {
@@ -99,21 +101,37 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
         </div>
       </div>
 
-      <Button
-        onClick={generate}
-        disabled={loading}
-        className="w-full bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI генерирует KR и решения...
-          </>
-        ) : (
-          <>
-            <Wand2 className="mr-2 h-4 w-4" /> Сгенерировать OKR и решения
-          </>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          onClick={generate}
+          disabled={loading}
+          className="flex-1 bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI генерирует KR и решения...
+            </>
+          ) : (
+            <>
+              <Wand2 className="mr-2 h-4 w-4" /> Сгенерировать OKR и решения
+            </>
+          )}
+        </Button>
+        {plan && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              saveOkr(objective, plan);
+              toast.success("OKR сохранён");
+            }}
+            className="sm:w-auto"
+            aria-label="Сохранить сгенерированный OKR"
+          >
+            <BookmarkPlus className="mr-2 h-4 w-4" /> Сохранить
+          </Button>
         )}
-      </Button>
+      </div>
 
       {(plan || loading) && (
         <div className="space-y-3">

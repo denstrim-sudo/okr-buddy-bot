@@ -7,6 +7,7 @@ import { DocsManager } from "@/components/aimbot/DocsManager";
 import { AppHeader } from "@/components/aimbot/AppHeader";
 import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
+import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
 import type { GeneratedPlan, ValidationDraft } from "@/types/okr";
 
@@ -50,6 +51,10 @@ const Index = () => {
           <section className="grid animate-fade-in gap-4 sm:gap-6 lg:grid-cols-2" style={{ animationDelay: "120ms" }}>
             <OkrGenerator onGenerated={handleGenerated} />
             <OkrValidator draft={validatorDraft} />
+          </section>
+
+          <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>
+            <SavedOkrsList />
           </section>
 
           <div className="animate-fade-in" style={{ animationDelay: "180ms" }}>

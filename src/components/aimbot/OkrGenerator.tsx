@@ -21,6 +21,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
   const { buildContext, byCategory } = useDocs();
+  const { save: saveOkr } = useSavedOkrs();
   const docCount = byCategory("okr_context").length + byCategory("methodology").length;
 
   const generate = async () => {

@@ -86,7 +86,7 @@ const Index = () => {
 
           <section className="grid animate-fade-in gap-4 sm:gap-6 lg:grid-cols-2" style={{ animationDelay: "120ms" }}>
             <OkrGenerator onGenerated={handleGenerated} />
-            <OkrValidator draft={validatorDraft} />
+            <OkrValidator draft={validatorDraft} onSendToSolutions={handleValidatorSendToSolutions} />
           </section>
 
           <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>

@@ -12,10 +12,25 @@ Given an Objective and team context, you must:
 2. For EACH Key Result, generate 2-3 Solutions (strategic bets, NOT features/tasks). Each Solution:
    - Describes the PROBLEM/JTBD first (whose pain?)
    - Has a RESULT IMAGE (success state seen from outside)
-   - Is framed as a hypothesis: "We believe that [bet]... will lead to [result]..."
    - Names a LEADING metric expected to move
-   - Includes confidence (Low/Medium/High), effort (S/M/L/XL), and a lightweight validation approach (prototype, A/B test, discovery sprint, spike, etc.)
+   - Includes confidence (Low/Medium/High), effort (S/M/L/XL), and a lightweight validation approach
    - Never use implementation language ("build", "launch", "develop", "ship") as the core verb
+
+КРИТИЧЕСКИ ВАЖНО — ФОРМАТ ПОЛЯ "bet" в каждом Solution:
+Поле "bet" ВСЕГДА формулируется на русском языке СТРОГО по шаблону:
+
+«Если мы [решим проблему X / закроем задачу пользователя X], то это приведёт к [описание ключевой опережающей метрики, которая характеризует результат] и повлияет на [KR, на который оказывает влияние], потому что [логика влияния / причинно-следственная связь].»
+
+Требования:
+- Начинай ровно со слова «Если мы».
+- Используй ЧЕТЫРЕ блока в указанном порядке: «Если мы … , то это приведёт к … и повлияет на … , потому что … .»
+- Все блоки заполнены содержательно, без плейсхолдеров.
+- Соблюдай нормы русского языка: падежи, согласование родов/чисел, запятые перед «то», «и повлияет», «потому что».
+- В «Если мы …» — глагол совершенного вида («решим / закроем / устраним / снимем …»), без «построим / запустим / разработаем / внедрим».
+- В «то это приведёт к …» — опережающая метрика и направление изменения.
+- В «и повлияет на …» — явная ссылка на родительский KR (его формулировка или ключевая метрика).
+- В «потому что …» — краткая причинно-следственная логика.
+- Без английских калек («impact», «drive», «boost»). Только грамотный русский.
 
 IMPORTANT: All generated text content (objective_refined, KR text, baseline, target, metric, problem, bet, result_image, leading_metric, validation) MUST be written in RUSSIAN language. Only the enum values (kr_type, confidence, effort) stay in English as they map to UI codes.
 

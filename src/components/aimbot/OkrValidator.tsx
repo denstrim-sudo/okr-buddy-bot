@@ -23,6 +23,7 @@ const DEFAULT_DRAFT: ValidationDraft = {
 export const OkrValidator = ({ draft }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
+  const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const { buildContext } = useDocs();
@@ -31,12 +32,23 @@ export const OkrValidator = ({ draft }: Props) => {
     if (!draft) return;
     setObjective(draft.objective);
     setKrs(draft.key_results.length ? draft.key_results : [""]);
+    setKrsFull(draft.key_results_full ?? null);
     setReport(null);
   }, [draft]);
 
-  const updateKr = (i: number, v: string) => setKrs((p) => p.map((x, idx) => (idx === i ? v : x)));
-  const addKr = () => setKrs((p) => [...p, ""]);
-  const removeKr = (i: number) => setKrs((p) => (p.length > 1 ? p.filter((_, idx) => idx !== i) : p));
+  const updateKr = (i: number, v: string) => {
+    setKrs((p) => p.map((x, idx) => (idx === i ? v : x)));
+    // если пользователь отредактировал текст KR — отвязываем расширенные данные для этой строки
+    setKrsFull((p) => (p ? p.map((x, idx) => (idx === i ? { ...x, text: v } : x)) : p));
+  };
+  const addKr = () => {
+    setKrs((p) => [...p, ""]);
+    setKrsFull((p) => (p ? [...p, { text: "" }] : p));
+  };
+  const removeKr = (i: number) => {
+    setKrs((p) => (p.length > 1 ? p.filter((_, idx) => idx !== i) : p));
+    setKrsFull((p) => (p && p.length > 1 ? p.filter((_, idx) => idx !== i) : p));
+  };
 
   const validate = async (overrideObjective?: string, overrideKrs?: string[]) => {
     const obj = overrideObjective ?? objective;
@@ -45,12 +57,24 @@ export const OkrValidator = ({ draft }: Props) => {
     if (obj.trim().length < 3) return toast.error("Введите Objective (мин. 3 символа)");
     if (cleaned.length === 0) return toast.error("Добавьте хотя бы один Key Result");
 
+    // Собираем расширенные KR (с baseline/target/metric) — только для тех строк, что не менялись
+    const fullCleaned: ValidationKR[] | undefined = krsFull
+      ? sourceKrs
+          .map((text, i) => {
+            const t = text.trim();
+            if (!t) return null;
+            const f = krsFull[i];
+            return f && f.text.trim() === t ? { ...f, text: t } : { text: t };
+          })
+          .filter(Boolean) as ValidationKR[]
+      : undefined;
+
     setLoading(true);
     setReport(null);
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective: obj, key_results: cleaned, extra_context },
+        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, extra_context },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

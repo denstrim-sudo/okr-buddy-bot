@@ -38,21 +38,25 @@ const Index = () => {
       <Sidebar />
       <main className="flex-1 overflow-x-hidden">
         <AppHeader />
-        <div className="space-y-8 p-6">
-          <StatsGrid plan={plan} solutionsCount={allSolutions.length} />
+        <div className="space-y-6 p-4 sm:space-y-8 sm:p-6">
+          <div className="animate-fade-in">
+            <StatsGrid plan={plan} solutionsCount={allSolutions.length} />
+          </div>
 
-          <section>
+          <section className="animate-fade-in" style={{ animationDelay: "60ms" }}>
             <DocsManager />
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-2">
+          <section className="grid animate-fade-in gap-4 sm:gap-6 lg:grid-cols-2" style={{ animationDelay: "120ms" }}>
             <OkrGenerator onGenerated={handleGenerated} />
             <OkrValidator draft={validatorDraft} />
           </section>
 
-          <SolutionsSection objective={objective} solutions={allSolutions} />
+          <div className="animate-fade-in" style={{ animationDelay: "180ms" }}>
+            <SolutionsSection objective={objective} solutions={allSolutions} />
+          </div>
 
-          <div className="mt-8">
+          <div className="mt-2 animate-fade-in sm:mt-8" style={{ animationDelay: "240ms" }}>
             <SolutionStudio
               defaultObjective={objective}
               defaultKeyResult={plan?.key_results?.[0]?.text || ""}

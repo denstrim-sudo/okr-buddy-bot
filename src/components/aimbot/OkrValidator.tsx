@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Loader2, Plus, Trash2, Wand2 } from "lucide-react";
+import { ShieldCheck, Loader2, Plus, Trash2, Wand2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ValidationDraft, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
+import { RuleList, scoreBadgeClass } from "./RuleList";
 
 interface Props {
   draft?: ValidationDraft | null;
@@ -95,12 +96,7 @@ export const OkrValidator = ({ draft }: Props) => {
           </div>
         </div>
         {score !== undefined && (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[11px] font-bold",
-              score >= 80 ? "bg-success-soft text-success" : score >= 50 ? "bg-warning-soft text-warning" : "bg-destructive/10 text-destructive",
-            )}
-          >
+          <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", scoreBadgeClass(score))}>
             Оценка {score}/100
           </span>
         )}

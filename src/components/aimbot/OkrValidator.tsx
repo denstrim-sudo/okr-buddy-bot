@@ -13,6 +13,7 @@ import { RuleList, scoreBadgeClass } from "./RuleList";
 
 interface Props {
   draft?: ValidationDraft | null;
+  onSendToSolutions?: (objective: string, keyResults: string[]) => void;
 }
 
 const DEFAULT_DRAFT: ValidationDraft = {

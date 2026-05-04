@@ -67,7 +67,7 @@ export const SolutionCard = memo(function SolutionCard({ id, problem, bet, resul
       <Stat icon={<FlaskConical className="h-3.5 w-3.5" />} label="Валидация" value={validation} />
     </footer>
   </article>
-);
+); });
 
 const Stat = ({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) => (
   <div className="flex items-start gap-1.5">

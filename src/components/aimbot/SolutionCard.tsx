@@ -70,9 +70,7 @@ export const SolutionCard = memo(function SolutionCard(props: Props) {
           </div>
           <div className="rounded-lg border border-border/60 bg-background/60 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Гипотеза</p>
-            <p className="mt-1 line-clamp-4 text-sm leading-relaxed text-foreground">
-              <span className="font-medium">Мы верим, что</span> {bet}, <span className="font-medium">что приведёт к тому, что</span> {resultImage}.
-            </p>
+            <p className="mt-1 line-clamp-4 text-sm leading-relaxed text-foreground">{bet}</p>
           </div>
         </div>
 
@@ -108,9 +106,7 @@ export const SolutionCard = memo(function SolutionCard(props: Props) {
             <Block label="Проблема / JTBD" text={problem} />
             <div className="rounded-lg border border-border/60 bg-secondary/30 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Гипотеза (bet)</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                <span className="font-medium">Мы верим, что</span> {bet}, <span className="font-medium">что приведёт к тому, что</span> {resultImage}.
-              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{bet}</p>
             </div>
             <Block label="Result image (что увидим извне)" text={resultImage} />
             <Block label="Опережающая метрика" text={metric} />

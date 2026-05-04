@@ -253,15 +253,69 @@ export const OkrValidator = ({ draft }: Props) => {
         </div>
       )}
 
-      {report && (report.rewritten_objective || report.rewritten_key_results?.length > 0) && (
-        <Button
-          onClick={applyAndRevalidate}
-          disabled={loading}
-          variant="outline"
-          className="border-primary/30 text-primary hover:bg-accent"
-        >
-          <Wand2 className="mr-2 h-4 w-4" /> Применить AI-версию и перепроверить
-        </Button>
+      {report && (report.rewritten_objective || report.rewritten_key_results?.some((x) => x && x.trim())) && (
+        <div className="space-y-3 rounded-xl border border-primary/20 bg-accent/30 p-4">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-primary" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">AI-предложения по улучшению</p>
+          </div>
+
+          {report.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
+            <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
+              <div className="space-y-1 text-sm">
+                <p className="text-muted-foreground line-through">{objective}</p>
+                <div className="flex items-start gap-1.5">
+                  <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <p className="font-medium text-foreground">{report.rewritten_objective}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" onClick={acceptObjective} className="h-8 bg-success text-success-foreground hover:bg-success/90">
+                  <Check className="mr-1 h-3.5 w-3.5" /> Принять новую
+                </Button>
+                <Button size="sm" variant="outline" onClick={rejectObjective} className="h-8">
+                  <X className="mr-1 h-3.5 w-3.5" /> Оставить старую
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {report.rewritten_key_results?.map((newKr, i) => {
+            const oldKr = krs[i] ?? "";
+            if (!newKr || !newKr.trim() || newKr.trim() === oldKr.trim()) return null;
+            return (
+              <div key={i} className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">KR{i + 1}</p>
+                <div className="space-y-1 text-sm">
+                  {oldKr && <p className="text-muted-foreground line-through">{oldKr}</p>}
+                  <div className="flex items-start gap-1.5">
+                    <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <p className="font-medium text-foreground">{newKr}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" onClick={() => acceptKr(i)} className="h-8 bg-success text-success-foreground hover:bg-success/90">
+                    <Check className="mr-1 h-3.5 w-3.5" /> Принять новую
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => rejectKr(i)} className="h-8">
+                    <X className="mr-1 h-3.5 w-3.5" /> Оставить старую
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+
+          <Button
+            onClick={applyAndRevalidate}
+            disabled={loading}
+            variant="outline"
+            size="sm"
+            className="w-full border-primary/30 text-primary hover:bg-accent"
+          >
+            <Wand2 className="mr-2 h-3.5 w-3.5" /> Принять все и перепроверить
+          </Button>
+        </div>
       )}
     </Card>
   );

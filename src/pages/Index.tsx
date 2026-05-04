@@ -34,6 +34,19 @@ const Index = () => {
     });
   }, []);
 
+  const handleSendToSolutions = useCallback((p: GeneratedPlan, obj: string) => {
+    setPlan(p);
+    setObjective(p.objective_refined || obj);
+    setValidatorDraft({
+      objective: p.objective_refined || obj,
+      key_results: p.key_results.map((k) => k.text),
+    });
+    // smooth-scroll to the Solution Studio
+    requestAnimationFrame(() => {
+      document.getElementById("solution-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-gradient-surface">
       <Sidebar />
@@ -54,14 +67,14 @@ const Index = () => {
           </section>
 
           <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>
-            <SavedOkrsList />
+            <SavedOkrsList onSendToSolutions={handleSendToSolutions} />
           </section>
 
           <div className="animate-fade-in" style={{ animationDelay: "180ms" }}>
             <SolutionsSection objective={objective} solutions={allSolutions} />
           </div>
 
-          <div className="mt-2 animate-fade-in sm:mt-8" style={{ animationDelay: "240ms" }}>
+          <div id="solution-studio" className="mt-2 animate-fade-in scroll-mt-6 sm:mt-8" style={{ animationDelay: "240ms" }}>
             <SolutionStudio
               defaultObjective={objective}
               defaultKeyResult={plan?.key_results?.[0]?.text || ""}

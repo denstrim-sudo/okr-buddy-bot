@@ -21,7 +21,7 @@ const DEFAULT_DRAFT: ValidationDraft = {
   key_results: ["Поднять удержание пользователей на 15%", "Провести 10 интервью с клиентами"],
 };
 
-export const OkrValidator = ({ draft }: Props) => {
+export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);

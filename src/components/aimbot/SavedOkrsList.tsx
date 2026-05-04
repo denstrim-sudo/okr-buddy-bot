@@ -1,9 +1,14 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, BookmarkCheck, Target, TrendingUp } from "lucide-react";
+import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles } from "lucide-react";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import type { GeneratedPlan } from "@/types/okr";
+
+interface Props {
+  onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+}
 
 const formatDate = (iso: string) => {
   try {

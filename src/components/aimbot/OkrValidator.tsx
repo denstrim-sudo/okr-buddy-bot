@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { ValidationDraft, ValidationReport } from "@/types/okr";
+import type { ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 

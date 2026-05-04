@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target } from "lucide-react";
+import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target, BookmarkPlus } from "lucide-react";
+import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";

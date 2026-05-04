@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Lightbulb, Target as TargetIcon, TrendingUp, FlaskConical, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +26,7 @@ const confLabel = {
   High: "Высокая",
 } as const;
 
-export const SolutionCard = ({ id, problem, bet, resultImage, metric, confidence, effort, validation, badge }: Props) => (
+export const SolutionCard = memo(function SolutionCard({ id, problem, bet, resultImage, metric, confidence, effort, validation, badge }: Props) { return (
   <article className="group relative overflow-hidden rounded-2xl border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft via-card to-card p-5 shadow-md transition-all hover:border-hypothesis/60 hover:shadow-elegant">
     <div className="absolute right-0 top-0 h-24 w-24 -translate-y-12 translate-x-12 rounded-full bg-hypothesis/10 blur-2xl" />
 

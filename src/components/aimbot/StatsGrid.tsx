@@ -16,9 +16,12 @@ export const StatsGrid = memo(function StatsGrid({ plan, solutionsCount }: Props
   return (
     <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((s) => (
-        <div key={s.label} className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        <div
+          key={s.label}
+          className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md sm:p-5"
+        >
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{s.label}</p>
-          <p className={`mt-2 text-3xl font-bold tracking-tight ${s.color}`}>{s.value}</p>
+          <p className={`mt-2 text-2xl font-bold tracking-tight sm:text-3xl ${s.color}`}>{s.value}</p>
           <p className="mt-1 text-xs text-muted-foreground">{s.trend}</p>
         </div>
       ))}

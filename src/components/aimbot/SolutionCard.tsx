@@ -27,7 +27,7 @@ const confLabel = {
 } as const;
 
 export const SolutionCard = memo(function SolutionCard({ id, problem, bet, resultImage, metric, confidence, effort, validation, badge }: Props) { return (
-  <article className="group relative overflow-hidden rounded-2xl border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft via-card to-card p-5 shadow-md transition-all hover:border-hypothesis/60 hover:shadow-elegant">
+  <article aria-label={`Решение ${id}`} className="group relative overflow-hidden rounded-2xl border-2 border-hypothesis/30 bg-gradient-to-br from-hypothesis-soft via-card to-card p-5 shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:border-hypothesis/60 hover:shadow-elegant focus-within:border-hypothesis/60">
     <div className="absolute right-0 top-0 h-24 w-24 -translate-y-12 translate-x-12 rounded-full bg-hypothesis/10 blur-2xl" />
 
     <header className="relative mb-3 flex items-start justify-between gap-3">

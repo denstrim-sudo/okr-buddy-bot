@@ -23,7 +23,7 @@ export const SolutionsSection = ({ objective, solutions }: Props) => (
         </p>
       </div>
     </div>
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
       {solutions.map((s) => (
         <SolutionCard
           key={s.id}

@@ -1,9 +1,14 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, BookmarkCheck, Target, TrendingUp } from "lucide-react";
+import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles } from "lucide-react";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import type { GeneratedPlan } from "@/types/okr";
+
+interface Props {
+  onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+}
 
 const formatDate = (iso: string) => {
   try {
@@ -18,7 +23,7 @@ const formatDate = (iso: string) => {
   }
 };
 
-export const SavedOkrsList = () => {
+export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
   const { items, remove, clear } = useSavedOkrs();
 
   if (!items.length) return null;
@@ -77,15 +82,31 @@ export const SavedOkrsList = () => {
                 </div>
                 <p className="mt-1.5 text-sm font-semibold text-foreground">{item.objective}</p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleRemove(item.id)}
-                aria-label="Удалить OKR"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                {onSendToSolutions && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onSendToSolutions(item.plan, item.objective);
+                      toast.success("OKR передан в Генератор решений");
+                    }}
+                    className="h-8 border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft"
+                    aria-label="Передать OKR в генератор решений"
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" /> В Решения
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleRemove(item.id)}
+                  aria-label="Удалить OKR"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {item.plan.key_results.length > 0 && (

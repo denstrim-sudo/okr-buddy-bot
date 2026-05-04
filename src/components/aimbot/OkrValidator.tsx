@@ -101,6 +101,35 @@ export const OkrValidator = ({ draft }: Props) => {
     validate(newObjective, newKrs);
   };
 
+  const acceptObjective = () => {
+    if (!report?.rewritten_objective) return;
+    setObjective(report.rewritten_objective);
+    setReport((p) => (p ? { ...p, rewritten_objective: "" } : p));
+    toast.success("Новая формулировка Objective принята");
+  };
+
+  const rejectObjective = () => {
+    setReport((p) => (p ? { ...p, rewritten_objective: "" } : p));
+    toast.message("Оставлена исходная формулировка Objective");
+  };
+
+  const acceptKr = (idx: number) => {
+    if (!report?.rewritten_key_results?.[idx]) return;
+    const newText = report.rewritten_key_results[idx];
+    setKrs((p) => p.map((x, i) => (i === idx ? newText : x)));
+    setKrsFull((p) => (p ? p.map((x, i) => (i === idx ? { ...x, text: newText } : x)) : p));
+    setReport((p) =>
+      p ? { ...p, rewritten_key_results: p.rewritten_key_results.map((x, i) => (i === idx ? "" : x)) } : p,
+    );
+    toast.success(`KR${idx + 1}: новая формулировка принята`);
+  };
+
+  const rejectKr = (idx: number) => {
+    setReport((p) =>
+      p ? { ...p, rewritten_key_results: p.rewritten_key_results.map((x, i) => (i === idx ? "" : x)) } : p,
+    );
+  };
+
   const applyAndRevalidate = applyRewrite;
 
   const score = report?.score;

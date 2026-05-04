@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, key_results, extra_context } = await req.json();
+    const { objective, key_results, key_results_full, extra_context } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -56,16 +56,35 @@ Deno.serve(async (req: Request) => {
       return errorJson("At least one Key Result is required", 400);
     }
 
-    const krList = (key_results as string[])
-      .map((k, i) => `KR${i + 1}: ${String(k).trim()}`)
-      .filter((s) => s.length > 4)
+    // Если переданы расширенные KR (с baseline/target/metric/kr_type) — используем их.
+    // Иначе — fallback к простому списку строк.
+    const enriched = Array.isArray(key_results_full) && key_results_full.length
+      ? key_results_full
+      : (key_results as string[]).map((t) => ({ text: String(t) }));
+
+    const krList = enriched
+      .map((k: any, i: number) => {
+        const text = String(k?.text ?? "").trim();
+        if (text.length < 4) return "";
+        const baseline = k?.baseline ? String(k.baseline).trim() : "";
+        const target = k?.target ? String(k.target).trim() : "";
+        const metric = k?.metric ? String(k.metric).trim() : "";
+        const kr_type = k?.kr_type ? String(k.kr_type).trim() : "";
+        const meta: string[] = [];
+        if (baseline) meta.push(`baseline: ${baseline}`);
+        if (target) meta.push(`target: ${target}`);
+        if (metric) meta.push(`metric: ${metric}`);
+        if (kr_type) meta.push(`type: ${kr_type}`);
+        return `KR${i + 1}: ${text}${meta.length ? `\n  (${meta.join(" · ")})` : ""}`;
+      })
+      .filter((s) => s.length > 0)
       .join("\n");
 
     const extraBlock = buildExtraBlock(
       extra_context,
       "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
     );
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS:\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology.`;
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть — обязательно учитывай их при проверке правил KR2 «from X to Y» и KR1 «измеримость»):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology. В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
     return await callAITool({
       systemPrompt: SYSTEM_PROMPT,

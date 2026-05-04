@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Loader2, Plus, Trash2, Wand2 } from "lucide-react";
+import { ShieldCheck, Loader2, Plus, Trash2, Wand2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ValidationDraft, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
+import { RuleList, scoreBadgeClass } from "./RuleList";
 
 interface Props {
   draft?: ValidationDraft | null;
@@ -95,12 +96,7 @@ export const OkrValidator = ({ draft }: Props) => {
           </div>
         </div>
         {score !== undefined && (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[11px] font-bold",
-              score >= 80 ? "bg-success-soft text-success" : score >= 50 ? "bg-warning-soft text-warning" : "bg-destructive/10 text-destructive",
-            )}
-          >
+          <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", scoreBadgeClass(score))}>
             Оценка {score}/100
           </span>
         )}
@@ -198,29 +194,7 @@ export const OkrValidator = ({ draft }: Props) => {
           {report && (
             <>
               {report.summary && <p className="mb-3 text-sm text-foreground">{report.summary}</p>}
-              <ul className="space-y-2">
-                {report.rules.map((rule) => (
-                  <li key={rule.id} className="flex items-start gap-2.5 text-sm">
-                    {rule.pass ? (
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                    ) : (
-                      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-[10px] font-bold text-muted-foreground">[{rule.id}]</span>
-                        <span className="text-sm text-foreground">{rule.label}</span>
-                      </div>
-                      {!rule.pass && rule.hint && (
-                        <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
-                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
-                          {rule.hint}
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <RuleList rules={report.rules} />
             </>
           )}
         </div>

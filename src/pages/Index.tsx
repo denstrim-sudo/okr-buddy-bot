@@ -52,6 +52,24 @@ const Index = () => {
     });
   }, []);
 
+  const handleValidatorSendToSolutions = useCallback((obj: string, krs: string[]) => {
+    // Собираем минимальный план из ручного OKR, чтобы Solution Studio подхватил KR-вкладки
+    const synthetic: GeneratedPlan = {
+      objective_refined: obj,
+      score: 0,
+      key_results: krs.map((text) => ({
+        text,
+        baseline: "",
+        target: "",
+        metric: "",
+        kr_type: "leading",
+        solutions: [],
+      })),
+    };
+    setPlan(synthetic);
+    setObjective(obj);
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-gradient-surface">
       <Sidebar />

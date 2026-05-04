@@ -52,6 +52,24 @@ const Index = () => {
     });
   }, []);
 
+  const handleValidatorSendToSolutions = useCallback((obj: string, krs: string[]) => {
+    // Собираем минимальный план из ручного OKR, чтобы Solution Studio подхватил KR-вкладки
+    const synthetic: GeneratedPlan = {
+      objective_refined: obj,
+      score: 0,
+      key_results: krs.map((text) => ({
+        text,
+        baseline: "",
+        target: "",
+        metric: "",
+        kr_type: "leading",
+        solutions: [],
+      })),
+    };
+    setPlan(synthetic);
+    setObjective(obj);
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-gradient-surface">
       <Sidebar />
@@ -68,7 +86,7 @@ const Index = () => {
 
           <section className="grid animate-fade-in gap-4 sm:gap-6 lg:grid-cols-2" style={{ animationDelay: "120ms" }}>
             <OkrGenerator onGenerated={handleGenerated} />
-            <OkrValidator draft={validatorDraft} />
+            <OkrValidator draft={validatorDraft} onSendToSolutions={handleValidatorSendToSolutions} />
           </section>
 
           <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>

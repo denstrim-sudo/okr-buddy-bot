@@ -40,9 +40,18 @@ export interface ValidationReport {
   rewritten_key_results: string[];
 }
 
+export interface ValidationKR {
+  text: string;
+  baseline?: string;
+  target?: string;
+  metric?: string;
+  kr_type?: "leading" | "lagging";
+}
+
 export interface ValidationDraft {
   objective: string;
   key_results: string[];
+  key_results_full?: ValidationKR[];
 }
 
 export interface SolutionReport {

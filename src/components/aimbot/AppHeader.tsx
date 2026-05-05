@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Logo } from "./Logo";
 import { Sidebar } from "./Sidebar";
+import { ModelSelector } from "./ModelSelector";
 
 export const AppHeader = () => {
   const [open, setOpen] = useState(false);

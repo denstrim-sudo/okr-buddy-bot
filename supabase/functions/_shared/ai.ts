@@ -39,15 +39,18 @@ interface CallResult {
   retryable?: boolean;
 }
 
-const DEFAULT_MODEL = "gpt-4.1-mini";
+// AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
+// Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
+const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
 const REQUEST_TIMEOUT_MS = 45_000;
+const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    return { ok: false, status: 500, errorCode: "missing_api_key", errorMessage: "OPENAI_API_KEY is not configured", retryable: false };
+  const API_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+  if (!API_KEY) {
+    return { ok: false, status: 500, errorCode: "missing_api_key", errorMessage: "AIAI_API_KEY не настроен в Cloud → Secrets", retryable: false };
   }
 
   const tool = {
@@ -59,9 +62,9 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
 
   let response: Response;
   try {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
+    response = await fetch(`${AIAI_BASE_URL}/chat/completions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: args.model ?? DEFAULT_MODEL,
         temperature: args.temperature ?? DEFAULT_TEMPERATURE,
@@ -76,30 +79,30 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
-    console.error("OpenAI fetch failed", e);
+    console.error("AIAI.BY fetch failed", e);
     const isAbort = e instanceof Error && e.name === "TimeoutError";
     return {
       ok: false,
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
-      errorMessage: isAbort ? "Запрос к AI занял слишком много времени" : "Не удалось связаться с OpenAI",
+      errorMessage: isAbort ? "Запрос к AI занял слишком много времени" : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };
   }
 
-  if (response.status === 401) {
-    return { ok: false, status: 401, errorCode: "invalid_api_key", errorMessage: "Неверный или отсутствующий OpenAI API ключ", retryable: false };
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, status: 401, errorCode: "invalid_api_key", errorMessage: "Неверный AIAI_API_KEY — проверьте секрет в Cloud → Secrets", retryable: false };
   }
   if (response.status === 429) {
-    return { ok: false, status: 429, errorCode: "rate_limit", errorMessage: "Превышен лимит запросов OpenAI. Попробуйте через несколько секунд.", retryable: true };
+    return { ok: false, status: 429, errorCode: "rate_limit", errorMessage: "Слишком много запросов к AIAI.BY. Подождите несколько секунд и попробуйте снова.", retryable: true };
   }
   if (response.status === 402) {
-    return { ok: false, status: 402, errorCode: "payment_required", errorMessage: "На счёте OpenAI закончились средства.", retryable: false };
+    return { ok: false, status: 402, errorCode: "payment_required", errorMessage: "На счёте AIAI.BY закончились средства. Пополните баланс на aiai.by.", retryable: false };
   }
   if (!response.ok) {
     const txt = await response.text();
-    console.error("OpenAI error", response.status, txt);
-    return { ok: false, status: response.status >= 500 ? 502 : 500, errorCode: "openai_error", errorMessage: `OpenAI error ${response.status}`, retryable: response.status >= 500 };
+    console.error("AIAI.BY error", response.status, txt);
+    return { ok: false, status: response.status >= 500 ? 502 : 500, errorCode: "aiai_error", errorMessage: `AIAI.BY error ${response.status}`, retryable: response.status >= 500 };
   }
 
   const data = await response.json();

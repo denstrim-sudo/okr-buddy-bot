@@ -36,7 +36,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
       const { data, error } = await supabase.functions.invoke("generate-okr", {
-        body: { objective, context, extra_context },
+        body: { objective, context, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

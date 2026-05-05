@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
+import { useAiModel } from "@/contexts/ModelContext";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 
 interface Props {
@@ -28,6 +29,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const { buildContext } = useDocs();
+  const { model } = useAiModel();
 
   useEffect(() => {
     if (!draft) return;
@@ -75,7 +77,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, extra_context },
+        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

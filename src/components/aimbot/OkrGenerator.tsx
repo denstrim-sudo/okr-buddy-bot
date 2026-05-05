@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { GeneratedPlan } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
+import { useAiModel } from "@/contexts/ModelContext";
 
 interface Props {
   onGenerated: (plan: GeneratedPlan, objective: string) => void;
@@ -22,6 +23,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
   const { buildContext, byCategory } = useDocs();
   const { save: saveOkr } = useSavedOkrs();
+  const { model } = useAiModel();
   const docCount = byCategory("okr_context").length + byCategory("methodology").length;
 
   const generate = async () => {
@@ -34,7 +36,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
       const { data, error } = await supabase.functions.invoke("generate-okr", {
-        body: { objective, context, extra_context },
+        body: { objective, context, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

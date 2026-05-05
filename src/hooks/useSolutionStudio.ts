@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useDocs } from "@/contexts/DocsContext";
+import { useAiModel } from "@/contexts/ModelContext";
 import type { GeneratedSolution, SolutionReport } from "@/types/okr";
 
 export const EMPTY_SOL: GeneratedSolution = {
@@ -64,6 +65,7 @@ const handleAIError = (e: any, fallback = "Ошибка") => {
 export function useSolutionStudio(defaultObjective: string, defaultKeyResult: string, keyResults: string[]) {
   const initial = loadInitial();
   const { buildContext } = useDocs();
+  const { model } = useAiModel();
 
   const [objective, setObjective] = useState(initial?.objective ?? defaultObjective);
   const [state, setState] = useState<Record<string, KrSlice>>(() =>
@@ -148,7 +150,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     try {
       const extra_context = buildContext(["methodology", "solutions_kb", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-solution", {
-        body: { objective, key_result: slice.krText, solution: s, extra_context },
+        body: { objective, key_result: slice.krText, solution: s, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -159,7 +161,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     } finally {
       setCardLoading((p) => ({ ...p, [idx]: false }));
     }
-  }, [objective, slice.cardReports, slice.krText, patchSlice, buildContext]);
+  }, [objective, slice.cardReports, slice.krText, patchSlice, buildContext, model]);
 
   const applyCardRewrite = useCallback((idx: number) => {
     const r = slice.cardReports[idx];
@@ -179,7 +181,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     try {
       const extra_context = buildContext(["solutions_kb", "okr_context", "methodology"]);
       const { data, error } = await supabase.functions.invoke("generate-solutions", {
-        body: { objective, key_result: slice.krText, context: slice.context, extra_context },
+        body: { objective, key_result: slice.krText, context: slice.context, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -208,7 +210,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     try {
       const extra_context = buildContext(["methodology", "solutions_kb", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-solution", {
-        body: { objective, key_result: slice.krText, solution: s, extra_context },
+        body: { objective, key_result: slice.krText, solution: s, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

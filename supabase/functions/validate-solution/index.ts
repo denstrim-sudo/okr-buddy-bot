@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, key_result, solution, extra_context } = await req.json();
+    const { objective, key_result, solution, extra_context, model } = await req.json();
     if (!solution || typeof solution !== "object") return errorJson("solution object is required", 400);
 
     for (const f of ["problem", "bet", "result_image", "leading_metric"]) {
@@ -84,6 +84,7 @@ Deno.serve(async (req: Request) => {
       toolName: "audit_solution",
       toolDescription: "Audit a single Solution and return a structured report.",
       parameters: PARAMETERS,
+      model: typeof model === "string" && model ? model : undefined,
     });
   } catch (e) {
     console.error("validate-solution error", e);

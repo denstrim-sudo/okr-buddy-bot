@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, context, extra_context } = await req.json();
+    const { objective, context, extra_context, model } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -101,6 +101,7 @@ Deno.serve(async (req: Request) => {
       toolName: "generate_okr_plan",
       toolDescription: "Return generated Key Results and Solutions for the given Objective.",
       parameters: PARAMETERS,
+      model: typeof model === "string" && model ? model : undefined,
     });
   } catch (e) {
     console.error("generate-okr error", e);

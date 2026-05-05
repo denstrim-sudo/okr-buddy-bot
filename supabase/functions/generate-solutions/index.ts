@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, key_result, context, extra_context } = await req.json();
+    const { objective, key_result, context, extra_context, model } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -83,6 +83,7 @@ Deno.serve(async (req: Request) => {
       toolName: "generate_solutions",
       toolDescription: "Return generated strategic Solutions for the given KR.",
       parameters: PARAMETERS,
+      model: typeof model === "string" && model ? model : undefined,
     });
   } catch (e) {
     console.error("generate-solutions error", e);

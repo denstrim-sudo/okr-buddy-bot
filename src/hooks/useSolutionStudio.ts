@@ -161,7 +161,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     } finally {
       setCardLoading((p) => ({ ...p, [idx]: false }));
     }
-  }, [objective, slice.cardReports, slice.krText, patchSlice, buildContext]);
+  }, [objective, slice.cardReports, slice.krText, patchSlice, buildContext, model]);
 
   const applyCardRewrite = useCallback((idx: number) => {
     const r = slice.cardReports[idx];

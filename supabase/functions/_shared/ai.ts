@@ -48,7 +48,10 @@ const REQUEST_TIMEOUT_MS = 45_000;
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
-  const API_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+  const RAW_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+  // Strip whitespace / non-ASCII chars that may have been pasted with the key
+  // (otherwise fetch throws "headers ... is not a valid ByteString").
+  const API_KEY = RAW_KEY?.replace(/[^\x21-\x7E]/g, "");
   if (!API_KEY) {
     return { ok: false, status: 500, errorCode: "missing_api_key", errorMessage: "AIAI_API_KEY не настроен в Cloud → Secrets", retryable: false };
   }

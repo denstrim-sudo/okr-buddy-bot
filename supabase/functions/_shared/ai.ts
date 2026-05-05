@@ -41,7 +41,7 @@ interface CallResult {
 
 // AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
 const REQUEST_TIMEOUT_MS = 45_000;

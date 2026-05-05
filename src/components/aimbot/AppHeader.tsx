@@ -34,13 +34,14 @@ export const AppHeader = () => {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <ModelSelector />
         <div className="relative hidden md:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <label htmlFor="header-search" className="sr-only">Поиск</label>
           <input
             id="header-search"
             placeholder="Поиск OKR, решений..."
-            className="h-9 w-64 rounded-lg border border-border bg-secondary/40 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-background focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 w-48 rounded-lg border border-border bg-secondary/40 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary focus:bg-background focus-visible:ring-2 focus-visible:ring-ring xl:w-64"
           />
         </div>
         <button

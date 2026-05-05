@@ -29,6 +29,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const { buildContext } = useDocs();
+  const { model } = useAiModel();
 
   useEffect(() => {
     if (!draft) return;

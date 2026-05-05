@@ -92,7 +92,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
   }, [keyResults]);
 
   useEffect(() => {
-    if (!objective && defaultObjective) setObjective(defaultObjective);
+    if (defaultObjective && defaultObjective !== objective) setObjective(defaultObjective);
   }, [defaultObjective]); // eslint-disable-line
 
   // persist

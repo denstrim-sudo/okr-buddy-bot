@@ -150,7 +150,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     try {
       const extra_context = buildContext(["methodology", "solutions_kb", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-solution", {
-        body: { objective, key_result: slice.krText, solution: s, extra_context },
+        body: { objective, key_result: slice.krText, solution: s, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

@@ -65,6 +65,7 @@ const handleAIError = (e: any, fallback = "Ошибка") => {
 export function useSolutionStudio(defaultObjective: string, defaultKeyResult: string, keyResults: string[]) {
   const initial = loadInitial();
   const { buildContext } = useDocs();
+  const { model } = useAiModel();
 
   const [objective, setObjective] = useState(initial?.objective ?? defaultObjective);
   const [state, setState] = useState<Record<string, KrSlice>>(() =>

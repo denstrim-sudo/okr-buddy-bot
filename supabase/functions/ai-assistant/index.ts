@@ -36,9 +36,11 @@
  *     error: { code, message, retryable } | null
  *   }
  *
- * The OpenAI Chat Completions API is used with tool calling (tool_choice forced)
- * to guarantee strict JSON. The OPENAI_API_KEY secret is read from Deno.env and
- * never exposed to the client.
+ * Uses AIAI.BY (OpenAI-compatible gateway, https://aiai.by/docs, base
+ * https://vedai.by/api/v1) /chat/completions with tool calling (tool_choice
+ * forced) to guarantee strict JSON. The AIAI_API_KEY secret is read from
+ * Deno.env and never exposed to the client. Supported models include
+ * gpt-4o, gpt-4o-mini, claude-*, gemini-*, deepseek-* (see AIAI.BY docs).
  */
 
 import { handleCors, callAIToolExtended, errorJson, buildExtraBlock } from "../_shared/ai.ts";

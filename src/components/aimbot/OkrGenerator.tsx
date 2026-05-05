@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { GeneratedPlan } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
+import { useAiModel } from "@/contexts/ModelContext";
 
 interface Props {
   onGenerated: (plan: GeneratedPlan, objective: string) => void;

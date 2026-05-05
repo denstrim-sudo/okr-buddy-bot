@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useDocs } from "@/contexts/DocsContext";
+import { useAiModel } from "@/contexts/ModelContext";
 import type { GeneratedSolution, SolutionReport } from "@/types/okr";
 
 export const EMPTY_SOL: GeneratedSolution = {

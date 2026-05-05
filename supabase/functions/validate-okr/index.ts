@@ -92,6 +92,7 @@ Deno.serve(async (req: Request) => {
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",
       parameters: PARAMETERS,
+      model: typeof model === "string" && model ? model : undefined,
     });
   } catch (e) {
     console.error("validate-okr error", e);

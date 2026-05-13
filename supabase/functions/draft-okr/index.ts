@@ -11,17 +11,37 @@ HARD RULES:
 - Between 1 and 3 Key Results. Never more than 3.
 - Each KR must be an OUTCOME, not an activity/task. Forbidden root verbs: "провести", "поддержать", "запустить", "построить", "разработать", "внедрить", "conduct", "support", "build", "launch", "develop", "ship".
 - At least one KR should be a LEADING (predictive) indicator if at all possible.
-- If baseline / target / metric is unknown — leave that field empty AND add an entry to the KR's "warnings" (e.g. "нет baseline") and to "assumptions" describing what the model would assume. NEVER invent numbers that the user did not give.
+- If baseline / target / metric is unknown — leave that field empty AND add an entry to the KR's "warnings" (e.g. "нет baseline") and to "assumptions". NEVER invent numbers the user did not give.
 - Horizon awareness:
-  - strategic_3y: 3-year ambitious outcomes, no quarterly framing. Targets are directional/long-term.
-  - block_12m: achievable inside a 12-month annual cycle, more concrete metrics.
-- Mode awareness:
+  - strategic_3y: 3-year ambitious outcomes, no quarterly framing. Targets are directional/long-term, possibly category-defining ("стать №1 в сегменте", "выйти на 3 новых рынка").
+  - block_12m: achievable inside a 12-month annual cycle, concrete numeric metrics, no multi-year horizons like "к 2028".
+- Mode:
   - from_scratch: produce a fresh OKR.
-  - rewrite_existing: PRESERVE the user's intent and recognizable wording from parsed_existing. Make MINIMAL edits — only what is required to fix outcome-orientation, measurability, or methodology violations. Do not invent a new theme.
-- DO NOT generate solutions, bets, hypotheses or actions. This step produces ONLY Objective + KRs.
-- "score_hint": your honest 0-100 self-estimate of draft quality (will be re-audited later).
+  - rewrite_existing: PRESERVE intent and recognizable wording from parsed_existing. Make MINIMAL edits.
+- DO NOT generate solutions, bets, hypotheses or actions.
+- "score_hint": honest 0-100 self-estimate of draft quality.
+
+HORIZON FIT SELF-CHECK (REQUIRED in "horizon_fit"):
+After drafting, evaluate how well YOUR OWN Objective and each KR fit the requested horizon.
+- For Objective and each KR: verdict = "fits" | "too_short" (формулировка слишком краткосрочная) | "too_long" (слишком долгосрочная) | "mixed".
+- "reason" — 1 предложение на русском.
+- "suggestion" — переформулированный текст под горизонт (если verdict != "fits").
+- "overall_verdict" + "overall_score" 0-100 — агрегированная оценка.
+- "notes" — общие замечания («нет временных маркеров», «target выглядит как квартальный» и т.п.).
+- Если в запросе focus_horizon_fit=true — ОСОБЕННО строго переформулируй KR под горизонт, используя prior_horizon_fit как обратную связь.
 
 ALL text fields in RUSSIAN. Enum values stay English. Return STRICT JSON via the tool.`;
+
+const HORIZON_FIT_ITEM = {
+  type: "object",
+  properties: {
+    verdict: { type: "string", enum: ["fits", "too_short", "too_long", "mixed"] },
+    reason: { type: "string" },
+    suggestion: { type: "string" },
+  },
+  required: ["verdict", "reason"],
+  additionalProperties: false,
+};
 
 const PARAMETERS = {
   type: "object",
@@ -50,8 +70,34 @@ const PARAMETERS = {
     global_assumptions: { type: "array", items: { type: "string" } },
     global_warnings: { type: "array", items: { type: "string" } },
     score_hint: { type: "number" },
+    horizon_fit: {
+      type: "object",
+      properties: {
+        horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+        overall_verdict: { type: "string", enum: ["fits", "too_short", "too_long", "mixed"] },
+        overall_score: { type: "number" },
+        objective: HORIZON_FIT_ITEM,
+        key_results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              index: { type: "number" },
+              verdict: { type: "string", enum: ["fits", "too_short", "too_long", "mixed"] },
+              reason: { type: "string" },
+              suggestion: { type: "string" },
+            },
+            required: ["index", "verdict", "reason"],
+            additionalProperties: false,
+          },
+        },
+        notes: { type: "array", items: { type: "string" } },
+      },
+      required: ["horizon", "overall_verdict", "overall_score", "objective", "key_results", "notes"],
+      additionalProperties: false,
+    },
   },
-  required: ["horizon", "mode", "objective", "key_results", "global_assumptions", "global_warnings", "score_hint"],
+  required: ["horizon", "mode", "objective", "key_results", "global_assumptions", "global_warnings", "score_hint", "horizon_fit"],
   additionalProperties: false,
 };
 
@@ -60,7 +106,10 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { raw_input, horizon, mode, interpretation, clarifying_answers, extra_context, model } = await req.json();
+    const {
+      raw_input, horizon, mode, interpretation, clarifying_answers,
+      extra_context, model, focus_horizon_fit, prior_horizon_fit,
+    } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
     }
@@ -74,26 +123,31 @@ Deno.serve(async (req: Request) => {
       ? `\n\nCLARIFYING ANSWERS FROM USER (in order):\n${clarifying_answers.map((a: string, i: number) => `Q${i + 1}: ${String(a).trim() || "(skipped)"}`).join("\n")}`
       : "";
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
+    const focusBlock = focus_horizon_fit
+      ? `\n\nFOCUS_HORIZON_FIT: true — переформулируй KR так, чтобы они строго соответствовали горизонту ${h}.${prior_horizon_fit ? `\nPRIOR_HORIZON_FIT (что было не так в прошлой попытке):\n${JSON.stringify(prior_horizon_fit, null, 2).slice(0, 4000)}` : ""}`
+      : "";
 
-    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results following the rules. If facts are missing — leave fields empty and record assumptions/warnings. NO solutions.`;
+    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
 
     const res = await callAITool({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt,
       toolName: "draft_okr",
-      toolDescription: "Draft a single Objective with 1..3 outcome-based Key Results.",
+      toolDescription: "Draft a single Objective with 1..3 outcome-based Key Results plus horizon-fit self-check.",
       parameters: PARAMETERS,
       model: typeof model === "string" && model ? model : undefined,
     });
 
-    // Hard cap to 3 KR on the server side, in case the model overshoots.
     try {
       const data = await res.clone().json();
       if (data && Array.isArray(data.key_results) && data.key_results.length > 3) {
         data.key_results = data.key_results.slice(0, 3);
+        if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
+          data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
+        }
         return json(data);
       }
-    } catch { /* pass through original response */ }
+    } catch { /* pass through */ }
     return res;
   } catch (e) {
     console.error("draft-okr error", e);

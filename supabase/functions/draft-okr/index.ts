@@ -101,7 +101,7 @@ const PARAMETERS = {
   additionalProperties: false,
 };
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 

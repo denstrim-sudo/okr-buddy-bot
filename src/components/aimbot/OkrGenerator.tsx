@@ -462,3 +462,53 @@ const NoteList = ({
     </ul>
   </div>
 );
+
+const horizonFitTone = (score: number, verdict: HorizonFitVerdict) => {
+  if (verdict === "fits" || score >= 70) return "bg-success-soft text-success";
+  if (score >= 40 || verdict === "mixed") return "bg-warning-soft text-warning";
+  return "bg-destructive/10 text-destructive";
+};
+
+const verdictLabel = (v: HorizonFitVerdict, horizon: OkrHorizon) => {
+  const h = horizon === "strategic_3y" ? "3 года" : "12 мес";
+  switch (v) {
+    case "fits": return `Подходит для ${h}`;
+    case "too_short": return `Слишком краткосрочно для ${h}`;
+    case "too_long": return `Слишком долгосрочно для ${h}`;
+    case "mixed": return `Частично подходит для ${h}`;
+  }
+};
+
+const HorizonNote = ({
+  item, horizon, onApply,
+}: { item: HorizonFitItem; horizon: OkrHorizon; onApply: (suggestion: string) => void }) => {
+  const tone = item.verdict === "fits"
+    ? "border-success/30 bg-success-soft/40 text-success"
+    : item.verdict === "mixed"
+      ? "border-warning/30 bg-warning-soft/50 text-warning"
+      : "border-destructive/30 bg-destructive/10 text-destructive";
+  return (
+    <div className={cn("space-y-1.5 rounded-md border px-2.5 py-1.5 text-[11px]", tone)}>
+      <div className="flex items-center gap-1.5 font-semibold">
+        <CalendarClock className="h-3 w-3" />
+        {verdictLabel(item.verdict, horizon)}
+      </div>
+      <p className="text-foreground/80">{item.reason}</p>
+      {item.verdict !== "fits" && item.suggestion && (
+        <div className="space-y-1 rounded bg-background/60 p-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Предложение</p>
+          <p className="text-foreground">{item.suggestion}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => onApply(item.suggestion!)}
+          >
+            <Check className="mr-1 h-3 w-3" /> Применить
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};

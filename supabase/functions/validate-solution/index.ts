@@ -14,7 +14,15 @@ S7. Aligns with the parent Objective and Key Result (moves the KR's metric)
 Score 0-100. Status: pass (>=80), warn (50-79), fail (<50).
 Provide a rewritten_solution with the same fields, optimized.
 
-IMPORTANT: All text fields (summary, hint, rewritten_solution.*) MUST be in RUSSIAN. Enum values stay in English.
+For EACH rule you MUST return:
+- "severity": уровень важности
+  - "critical" — без исправления Решение методологически некорректно (bet=фича/задача, нет связи с KR, проблема выдумана/расплывчата, leading-метрика — vanity)
+  - "important" — снижает качество и шансы провалидировать гипотезу (несогласованность confidence/effort с validation, размытый result image)
+  - "improve" — точечное усиление формулировки, не блокирующее
+  - Для pass=true ставь "improve" (или опускай).
+- "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно — как влияет на проверяемость гипотезы, фокус, связь с KR. Без длинных лекций.
+
+IMPORTANT: All text fields (label, hint, why, summary, rewritten_solution.*) MUST be in RUSSIAN. Enum values stay in English.
 
 Return STRICT JSON only via the provided tool.`;
 
@@ -33,8 +41,10 @@ const PARAMETERS = {
           label: { type: "string" },
           pass: { type: "boolean" },
           hint: { type: "string" },
+          severity: { type: "string", enum: ["critical", "important", "improve"] },
+          why: { type: "string", description: "≤140 chars Russian explanation of why this matters." },
         },
-        required: ["id", "label", "pass", "hint"],
+        required: ["id", "label", "pass", "hint", "severity", "why"],
         additionalProperties: false,
       },
     },

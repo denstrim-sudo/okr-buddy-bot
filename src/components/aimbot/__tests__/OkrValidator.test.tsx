@@ -18,10 +18,11 @@ const validReport = {
   summary: "Хороший OKR",
   rules: [
     { id: "O1", label: "Качественный Objective", pass: true, hint: "" },
+    { id: "O3", label: "Без цифр в Objective", pass: false, hint: "Уберите проценты", severity: "critical" as const, why: "Цифры подменяют качественную цель." },
     { id: "KR1", label: "KR измеримы", pass: true, hint: "" },
-    { id: "KR2", label: "Baseline и target", pass: true, hint: "" },
+    { id: "KR2", label: "Baseline и target", pass: false, hint: "Добавьте baseline для KR2", severity: "important" as const, why: "Без baseline нельзя посчитать прогресс." },
     { id: "KR3", label: "Outcomes, не tasks", pass: true, hint: "" },
-    { id: "KR10", label: "Есть leading", pass: true, hint: "" },
+    { id: "KR10", label: "Есть leading", pass: false, hint: "Добавьте предсказательный KR", severity: "improve" as const, why: "Leading даёт ранний сигнал." },
   ],
   rewritten_objective: "",
   rewritten_key_results: ["", ""],
@@ -61,7 +62,14 @@ describe("OkrValidator (Module 2)", () => {
     expect(invokeMock.mock.calls[0][0]).toBe("validate-okr");
     expect(invokeMock.mock.calls[0][1].body.objective).toBe("Стать лидером");
 
-    await screen.findByText(/Качественный Objective/);
+    await screen.findByText(/Без цифр в Objective/);
+    // severity-бейджи и summary-сводка
+    expect(screen.getAllByText(/Критично/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Критичных:\s*1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Важных:\s*1/i)).toBeInTheDocument();
+    // строка «Почему важно»
+    expect(screen.getByText(/Цифры подменяют качественную цель/)).toBeInTheDocument();
+
     const sendBtn = await screen.findByRole("button", { name: /Передать в Решения/i });
     await userEvent.click(sendBtn);
     expect(onSend).toHaveBeenCalledWith("Стать лидером", ["Поднять X с 30 до 50", "NPS 32→50"]);

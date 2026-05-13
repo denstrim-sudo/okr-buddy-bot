@@ -250,6 +250,34 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           {report && (
             <>
               {report.summary && <p className="mb-3 text-sm text-foreground">{report.summary}</p>}
+              {(() => {
+                const failed = report.rules.filter((r) => !r.pass);
+                const counts = {
+                  critical: failed.filter((r) => (r.severity ?? "important") === "critical").length,
+                  important: failed.filter((r) => (r.severity ?? "important") === "important").length,
+                  improve: failed.filter((r) => (r.severity ?? "important") === "improve").length,
+                };
+                if (failed.length === 0) return null;
+                return (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+                    {counts.critical > 0 && (
+                      <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
+                        Критичных: {counts.critical}
+                      </span>
+                    )}
+                    {counts.important > 0 && (
+                      <span className="rounded-full bg-warning-soft px-2 py-0.5 font-semibold text-warning">
+                        Важных: {counts.important}
+                      </span>
+                    )}
+                    {counts.improve > 0 && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 font-semibold text-muted-foreground">
+                        Улучшений: {counts.improve}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
               <RuleList rules={report.rules} />
             </>
           )}

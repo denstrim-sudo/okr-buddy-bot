@@ -1,102 +1,86 @@
 ## Цель
 
-Покрыть тестами каждый из трёх модулей OKR Copilot и их связку. Сейчас в проекте есть только `src/test/example.test.ts` и нулевое покрытие edge functions.
+Эволюционировать Модуль 2 (аудит OKR + аудит Решений) от плоского списка правил к **структурированному ревью** с приоритетами и коротким объяснением «почему это важно». Без перестройки архитектуры, без замены rule engine, без редизайна.
 
-## Что тестируем
+Сейчас замечания — однородный список `ValidationRule { id, label, pass, hint }`, отрисовываемый одним `RuleList` (используется и в `OkrValidator`, и в `SolutionStudio`). Все нарушения визуально равны: и «Objective содержит цифры», и «можно усилить формулировку» выглядят одинаково красным крестом.
 
-### Модуль 1 — OKR Generator
-Edge functions: `interpret-okr-input`, `draft-okr`. UI: `OkrGenerator.tsx`.
+## Что меняется
 
-- **Edge (Deno, реальный AI вызов через `_shared/ai.ts`)**
-  - `interpret-okr-input`: на сыром тексте про годовую цель возвращает `detected_horizon=block_12m`, `detected_mode=from_scratch`, ≥1 `clarifying_questions`.
-  - `interpret-okr-input`: при вставленном готовом OKR (`Objective: ... KR1: ...`) возвращает `detected_mode=rewrite_existing`, `parsed_existing.objective` непустой.
-  - `draft-okr`: возвращает ровно 1 objective, ≤3 KR, у каждого KR `is_outcome=true`, заполнен `horizon_fit` с `overall_score 0..100`.
-  - `draft-okr` с `focus_horizon_fit=true` + `prior_horizon_fit` отдаёт изменённые формулировки KR.
-  - Валидация входа: `raw_input=""` → 400.
+### 1. Тип `ValidationRule` — два новых поля (опциональных, чтобы старые ответы не ломались)
 
-- **UI (Vitest + RTL, мок `supabase.functions.invoke`)**
-  - `OkrGenerator` фаза `input → interpreting → clarify`: при ответе с `clarifying_questions.length>0` появляются textarea для ответов.
-  - Фаза `clarify → drafting → draft_ready`: появляются бейдж «Соответствие горизонту X/100», `HorizonNote` под objective и KR.
-  - Кнопка «Применить предложение» подставляет `suggestion` в текст KR без сетевого вызова.
-  - Кнопка «Перегенерировать с акцентом на горизонт» вызывает `draft-okr` с `focus_horizon_fit:true` и `prior_horizon_fit`.
-  - Кнопка «Передать в аудит» вызывает `onGenerated` с корректно собранным `GeneratedPlan` (адаптер `draftToGeneratedPlan`).
+В `src/types/okr.ts`:
 
-### Модуль 2 — OKR Validator
-Edge: `validate-okr`. UI: `OkrValidator.tsx`.
+```ts
+export type RuleSeverity = "critical" | "important" | "improve";
 
-- **Edge**
-  - На валидном OKR: `status="pass"`, `score≥70`, `rules` непустой, каждое правило содержит `pass:boolean`.
-  - На «activity-KR» («Запустить лендинг»): хотя бы одно правило с `pass=false` и `status≠"pass"`.
-  - Возвращает `rewritten_objective` и `rewritten_key_results.length === input.length`.
+export interface ValidationRule {
+  id: string;
+  label: string;
+  pass: boolean;
+  hint: string;
+  severity?: RuleSeverity;   // НОВОЕ
+  why?: string;              // НОВОЕ — короткое (≤140 символов) объяснение, почему это важно
+}
+```
 
-- **UI**
-  - При получении `draft` через props автоматически заполняются поля.
-  - Кнопка «Проверить» рендерит `RuleList` со всеми правилами; статусные цвета соответствуют `pass/warn/fail`.
-  - Кнопка «В Solution Studio» вызывает `onSendToSolutions(objective, krs)`.
+Поля **опциональные** → старые сохранённые отчёты и edge-функции, которые ещё не обновлены, продолжат работать. На UI просто не покажется бейдж/«почему».
 
-### Модуль 3 — Solution Studio
-Edge: `generate-solutions`, `validate-solution`. UI: `SolutionStudio.tsx`, hook `useSolutionStudio.ts`.
+### 2. Edge functions `validate-okr` и `validate-solution` — расширяем схему и промпт
 
-- **Edge**
-  - `generate-solutions`: возвращает массив `solutions`, у каждого заполнены `bet`, `result_image`, `leading_metric`, `confidence∈{Low,Medium,High}`, `effort∈{S,M,L,XL}`.
-  - `validate-solution`: возвращает `score`, `rules`, `rewritten_solution` со всеми обязательными полями.
+Минимально, без слома обратной совместимости:
 
-- **UI / hook**
-  - `useSolutionStudio` пробрасывает `objective` (regression-тест предыдущего фикса) в payload.
-  - При смене вкладки KR подгружаются соответствующие решения.
+- В `PARAMETERS.rules.items.properties` добавить `severity` (enum) и `why` (string). Обновить `required` — добавить оба поля (модель должна заполнять).
+- В системный промпт каждой функции добавить блок «SEVERITY» с критериями:
+  - `critical` — нарушение делает OKR/Решение методологически некорректным или непригодным к работе (Objective с цифрами, KR без метрики, bet как фича/задача, нет связи с KR).
+  - `important` — снижает качество и управляемость, но OKR/Решение работоспособно (нет leading-индикатора, размытый result image, неуверенный baseline).
+  - `improve` — точечное усиление формулировки, не блокирующее (стилистика, конкретизация сегмента, более измеримая формулировка).
+- Поле `why`: 1 короткое предложение на русском (≤140 символов), без методологической лекции — «как это влияет на измеримость / фокус / outcome / ревью». Примеры в промпте.
+- Для `pass=true` — `severity` не выставляется (или ставится `improve`); `why` можно опустить.
 
-### Связка (integration)
-Один тест прогоняет цепочку **в режиме мока** для скорости:
-1. Рендерим `<Index />` с моками `supabase.functions.invoke`.
-2. В `OkrGenerator` вводим текст → interpret → (ответы) → draft → «Передать в аудит».
-3. Проверяем, что в `OkrValidator` подставился `objective_refined` и список KR из draft.
-4. Жмём «Проверить» → «В Solution Studio».
-5. Проверяем, что в `SolutionStudio` `defaultObjective` = тот же objective и `keyResults` совпадают.
-6. Один happy-path edge-test с реальными вызовами: `interpret-okr-input → draft-okr → validate-okr → generate-solutions`, проверяем только что каждый этап вернул 200 и непустые ключевые поля (медленно, помечается как `slow`).
+`score`/`status`/`rules.id` не меняются, чтобы не задеть Модуль 1 (адаптер `draftToGeneratedPlan` не трогается) и Модуль 3 (UI карточек).
 
-## Технические детали
+### 3. `RuleList.tsx` — расширяем без поломки sm-режима
 
-**Frontend (`src/**/__tests__` или рядом с компонентом)**
-- Vitest + jsdom уже настроены.
-- Моки supabase: `vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: vi.fn() } } }))`. Каждый тест задаёт нужный ответ через `mockResolvedValueOnce`.
-- Заворачиваем рендер в `ModelProvider` и `DocsProvider` (из `src/contexts/...`).
+Один компонент обслуживает оба места (validator + solution studio). Меняем только режим `md`; `sm` остаётся компактным, без лишних блоков (он используется в маленьких карточках Solutions).
 
-**Edge (`supabase/functions/<name>/index.test.ts`)**
-- `import "https://deno.land/std@0.224.0/dotenv/load.ts"` — для `LOVABLE_API_KEY`.
-- Тестируем через локальный `Deno.serve` handler: импортируем `index.ts` динамически и `fetch`-аем по `http://localhost:<port>` либо вызываем экспортированный handler. Если handler не экспортирован — небольшой рефактор: вынести `handler` отдельно и `Deno.serve(handler)` оставить в файле. Это единственная правка прод-кода ради тестируемости.
-- Помечаем тесты, делающие реальный AI вызов, как `Deno.test({ name, ignore: !Deno.env.get("RUN_AI_TESTS") })` — по умолчанию пропускаются, чтобы не жечь кредиты на каждом прогоне. CI/локальный запуск — с флагом.
-- Быстрые тесты (валидация входа, форма ответа на моке `fetch`) — без флага.
+В `md`:
+- Сортировать правила: сначала `pass=false` по severity (`critical → important → improve`), затем `pass=true` (свернуть в «Что уже хорошо · N» — collapsible, по умолчанию свёрнут, чтобы экран не раздувался).
+- Для каждого падшего правила добавить **бейдж severity** слева от `[id]`:
+  - `critical` — `bg-destructive/10 text-destructive` + иконка `XCircle`
+  - `important` — `bg-warning-soft text-warning` + иконка `AlertTriangle`
+  - `improve` — `bg-muted text-muted-foreground` + иконка `Sparkles`
+- Под `hint` добавить тонкую строку «Почему это важно: {why}» с приглушённым стилем (`text-muted-foreground/80`, italic, иконка `Info` 12px). Если `why` пустой — строка не рендерится.
 
-**Запуск**
-- Frontend: `bunx vitest run` (через `lovable-exec test`).
-- Edge: `supabase--test_edge_functions` для всех функций; AI-тесты — отдельным проходом с `RUN_AI_TESTS=1`.
+Никаких новых модальных окон, аккордеонов, табов, табличного режима, чата. Всё inline в существующем блоке «Отчёт валидации».
 
-## Файлы
+### 4. `OkrValidator.tsx` — мини-сводка над списком
 
-Новые:
-- `src/components/aimbot/__tests__/OkrGenerator.test.tsx`
-- `src/components/aimbot/__tests__/OkrValidator.test.tsx`
-- `src/components/aimbot/__tests__/SolutionStudio.test.tsx`
-- `src/hooks/__tests__/useSolutionStudio.test.ts`
-- `src/pages/__tests__/Index.integration.test.tsx`
-- `supabase/functions/interpret-okr-input/index.test.ts`
-- `supabase/functions/draft-okr/index.test.ts`
-- `supabase/functions/validate-okr/index.test.ts`
-- `supabase/functions/generate-solutions/index.test.ts`
-- `supabase/functions/validate-solution/index.test.ts`
-- `src/test/utils.tsx` — обёртки `renderWithProviders`, фикстуры `OkrDraft`/`GeneratedPlan`.
+Над `<RuleList>` добавить однострочную сводку: «Критичных: X · Важных: Y · Улучшений: Z» (если все нули — не показывать). Это всё, что меняется в компоненте. Кнопки «Принять новую / Оставить старую / Принять все и перепроверить / Передать в Решения» — без изменений. Порог 70/100 для передачи в Solutions — без изменений.
 
-Минимальные правки в проде (только ради тестируемости, поведения не меняют):
-- В каждом `supabase/functions/*/index.ts` экспортировать `handler` и оставить `Deno.serve(handler)`.
+### 5. `SolutionStudio` — без изменений по UX
 
-## Что не делаем
+`RuleList` используется и здесь. Чтобы не раздувать карточки Solutions (`size="sm"`), там бейджи severity показываем компактно (точкой-цветом перед `[id]`), а строку «Почему это важно» **скрываем в sm-режиме**. Большой блок «Полный аудит решения» (`size="md"`) — получает то же поведение, что и в Validator.
 
-- Не покрываем UI shadcn-компонентов.
-- Не пишем e2e через браузер — этого достаточно integration-теста на jsdom.
-- Не трогаем `generate-okr` (deprecated).
+## Файлы, которые меняются
+
+- `src/types/okr.ts` — `RuleSeverity`, два поля в `ValidationRule`.
+- `src/components/aimbot/RuleList.tsx` — сортировка, бейдж severity, строка `why`, collapsible «Что уже хорошо».
+- `src/components/aimbot/OkrValidator.tsx` — однострочная сводка `критичных/важных/улучшений`.
+- `supabase/functions/validate-okr/index.ts` — поля `severity` + `why` в schema и промпт.
+- `supabase/functions/validate-solution/index.ts` — то же самое.
+- (Тесты) `supabase/functions/validate-okr/index.test.ts` и `validate-solution/index.test.ts` — добавить проверку: при `pass=false` есть `severity ∈ {critical, important, improve}` и `why.length > 0` (под флагом `RUN_AI_TESTS`). Frontend тест `OkrValidator.test.tsx` — расширить мок: для одного правила `severity:"critical"` + `why`, проверить, что бейдж и текст рендерятся.
+
+## Что НЕ меняется
+
+- Адаптер Модуля 1 → Модуль 2 (`buildDraft` в `Index.tsx`) и тип `GeneratedPlan` — без изменений.
+- Передача OKR в Модуль 3 (`onSendToSolutions(objective, krs)`) — без изменений; severity не пробрасывается в Solutions, остаётся внутри Module 2.
+- Порог 70/100, поведение «Принять предложение», структура `rewritten_objective`/`rewritten_key_results` — без изменений.
+- Edge function `interpret-okr-input`, `draft-okr`, `generate-solutions`, `ai-assistant`, `generate-okr` — не трогаем.
+- Визуальный стиль, тема, токены — без изменений (используем уже существующие `success`, `warning`, `destructive`, `muted`).
 
 ## Открытые вопросы
 
-1. Запускать ли AI-тесты (реальные вызовы Lovable AI) по умолчанию или только под флагом `RUN_AI_TESTS=1`? Рекомендую — под флагом, чтобы не жечь кредиты.
-2. Делать ли integration-тест **только на моках** (быстро, детерминированно) или дублировать ещё и реальной цепочкой? Рекомендую — мок + один опциональный «smoke»-прогон под флагом.
-3. ОК ли мини-рефактор `Deno.serve(handler)` → `export const handler; Deno.serve(handler)` в каждой edge-функции?
+1. **Три уровня (`critical/important/improve`) или два (`critical/improve`)?** Рекомендую три — пользователь явно их перечислил.
+2. **«Что уже хорошо» — свернуть по умолчанию или показать списком?** Рекомендую свернуть, чтобы экран не раздувался; раскрывается одним кликом.
+3. **Поле `why` — обязательное в JSON-схеме edge-функции или опциональное?** Рекомендую обязательное при `pass=false` (через описание в промпте), опциональное в TS-типе для обратной совместимости со старыми сохранёнными отчётами.
+4. **Влияет ли severity на итоговый `score`?** Не меняем формулу — оставляем модели; иначе придётся править оба места и пороги передачи. Можно вернуться к этому отдельной итерацией.

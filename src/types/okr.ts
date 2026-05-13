@@ -82,11 +82,15 @@ export interface GeneratedPlan {
   key_results: GeneratedKR[];
 }
 
+export type RuleSeverity = "critical" | "important" | "improve";
+
 export interface ValidationRule {
   id: string;
   label: string;
   pass: boolean;
   hint: string;
+  severity?: RuleSeverity;
+  why?: string;
 }
 
 export interface ValidationReport {

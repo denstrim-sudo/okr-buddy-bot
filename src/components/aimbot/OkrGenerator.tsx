@@ -285,11 +285,27 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             )}>
               Самооценка {draft.score_hint}/100
             </span>
+            {draft.horizon_fit && (
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                horizonFitTone(draft.horizon_fit.overall_score, draft.horizon_fit.overall_verdict),
+              )}>
+                <CalendarClock className="h-3 w-3" />
+                Соответствие горизонту {draft.horizon_fit.overall_score}/100
+              </span>
+            )}
           </div>
 
-          <div className="rounded-xl border border-border bg-background p-4">
+          <div className="rounded-xl border border-border bg-background p-4 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{draft.objective}</p>
+            {draft.horizon_fit?.objective && (
+              <HorizonNote
+                item={draft.horizon_fit.objective}
+                horizon={draft.horizon}
+                onApply={(s) => applyObjectiveSuggestion(s)}
+              />
+            )}
           </div>
 
           <div className="space-y-3">

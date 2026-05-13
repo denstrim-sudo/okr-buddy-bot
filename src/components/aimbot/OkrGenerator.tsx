@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target, BookmarkPlus, AlertTriangle, Info, RotateCcw, ShieldCheck, MessageCircleQuestion } from "lucide-react";
+import { Sparkles, Wand2, Loader2, ChevronRight, TrendingUp, Target, BookmarkPlus, AlertTriangle, Info, RotateCcw, ShieldCheck, MessageCircleQuestion, CalendarClock, RefreshCw, Check } from "lucide-react";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { GeneratedPlan, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
+import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
@@ -87,7 +87,11 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     }
   };
 
-  const runDraft = async (interp: OkrInputInterpretation, clarifying_answers: string[]) => {
+  const runDraft = async (
+    interp: OkrInputInterpretation,
+    clarifying_answers: string[],
+    opts?: { focus_horizon_fit?: boolean; prior_horizon_fit?: HorizonFit | null },
+  ) => {
     setPhase("drafting");
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
@@ -100,6 +104,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           clarifying_answers,
           extra_context,
           model,
+          focus_horizon_fit: opts?.focus_horizon_fit ?? false,
+          prior_horizon_fit: opts?.prior_horizon_fit ?? undefined,
         },
       });
       if (error) throw error;
@@ -112,6 +118,25 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       setPhase(interp.clarifying_questions?.length ? "clarify" : "input");
       handleError(e, "Ошибка генерации черновика");
     }
+  };
+
+  const regenerateWithHorizonFocus = () => {
+    if (!interpretation || !draft) return;
+    runDraft(interpretation, answers, { focus_horizon_fit: true, prior_horizon_fit: draft.horizon_fit ?? null });
+  };
+
+  const applyObjectiveSuggestion = (suggestion: string) => {
+    setDraft((d) => d ? { ...d, objective: suggestion } : d);
+    toast.success("Objective обновлён");
+  };
+
+  const applyKrSuggestion = (idx: number, suggestion: string) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const krs = d.key_results.map((k, i) => i === idx ? { ...k, text: suggestion } : k);
+      return { ...d, key_results: krs };
+    });
+    toast.success(`KR${idx + 1} обновлён`);
   };
 
   const submitClarifications = () => {
@@ -260,11 +285,27 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             )}>
               Самооценка {draft.score_hint}/100
             </span>
+            {draft.horizon_fit && (
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                horizonFitTone(draft.horizon_fit.overall_score, draft.horizon_fit.overall_verdict),
+              )}>
+                <CalendarClock className="h-3 w-3" />
+                Соответствие горизонту {draft.horizon_fit.overall_score}/100
+              </span>
+            )}
           </div>
 
-          <div className="rounded-xl border border-border bg-background p-4">
+          <div className="rounded-xl border border-border bg-background p-4 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{draft.objective}</p>
+            {draft.horizon_fit?.objective && (
+              <HorizonNote
+                item={draft.horizon_fit.objective}
+                horizon={draft.horizon}
+                onApply={(s) => applyObjectiveSuggestion(s)}
+              />
+            )}
           </div>
 
           <div className="space-y-3">
@@ -304,6 +345,12 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
                     Похоже на activity, а не outcome — требует доработки
                   </p>
                 )}
+                {(() => {
+                  const fit = draft.horizon_fit?.key_results?.find((f) => f.index === idx);
+                  return fit ? (
+                    <HorizonNote item={fit} horizon={draft.horizon} onApply={(s) => applyKrSuggestion(idx, s)} />
+                  ) : null;
+                })()}
               </div>
             ))}
           </div>
@@ -316,6 +363,29 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               {draft.global_assumptions?.length > 0 && (
                 <NoteList icon={<Info className="h-3 w-3" />} items={draft.global_assumptions} tone="info" label="Допущения" />
               )}
+            </div>
+          )}
+
+          {draft.horizon_fit && draft.horizon_fit.overall_verdict !== "fits" && (
+            <div className="space-y-2 rounded-xl border border-warning/40 bg-warning-soft/40 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-warning">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Часть формулировок не укладывается в горизонт {draft.horizon === "strategic_3y" ? "3 года" : "12 мес"}
+              </div>
+              {draft.horizon_fit.notes?.length > 0 && (
+                <ul className="ml-5 list-disc space-y-0.5 text-[11px] text-foreground/80">
+                  {draft.horizon_fit.notes.map((n, i) => <li key={i}>{n}</li>)}
+                </ul>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={regenerateWithHorizonFocus}
+                className="border-warning/50 text-warning hover:bg-warning-soft"
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Перегенерировать с акцентом на горизонт
+              </Button>
             </div>
           )}
 
@@ -392,3 +462,53 @@ const NoteList = ({
     </ul>
   </div>
 );
+
+const horizonFitTone = (score: number, verdict: HorizonFitVerdict) => {
+  if (verdict === "fits" || score >= 70) return "bg-success-soft text-success";
+  if (score >= 40 || verdict === "mixed") return "bg-warning-soft text-warning";
+  return "bg-destructive/10 text-destructive";
+};
+
+const verdictLabel = (v: HorizonFitVerdict, horizon: OkrHorizon) => {
+  const h = horizon === "strategic_3y" ? "3 года" : "12 мес";
+  switch (v) {
+    case "fits": return `Подходит для ${h}`;
+    case "too_short": return `Слишком краткосрочно для ${h}`;
+    case "too_long": return `Слишком долгосрочно для ${h}`;
+    case "mixed": return `Частично подходит для ${h}`;
+  }
+};
+
+const HorizonNote = ({
+  item, horizon, onApply,
+}: { item: HorizonFitItem; horizon: OkrHorizon; onApply: (suggestion: string) => void }) => {
+  const tone = item.verdict === "fits"
+    ? "border-success/30 bg-success-soft/40 text-success"
+    : item.verdict === "mixed"
+      ? "border-warning/30 bg-warning-soft/50 text-warning"
+      : "border-destructive/30 bg-destructive/10 text-destructive";
+  return (
+    <div className={cn("space-y-1.5 rounded-md border px-2.5 py-1.5 text-[11px]", tone)}>
+      <div className="flex items-center gap-1.5 font-semibold">
+        <CalendarClock className="h-3 w-3" />
+        {verdictLabel(item.verdict, horizon)}
+      </div>
+      <p className="text-foreground/80">{item.reason}</p>
+      {item.verdict !== "fits" && item.suggestion && (
+        <div className="space-y-1 rounded bg-background/60 p-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Предложение</p>
+          <p className="text-foreground">{item.suggestion}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => onApply(item.suggestion!)}
+          >
+            <Check className="mr-1 h-3 w-3" /> Применить
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};

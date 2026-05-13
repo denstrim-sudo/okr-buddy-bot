@@ -58,9 +58,9 @@ describe("OkrGenerator (Module 1)", () => {
     const onGenerated = vi.fn();
     renderWithProviders(<OkrGenerator onGenerated={onGenerated} />);
 
-    const ta = screen.getByPlaceholderText(/Опишите цель/i);
+    const ta = screen.getByPlaceholderText(/Хотим стать самым любимым онбордингом/i);
     await userEvent.type(ta, "Хотим удвоить активацию пользователей за год");
-    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать|Сформулировать|Подготовить|Анализ|Дальше|Старт|Поехали|Сгенерировать|Далее/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать ввод/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
     expect(invokeMock.mock.calls[0][0]).toBe("interpret-okr-input");

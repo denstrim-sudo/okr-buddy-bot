@@ -366,6 +366,29 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             </div>
           )}
 
+          {draft.horizon_fit && draft.horizon_fit.overall_verdict !== "fits" && (
+            <div className="space-y-2 rounded-xl border border-warning/40 bg-warning-soft/40 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-warning">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Часть формулировок не укладывается в горизонт {draft.horizon === "strategic_3y" ? "3 года" : "12 мес"}
+              </div>
+              {draft.horizon_fit.notes?.length > 0 && (
+                <ul className="ml-5 list-disc space-y-0.5 text-[11px] text-foreground/80">
+                  {draft.horizon_fit.notes.map((n, i) => <li key={i}>{n}</li>)}
+                </ul>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={regenerateWithHorizonFocus}
+                className="border-warning/50 text-warning hover:bg-warning-soft"
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Перегенерировать с акцентом на горизонт
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button onClick={sendToAudit} className="flex-1 bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95">
               <ShieldCheck className="mr-2 h-4 w-4" /> Передать в аудит

@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { GeneratedPlan, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
+import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";

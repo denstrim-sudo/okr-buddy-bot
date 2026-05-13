@@ -1,87 +1,102 @@
 ## Цель
 
-Сделать так, чтобы Модуль 1 не просто помечал draft с горизонтом `strategic_3y` / `block_12m`, но и **явно проверял**, реально ли сформулированные Objective + KR соответствуют этому периоду, и подсказывал, что не так.
+Покрыть тестами каждый из трёх модулей OKR Copilot и их связку. Сейчас в проекте есть только `src/test/example.test.ts` и нулевое покрытие edge functions.
 
-Сейчас горизонт задаётся пользователем (или детектируется в `interpret-okr-input`) и передаётся в `draft-okr` как параметр промпта, но обратной валидации нет: модель может выдать «годовой» KR под лейблом 3-летний и наоборот — пользователь этого не увидит.
+## Что тестируем
 
-## Что добавляем
+### Модуль 1 — OKR Generator
+Edge functions: `interpret-okr-input`, `draft-okr`. UI: `OkrGenerator.tsx`.
 
-### 1. Новый блок данных в `OkrDraft` (тип)
+- **Edge (Deno, реальный AI вызов через `_shared/ai.ts`)**
+  - `interpret-okr-input`: на сыром тексте про годовую цель возвращает `detected_horizon=block_12m`, `detected_mode=from_scratch`, ≥1 `clarifying_questions`.
+  - `interpret-okr-input`: при вставленном готовом OKR (`Objective: ... KR1: ...`) возвращает `detected_mode=rewrite_existing`, `parsed_existing.objective` непустой.
+  - `draft-okr`: возвращает ровно 1 objective, ≤3 KR, у каждого KR `is_outcome=true`, заполнен `horizon_fit` с `overall_score 0..100`.
+  - `draft-okr` с `focus_horizon_fit=true` + `prior_horizon_fit` отдаёт изменённые формулировки KR.
+  - Валидация входа: `raw_input=""` → 400.
 
-В `src/types/okr.ts` расширить `OkrDraft` новым опциональным полем:
+- **UI (Vitest + RTL, мок `supabase.functions.invoke`)**
+  - `OkrGenerator` фаза `input → interpreting → clarify`: при ответе с `clarifying_questions.length>0` появляются textarea для ответов.
+  - Фаза `clarify → drafting → draft_ready`: появляются бейдж «Соответствие горизонту X/100», `HorizonNote` под objective и KR.
+  - Кнопка «Применить предложение» подставляет `suggestion` в текст KR без сетевого вызова.
+  - Кнопка «Перегенерировать с акцентом на горизонт» вызывает `draft-okr` с `focus_horizon_fit:true` и `prior_horizon_fit`.
+  - Кнопка «Передать в аудит» вызывает `onGenerated` с корректно собранным `GeneratedPlan` (адаптер `draftToGeneratedPlan`).
 
-```ts
-export type HorizonFitVerdict = "fits" | "too_short" | "too_long" | "mixed";
+### Модуль 2 — OKR Validator
+Edge: `validate-okr`. UI: `OkrValidator.tsx`.
 
-export interface HorizonFitKR {
-  index: number;            // позиция KR (0..2)
-  verdict: HorizonFitVerdict;
-  reason: string;           // на русском, 1 предложение
-  suggestion?: string;      // как переформулировать под горизонт
-}
+- **Edge**
+  - На валидном OKR: `status="pass"`, `score≥70`, `rules` непустой, каждое правило содержит `pass:boolean`.
+  - На «activity-KR» («Запустить лендинг»): хотя бы одно правило с `pass=false` и `status≠"pass"`.
+  - Возвращает `rewritten_objective` и `rewritten_key_results.length === input.length`.
 
-export interface HorizonFit {
-  horizon: OkrHorizon;
-  overall_verdict: HorizonFitVerdict;
-  overall_score: number;    // 0..100, насколько в целом укладывается
-  objective: { verdict: HorizonFitVerdict; reason: string; suggestion?: string };
-  key_results: HorizonFitKR[];
-  notes: string[];          // общие заметки (например «нет временных маркеров»)
-}
-```
+- **UI**
+  - При получении `draft` через props автоматически заполняются поля.
+  - Кнопка «Проверить» рендерит `RuleList` со всеми правилами; статусные цвета соответствуют `pass/warn/fail`.
+  - Кнопка «В Solution Studio» вызывает `onSendToSolutions(objective, krs)`.
 
-И добавить `horizon_fit?: HorizonFit` в `OkrDraft`.
+### Модуль 3 — Solution Studio
+Edge: `generate-solutions`, `validate-solution`. UI: `SolutionStudio.tsx`, hook `useSolutionStudio.ts`.
 
-### 2. Логика — два варианта (выбор за пользователем, см. вопросы ниже)
+- **Edge**
+  - `generate-solutions`: возвращает массив `solutions`, у каждого заполнены `bet`, `result_image`, `leading_metric`, `confidence∈{Low,Medium,High}`, `effort∈{S,M,L,XL}`.
+  - `validate-solution`: возвращает `score`, `rules`, `rewritten_solution` со всеми обязательными полями.
 
-**Вариант A — встроить в `draft-okr`** (один вызов AI):
-- Расширить tool-схему `draft_okr` обязательным `horizon_fit`.
-- В системный промпт добавить блок-критерий «horizon fit», с примерами для `strategic_3y` (амбициозность, отсутствие квартальной/годовой привязки, направленные метрики) и `block_12m` (достижимость в 12 мес, конкретные числовые таргеты, отсутствие 3-летних формулировок типа «стать №1 в категории к 2028»).
-- Плюс: 0 дополнительных вызовов, дешевле.
-- Минус: модель оценивает саму себя в одном проходе — оценка чуть мягче.
+- **UI / hook**
+  - `useSolutionStudio` пробрасывает `objective` (regression-тест предыдущего фикса) в payload.
+  - При смене вкладки KR подгружаются соответствующие решения.
 
-**Вариант B — отдельная Edge Function `assess-horizon-fit`** (двухпроходно):
-- Новый файл `supabase/functions/assess-horizon-fit/index.ts`. Вход: `{ draft, horizon, model }`. Выход: `HorizonFit`.
-- Вызывается автоматически после `draft-okr` (или по кнопке «Проверить горизонт»).
-- Плюс: независимая «вторая пара глаз», результат строже и нагляднее.
-- Минус: +1 вызов AI, +латентность.
+### Связка (integration)
+Один тест прогоняет цепочку **в режиме мока** для скорости:
+1. Рендерим `<Index />` с моками `supabase.functions.invoke`.
+2. В `OkrGenerator` вводим текст → interpret → (ответы) → draft → «Передать в аудит».
+3. Проверяем, что в `OkrValidator` подставился `objective_refined` и список KR из draft.
+4. Жмём «Проверить» → «В Solution Studio».
+5. Проверяем, что в `SolutionStudio` `defaultObjective` = тот же objective и `keyResults` совпадают.
+6. Один happy-path edge-test с реальными вызовами: `interpret-okr-input → draft-okr → validate-okr → generate-solutions`, проверяем только что каждый этап вернул 200 и непустые ключевые поля (медленно, помечается как `slow`).
 
-### 3. UI в фазе `draft_ready` (в `OkrGenerator.tsx`)
+## Технические детали
 
-Под бейджами горизонт/режим/самооценка добавить новый бейдж **«Соответствие горизонту: X/100»** (зелёный/жёлтый/красный по `overall_score`).
+**Frontend (`src/**/__tests__` или рядом с компонентом)**
+- Vitest + jsdom уже настроены.
+- Моки supabase: `vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: vi.fn() } } }))`. Каждый тест задаёт нужный ответ через `mockResolvedValueOnce`.
+- Заворачиваем рендер в `ModelProvider` и `DocsProvider` (из `src/contexts/...`).
 
-Под Objective и под каждым KR — компактная плашка `HorizonNote` с иконкой Calendar/AlertTriangle:
-- зелёная (`fits`) — «Подходит для 12 мес»
-- жёлтая (`mixed`) — «Частично: …reason». Кнопка `Применить предложение` подставляет `suggestion` в текст KR (локально, без AI-вызова).
-- красная (`too_short` / `too_long`) — «Слишком краткосрочно для 3 лет: …». Та же кнопка `Применить предложение`.
+**Edge (`supabase/functions/<name>/index.test.ts`)**
+- `import "https://deno.land/std@0.224.0/dotenv/load.ts"` — для `LOVABLE_API_KEY`.
+- Тестируем через локальный `Deno.serve` handler: импортируем `index.ts` динамически и `fetch`-аем по `http://localhost:<port>` либо вызываем экспортированный handler. Если handler не экспортирован — небольшой рефактор: вынести `handler` отдельно и `Deno.serve(handler)` оставить в файле. Это единственная правка прод-кода ради тестируемости.
+- Помечаем тесты, делающие реальный AI вызов, как `Deno.test({ name, ignore: !Deno.env.get("RUN_AI_TESTS") })` — по умолчанию пропускаются, чтобы не жечь кредиты на каждом прогоне. CI/локальный запуск — с флагом.
+- Быстрые тесты (валидация входа, форма ответа на моке `fetch`) — без флага.
 
-Если `overall_verdict !== "fits"` — над кнопкой «Передать в аудит» показывается мягкое предупреждение: «Часть формулировок не укладывается в выбранный горизонт. Уточнить или передать как есть?» с двумя кнопками: `Перегенерировать с акцентом на горизонт` (повторный `draft-okr` с `force_horizon_alignment=true` в теле — добавить флаг в Edge Function) и `Передать в аудит как есть`.
+**Запуск**
+- Frontend: `bunx vitest run` (через `lovable-exec test`).
+- Edge: `supabase--test_edge_functions` для всех функций; AI-тесты — отдельным проходом с `RUN_AI_TESTS=1`.
 
-### 4. Возврат в фазу `clarify` (опционально)
+## Файлы
 
-Если пользователь выбирает «Перегенерировать», в `runDraft` добавляем:
-```ts
-{ ...existing, focus_horizon_fit: true, prior_horizon_fit: draft.horizon_fit }
-```
-`draft-okr` использует это, чтобы переформулировать KR под горизонт.
+Новые:
+- `src/components/aimbot/__tests__/OkrGenerator.test.tsx`
+- `src/components/aimbot/__tests__/OkrValidator.test.tsx`
+- `src/components/aimbot/__tests__/SolutionStudio.test.tsx`
+- `src/hooks/__tests__/useSolutionStudio.test.ts`
+- `src/pages/__tests__/Index.integration.test.tsx`
+- `supabase/functions/interpret-okr-input/index.test.ts`
+- `supabase/functions/draft-okr/index.test.ts`
+- `supabase/functions/validate-okr/index.test.ts`
+- `supabase/functions/generate-solutions/index.test.ts`
+- `supabase/functions/validate-solution/index.test.ts`
+- `src/test/utils.tsx` — обёртки `renderWithProviders`, фикстуры `OkrDraft`/`GeneratedPlan`.
 
-## Файлы, которые изменятся
+Минимальные правки в проде (только ради тестируемости, поведения не меняют):
+- В каждом `supabase/functions/*/index.ts` экспортировать `handler` и оставить `Deno.serve(handler)`.
 
-- `src/types/okr.ts` — добавить типы `HorizonFitVerdict`, `HorizonFitKR`, `HorizonFit`, поле `horizon_fit?` в `OkrDraft`.
-- `supabase/functions/draft-okr/index.ts` — расширить схему/промпт (Вариант A) либо принять флаг `focus_horizon_fit` (Вариант B).
-- (Вариант B) `supabase/functions/assess-horizon-fit/index.ts` — новая функция.
-- `src/components/aimbot/OkrGenerator.tsx` — новый UI-блок `HorizonFitPanel`/`HorizonNote`, кнопка «Применить предложение», кнопка «Перегенерировать с акцентом на горизонт».
+## Что не делаем
 
-Никакие другие модули (2/3, `Index.tsx`, `useSavedOkrs`, валидаторы) не трогаются. Адаптер `draftToGeneratedPlan` остаётся как есть — `horizon_fit` живёт только в Модуле 1.
+- Не покрываем UI shadcn-компонентов.
+- Не пишем e2e через браузер — этого достаточно integration-теста на jsdom.
+- Не трогаем `generate-okr` (deprecated).
 
-## Что не делаем сейчас
+## Открытые вопросы
 
-- Не передаём `horizon` в `validate-okr` (Модуль 2) — это отдельная итерация.
-- Не меняем `interpret-okr-input`.
-- Не меняем `generate-okr` (deprecated).
-
-## Открытые вопросы перед реализацией
-
-1. **Вариант A (встроить в `draft-okr`) или B (отдельная функция `assess-horizon-fit`)?** Рекомендую **A** на старте: дешевле, быстрее, и `score_hint` уже работает по той же схеме самооценки.
-2. **Авто-перегенерация**: если `overall_score < 40`, делать ли её автоматически (1 раз) или только по кнопке? Рекомендую — **только по кнопке**, чтобы не жечь кредиты молча.
-3. **«Применить предложение»** — подставлять `suggestion` в `kr.text` локально без AI-вызова, ОК?
+1. Запускать ли AI-тесты (реальные вызовы Lovable AI) по умолчанию или только под флагом `RUN_AI_TESTS=1`? Рекомендую — под флагом, чтобы не жечь кредиты.
+2. Делать ли integration-тест **только на моках** (быстро, детерминированно) или дублировать ещё и реальной цепочкой? Рекомендую — мок + один опциональный «smoke»-прогон под флагом.
+3. ОК ли мини-рефактор `Deno.serve(handler)` → `export const handler; Deno.serve(handler)` в каждой edge-функции?

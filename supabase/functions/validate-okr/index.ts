@@ -43,7 +43,7 @@ const PARAMETERS = {
   additionalProperties: false,
 };
 
-Deno.serve(async (req: Request) => {
+export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
@@ -98,4 +98,6 @@ Deno.serve(async (req: Request) => {
     console.error("validate-okr error", e);
     return errorJson(e instanceof Error ? e.message : "Unknown error", 500);
   }
-});
+};
+
+Deno.serve(handler);

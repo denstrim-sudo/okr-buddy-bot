@@ -18,10 +18,11 @@ const validReport = {
   summary: "Хороший OKR",
   rules: [
     { id: "O1", label: "Качественный Objective", pass: true, hint: "" },
+    { id: "O3", label: "Без цифр в Objective", pass: false, hint: "Уберите проценты", severity: "critical" as const, why: "Цифры подменяют качественную цель." },
     { id: "KR1", label: "KR измеримы", pass: true, hint: "" },
-    { id: "KR2", label: "Baseline и target", pass: true, hint: "" },
+    { id: "KR2", label: "Baseline и target", pass: false, hint: "Добавьте baseline для KR2", severity: "important" as const, why: "Без baseline нельзя посчитать прогресс." },
     { id: "KR3", label: "Outcomes, не tasks", pass: true, hint: "" },
-    { id: "KR10", label: "Есть leading", pass: true, hint: "" },
+    { id: "KR10", label: "Есть leading", pass: false, hint: "Добавьте предсказательный KR", severity: "improve" as const, why: "Leading даёт ранний сигнал." },
   ],
   rewritten_objective: "",
   rewritten_key_results: ["", ""],

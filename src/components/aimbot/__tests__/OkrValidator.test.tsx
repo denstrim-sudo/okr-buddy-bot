@@ -62,7 +62,14 @@ describe("OkrValidator (Module 2)", () => {
     expect(invokeMock.mock.calls[0][0]).toBe("validate-okr");
     expect(invokeMock.mock.calls[0][1].body.objective).toBe("Стать лидером");
 
-    await screen.findByText(/Качественный Objective/);
+    await screen.findByText(/Без цифр в Objective/);
+    // severity-бейджи и summary-сводка
+    expect(screen.getAllByText(/Критично/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Критичных:\s*1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Важных:\s*1/i)).toBeInTheDocument();
+    // строка «Почему важно»
+    expect(screen.getByText(/Цифры подменяют качественную цель/)).toBeInTheDocument();
+
     const sendBtn = await screen.findByRole("button", { name: /Передать в Решения/i });
     await userEvent.click(sendBtn);
     expect(onSend).toHaveBeenCalledWith("Стать лидером", ["Поднять X с 30 до 50", "NPS 32→50"]);

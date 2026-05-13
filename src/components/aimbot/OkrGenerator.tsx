@@ -87,7 +87,11 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     }
   };
 
-  const runDraft = async (interp: OkrInputInterpretation, clarifying_answers: string[]) => {
+  const runDraft = async (
+    interp: OkrInputInterpretation,
+    clarifying_answers: string[],
+    opts?: { focus_horizon_fit?: boolean; prior_horizon_fit?: HorizonFit | null },
+  ) => {
     setPhase("drafting");
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
@@ -100,6 +104,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           clarifying_answers,
           extra_context,
           model,
+          focus_horizon_fit: opts?.focus_horizon_fit ?? false,
+          prior_horizon_fit: opts?.prior_horizon_fit ?? undefined,
         },
       });
       if (error) throw error;
@@ -112,6 +118,25 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       setPhase(interp.clarifying_questions?.length ? "clarify" : "input");
       handleError(e, "Ошибка генерации черновика");
     }
+  };
+
+  const regenerateWithHorizonFocus = () => {
+    if (!interpretation || !draft) return;
+    runDraft(interpretation, answers, { focus_horizon_fit: true, prior_horizon_fit: draft.horizon_fit ?? null });
+  };
+
+  const applyObjectiveSuggestion = (suggestion: string) => {
+    setDraft((d) => d ? { ...d, objective: suggestion } : d);
+    toast.success("Objective обновлён");
+  };
+
+  const applyKrSuggestion = (idx: number, suggestion: string) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const krs = d.key_results.map((k, i) => i === idx ? { ...k, text: suggestion } : k);
+      return { ...d, key_results: krs };
+    });
+    toast.success(`KR${idx + 1} обновлён`);
   };
 
   const submitClarifications = () => {

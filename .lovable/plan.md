@@ -1,186 +1,87 @@
-## Анализ Модуля 1 (текущая реализация)
+## Цель
 
-### 1. Что сейчас участвует в Модуле 1
+Сделать так, чтобы Модуль 1 не просто помечал draft с горизонтом `strategic_3y` / `block_12m`, но и **явно проверял**, реально ли сформулированные Objective + KR соответствуют этому периоду, и подсказывал, что не так.
 
-**UI-компонент**
-- `src/components/aimbot/OkrGenerator.tsx` — единственный экран Модуля 1.
-  - Локальный стейт: `objective` (string), `context` (string), `loading` (bool), `plan` (GeneratedPlan | null).
-  - Один поток: ввод → кнопка «Сгенерировать OKR и решения» → `supabase.functions.invoke("generate-okr", { objective, context, extra_context, model })` → сразу получаем готовый `GeneratedPlan` (Objective + 2–4 KR + 2–3 Solutions на каждый KR).
-  - Показ результата: список KR со Stat-плитками (baseline / target / metric).
-  - Кнопка «Сохранить» через `useSavedOkrs`.
+Сейчас горизонт задаётся пользователем (или детектируется в `interpret-okr-input`) и передаётся в `draft-okr` как параметр промпта, но обратной валидации нет: модель может выдать «годовой» KR под лейблом 3-летний и наоборот — пользователь этого не увидит.
 
-**Контексты и хуки**
-- `src/contexts/DocsContext.tsx` — `buildContext(["okr_context","methodology"])` подмешивает методологию в промпт.
-- `src/contexts/ModelContext.tsx` — выбор AI-модели.
-- `src/hooks/useSavedOkrs.ts` — локальное сохранение OKR.
+## Что добавляем
 
-**Интеграция со страницей**
-- `src/pages/Index.tsx`: `handleGenerated(plan, objective)` → одновременно:
-  - кладёт `plan` и `objective` в стейт страницы,
-  - строит `validatorDraft` (через `buildDraft`) и пробрасывает в `OkrValidator` (Модуль 2),
-  - `SolutionsSection` и `SolutionStudio` (Модуль 3) читают `plan.key_results[*].solutions` и `krTexts`.
+### 1. Новый блок данных в `OkrDraft` (тип)
 
-**Edge Functions**
-- `supabase/functions/generate-okr/index.ts` — за один вызов делает Objective + 2–4 KR + 2–3 Solutions на каждый KR. Tool-call `generate_okr_plan`. Использует общий `_shared/ai.ts` (AIAI.BY, OpenAI-совместимый шлюз).
-
-**Типы**
-- `GeneratedPlan`, `GeneratedKR`, `GeneratedSolution` в `src/types/okr.ts`.
-
-### 2. Проблемы текущей реализации (для нового сценария)
-
-- Один шаг от свободного текста сразу к финальному плану — нет фазы интерпретации/уточнения.
-- Solutions генерируются здесь же, что нарушает разделение «Модуль 1 — только OKR-черновик», и навязывает Модулю 3 источник данных.
-- Нет различия `strategic_3y` vs `block_12m`.
-- Нет режима `rewrite_existing` (вставленный пользователем OKR полностью перегенерируется без сохранения исходных формулировок).
-- Нет явных `assumptions` / `warnings`, когда baseline/target/метрики неизвестны.
-- Может вернуться до 4 KR — нужно жёсткое ограничение ≤ 3.
-- Жёстко связан с Модулями 2 и 3 через общий `GeneratedPlan` — любое изменение типов ломает Solutions.
-
-### 3. Минимальный безопасный план рефакторинга (только Модуль 1)
-
-Принцип: **новые сущности добавляем рядом, старые типы/функции не трогаем**, чтобы Модули 2 и 3 продолжили работать как сейчас.
-
-Шаги:
-
-1. Ввести новый тип `OkrDraft` (отдельно от `GeneratedPlan`) — это «выход Модуля 1» в новой логике.
-2. Создать **две новые Edge Functions** (`interpret-okr-input`, `draft-okr`) и оставить `generate-okr` как есть на время миграции — Модули 2/3 продолжают работать на нём.
-3. Переписать только `OkrGenerator.tsx` под трёхфазный мастер (interpret → clarify → draft). Внешний контракт компонента — `onGenerated(plan, objective)` — сохраняем: при генерации финального draft строим адаптер `draftToGeneratedPlan(draft)` (Objective + KR без solutions: пустой массив) и вызываем существующий `onGenerated`. Это автоматически прокидывает результат в `OkrValidator` (Модуль 2), не трогая `Index.tsx`.
-4. В `Index.tsx` — никаких правок. `SolutionStudio` и `SolutionsSection` продолжают читать `plan.key_results`. Если `solutions` пустой — Модуль 3 уже умеет это (`fallbackSolutions`, и `SolutionStudio` сам генерирует решения по `keyResults`).
-5. Solutions из Модуля 1 убираем (они появятся естественно из Модуля 3). Старая ветка «сохранение OKR со старыми solutions» в `useSavedOkrs` остаётся — она просто получит draft без решений.
-
-Что **не** делаем сейчас:
-- Не удаляем `generate-okr` (deprecated, удалим позже отдельным PR).
-- Не меняем `validate-okr` / `generate-solutions` / `validate-solution`.
-- Не меняем типы `GeneratedPlan` / `GeneratedKR` / `GeneratedSolution`.
-- Не трогаем `Index.tsx`, `OkrValidator`, `SolutionStudio`, `SolutionsSection`, `useSavedOkrs`.
-
-### 4. Новая state-структура (только в `OkrGenerator.tsx`)
-
-Новые типы — добавить в `src/types/okr.ts` рядом со старыми:
+В `src/types/okr.ts` расширить `OkrDraft` новым опциональным полем:
 
 ```ts
-export type OkrHorizon = "strategic_3y" | "block_12m";
-export type OkrMode = "from_scratch" | "rewrite_existing";
+export type HorizonFitVerdict = "fits" | "too_short" | "too_long" | "mixed";
 
-export interface OkrInputInterpretation {
-  detected_horizon: OkrHorizon;
-  detected_mode: OkrMode;
-  topic_summary: string;
-  has_existing_okr: boolean;
-  parsed_existing?: { objective?: string; key_results?: string[] };
-  missing_info: string[];        // baseline, target, метрики, сегмент и т.п.
-  clarifying_questions: string[]; // 0..3 вопросов; если 0 — можно сразу draft
-  assumptions: string[];          // что AI принял по умолчанию
-  warnings: string[];
+export interface HorizonFitKR {
+  index: number;            // позиция KR (0..2)
+  verdict: HorizonFitVerdict;
+  reason: string;           // на русском, 1 предложение
+  suggestion?: string;      // как переформулировать под горизонт
 }
 
-export interface OkrDraftKR {
-  text: string;
-  baseline?: string;     // optional — если неизвестно
-  target?: string;
-  metric?: string;
-  kr_type: "leading" | "lagging";
-  is_outcome: boolean;   // self-check от модели
-  assumptions: string[]; // на чём основана формулировка
-  warnings: string[];    // напр. "нет baseline", "похоже на activity"
-}
-
-export interface OkrDraft {
+export interface HorizonFit {
   horizon: OkrHorizon;
-  mode: OkrMode;
-  objective: string;
-  key_results: OkrDraftKR[]; // ровно 1..3
-  global_assumptions: string[];
-  global_warnings: string[];
-  score_hint: number; // 0-100, грубая самооценка перед аудитом
+  overall_verdict: HorizonFitVerdict;
+  overall_score: number;    // 0..100, насколько в целом укладывается
+  objective: { verdict: HorizonFitVerdict; reason: string; suggestion?: string };
+  key_results: HorizonFitKR[];
+  notes: string[];          // общие заметки (например «нет временных маркеров»)
 }
 ```
 
-Локальный state `OkrGenerator`:
+И добавить `horizon_fit?: HorizonFit` в `OkrDraft`.
 
+### 2. Логика — два варианта (выбор за пользователем, см. вопросы ниже)
+
+**Вариант A — встроить в `draft-okr`** (один вызов AI):
+- Расширить tool-схему `draft_okr` обязательным `horizon_fit`.
+- В системный промпт добавить блок-критерий «horizon fit», с примерами для `strategic_3y` (амбициозность, отсутствие квартальной/годовой привязки, направленные метрики) и `block_12m` (достижимость в 12 мес, конкретные числовые таргеты, отсутствие 3-летних формулировок типа «стать №1 в категории к 2028»).
+- Плюс: 0 дополнительных вызовов, дешевле.
+- Минус: модель оценивает саму себя в одном проходе — оценка чуть мягче.
+
+**Вариант B — отдельная Edge Function `assess-horizon-fit`** (двухпроходно):
+- Новый файл `supabase/functions/assess-horizon-fit/index.ts`. Вход: `{ draft, horizon, model }`. Выход: `HorizonFit`.
+- Вызывается автоматически после `draft-okr` (или по кнопке «Проверить горизонт»).
+- Плюс: независимая «вторая пара глаз», результат строже и нагляднее.
+- Минус: +1 вызов AI, +латентность.
+
+### 3. UI в фазе `draft_ready` (в `OkrGenerator.tsx`)
+
+Под бейджами горизонт/режим/самооценка добавить новый бейдж **«Соответствие горизонту: X/100»** (зелёный/жёлтый/красный по `overall_score`).
+
+Под Objective и под каждым KR — компактная плашка `HorizonNote` с иконкой Calendar/AlertTriangle:
+- зелёная (`fits`) — «Подходит для 12 мес»
+- жёлтая (`mixed`) — «Частично: …reason». Кнопка `Применить предложение` подставляет `suggestion` в текст KR (локально, без AI-вызова).
+- красная (`too_short` / `too_long`) — «Слишком краткосрочно для 3 лет: …». Та же кнопка `Применить предложение`.
+
+Если `overall_verdict !== "fits"` — над кнопкой «Передать в аудит» показывается мягкое предупреждение: «Часть формулировок не укладывается в выбранный горизонт. Уточнить или передать как есть?» с двумя кнопками: `Перегенерировать с акцентом на горизонт` (повторный `draft-okr` с `force_horizon_alignment=true` в теле — добавить флаг в Edge Function) и `Передать в аудит как есть`.
+
+### 4. Возврат в фазу `clarify` (опционально)
+
+Если пользователь выбирает «Перегенерировать», в `runDraft` добавляем:
 ```ts
-type Phase = "input" | "interpreting" | "clarify" | "drafting" | "draft_ready";
-
-const [phase, setPhase] = useState<Phase>("input");
-const [horizon, setHorizon] = useState<OkrHorizon>("block_12m"); // переключатель в UI
-const [rawInput, setRawInput] = useState("");        // свободный текст / вставленный OKR
-const [contextText, setContextText] = useState("");
-const [interpretation, setInterpretation] = useState<OkrInputInterpretation | null>(null);
-const [answers, setAnswers] = useState<Record<number, string>>({}); // ответы на clarifying_questions
-const [draft, setDraft] = useState<OkrDraft | null>(null);
+{ ...existing, focus_horizon_fit: true, prior_horizon_fit: draft.horizon_fit }
 ```
+`draft-okr` использует это, чтобы переформулировать KR под горизонт.
 
-Поток фаз:
-- `input` → пользователь пишет/вставляет, выбирает `horizon`, нажимает «Интерпретировать».
-- `interpreting` → вызов `interpret-okr-input` → `interpretation`.
-- Если `clarifying_questions.length > 0` → `clarify` (показываем вопросы, собираем `answers`, кнопка «Пропустить» допустима).
-- Иначе — сразу `drafting`.
-- `drafting` → вызов `draft-okr` с `interpretation + answers + horizon + mode` → `OkrDraft`.
-- `draft_ready` → показ Objective + ≤3 KR с явными `warnings`/`assumptions`. Кнопки: «Передать в аудит» (вызов `onGenerated` через адаптер), «Уточнить ещё» (возврат в `clarify`), «Начать заново».
+## Файлы, которые изменятся
 
-### 5. Новые Edge Functions
+- `src/types/okr.ts` — добавить типы `HorizonFitVerdict`, `HorizonFitKR`, `HorizonFit`, поле `horizon_fit?` в `OkrDraft`.
+- `supabase/functions/draft-okr/index.ts` — расширить схему/промпт (Вариант A) либо принять флаг `focus_horizon_fit` (Вариант B).
+- (Вариант B) `supabase/functions/assess-horizon-fit/index.ts` — новая функция.
+- `src/components/aimbot/OkrGenerator.tsx` — новый UI-блок `HorizonFitPanel`/`HorizonNote`, кнопка «Применить предложение», кнопка «Перегенерировать с акцентом на горизонт».
 
-Используем существующий `_shared/ai.ts` и `callAITool` — никакой новой инфраструктуры.
+Никакие другие модули (2/3, `Index.tsx`, `useSavedOkrs`, валидаторы) не трогаются. Адаптер `draftToGeneratedPlan` остаётся как есть — `horizon_fit` живёт только в Модуле 1.
 
-**A. `supabase/functions/interpret-okr-input/index.ts`**
-- Вход: `{ raw_input: string, horizon: OkrHorizon, extra_context?: string, model?: string }`.
-- Выход (tool `interpret_okr_input`, схема = `OkrInputInterpretation`).
-- Системный промпт:
-  - канон уровней Strategy → strategic_3y → block_12m → Decisions/Solutions;
-  - различение `from_scratch` vs `rewrite_existing` (детектор: похоже ли на готовый OKR);
-  - правило: возвращать ≤3 уточняющих вопроса, и только если они реально нужны;
-  - все тексты — на русском; enum'ы — на английском.
+## Что не делаем сейчас
 
-**B. `supabase/functions/draft-okr/index.ts`**
-- Вход: `{ raw_input, horizon, mode, interpretation, clarifying_answers: string[], extra_context?, model? }`.
-- Выход (tool `draft_okr`, схема = `OkrDraft`).
-- Системный промпт:
-  - ровно 1 Objective, 1..3 KR, KR ориентированы на outcome;
-  - если baseline/target/metric неизвестны — оставлять пустыми и заполнять `assumptions` / `warnings`, не выдумывать цифры;
-  - `mode = rewrite_existing` → сохранять смысл и узнаваемые формулировки исходного OKR, переписывать минимально;
-  - различать `strategic_3y` (3 года, амбициозный, без квартального уклона) и `block_12m` (12 мес, достижимый в годовом цикле);
-  - запрет на «conduct/support/build/launch» как корневой глагол KR;
-  - solutions НЕ генерировать.
+- Не передаём `horizon` в `validate-okr` (Модуль 2) — это отдельная итерация.
+- Не меняем `interpret-okr-input`.
+- Не меняем `generate-okr` (deprecated).
 
-**C. `generate-okr` — оставляем без изменений** на этой итерации (deprecated, на удаление позже).
+## Открытые вопросы перед реализацией
 
-### 6. Адаптер для совместимости с Модулями 2 и 3
-
-В `OkrGenerator.tsx` добавить чистую функцию (не трогая типы):
-
-```ts
-const draftToGeneratedPlan = (d: OkrDraft): GeneratedPlan => ({
-  objective_refined: d.objective,
-  score: d.score_hint,
-  key_results: d.key_results.map((k) => ({
-    text: k.text,
-    baseline: k.baseline ?? "",
-    target: k.target ?? "",
-    metric: k.metric ?? "",
-    kr_type: k.kr_type,
-    solutions: [], // Модуль 3 сам сгенерирует
-  })),
-});
-```
-
-При нажатии «Передать в аудит» вызываем существующий `onGenerated(draftToGeneratedPlan(draft), draft.objective)`. Никаких правок в `Index.tsx`, `OkrValidator`, `SolutionStudio` не требуется.
-
-### 7. Риски и как их закрываем
-
-| Риск | Влияние | Митигация |
-|---|---|---|
-| Модули 2/3 ожидают непустой `solutions` | Поломка Studio/SolutionsSection | Уже есть `fallbackSolutions` и собственная генерация в `SolutionStudio` по `keyResults` — пустой `solutions[]` безопасен. Проверить визуально после первой итерации. |
-| Сохранённые ранее OKR (через `useSavedOkrs`) имеют старую структуру с solutions | UI saved list | Структура `GeneratedPlan` не меняется → совместимо. Новые сохранения будут с пустым `solutions`. |
-| Два вызова AI вместо одного → выше латентность и стоимость | UX | Фаза `clarify` пропускается, если `clarifying_questions = []`. Показываем явный progress по фазам. |
-| Модель проигнорирует ограничение «≤3 KR» | Нарушение методологии | Жёстко в JSON-схеме: `maxItems: 3, minItems: 1`. Доп. проверка на стороне Edge Function — обрезать до 3. |
-| `rewrite_existing` будет переписывать слишком агрессивно | Потеря исходных формулировок | В системном промпте — явное правило «минимальные правки», и `parsed_existing` передаётся в `draft-okr` как baseline. |
-| Регрессия в Модуле 2 из-за изменения формы данных | Поломка аудита | Адаптер сохраняет точно ту же форму `GeneratedPlan`, что и раньше. `validate-okr` не трогаем. |
-| Расхождение `horizon` между Модулем 1 и аудитом | Аудит не учитывает 3y vs 12m | На этой итерации — не блокирует (Модуль 2 работает по общим правилам Doerr). В следующей итерации можно прокинуть `horizon` в `validate-okr`. |
-
-### 8. Что нужно от тебя перед реализацией
-
-- Подтверди план (или скажи, что менять).
-- Подтверди, что `generate-okr` оставляем как deprecated до отдельного PR (а не удаляем сейчас).
-- Подтверди дефолт `horizon` в UI: предлагаю `block_12m`.
-
-После твоего ОК — реализую строго по этому плану одной итерацией: 2 новые Edge Functions + переписанный `OkrGenerator.tsx` + новые типы. Никаких других файлов не трогаю.
+1. **Вариант A (встроить в `draft-okr`) или B (отдельная функция `assess-horizon-fit`)?** Рекомендую **A** на старте: дешевле, быстрее, и `score_hint` уже работает по той же схеме самооценки.
+2. **Авто-перегенерация**: если `overall_score < 40`, делать ли её автоматически (1 раз) или только по кнопке? Рекомендую — **только по кнопке**, чтобы не жечь кредиты молча.
+3. **«Применить предложение»** — подставлять `suggestion` в `kr.text` локально без AI-вызова, ОК?

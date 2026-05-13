@@ -24,6 +24,27 @@ export interface OkrDraftKR {
   warnings: string[];
 }
 
+export type HorizonFitVerdict = "fits" | "too_short" | "too_long" | "mixed";
+
+export interface HorizonFitItem {
+  verdict: HorizonFitVerdict;
+  reason: string;
+  suggestion?: string;
+}
+
+export interface HorizonFitKR extends HorizonFitItem {
+  index: number;
+}
+
+export interface HorizonFit {
+  horizon: OkrHorizon;
+  overall_verdict: HorizonFitVerdict;
+  overall_score: number;
+  objective: HorizonFitItem;
+  key_results: HorizonFitKR[];
+  notes: string[];
+}
+
 export interface OkrDraft {
   horizon: OkrHorizon;
   mode: OkrMode;
@@ -32,6 +53,7 @@ export interface OkrDraft {
   global_assumptions: string[];
   global_warnings: string[];
   score_hint: number;
+  horizon_fit?: HorizonFit;
 }
 
 export interface GeneratedSolution {

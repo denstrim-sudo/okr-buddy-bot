@@ -1,3 +1,39 @@
+export type OkrHorizon = "strategic_3y" | "block_12m";
+export type OkrMode = "from_scratch" | "rewrite_existing";
+
+export interface OkrInputInterpretation {
+  detected_horizon: OkrHorizon;
+  detected_mode: OkrMode;
+  topic_summary: string;
+  has_existing_okr: boolean;
+  parsed_existing?: { objective?: string; key_results?: string[] };
+  missing_info: string[];
+  clarifying_questions: string[];
+  assumptions: string[];
+  warnings: string[];
+}
+
+export interface OkrDraftKR {
+  text: string;
+  baseline?: string;
+  target?: string;
+  metric?: string;
+  kr_type: "leading" | "lagging";
+  is_outcome: boolean;
+  assumptions: string[];
+  warnings: string[];
+}
+
+export interface OkrDraft {
+  horizon: OkrHorizon;
+  mode: OkrMode;
+  objective: string;
+  key_results: OkrDraftKR[];
+  global_assumptions: string[];
+  global_warnings: string[];
+  score_hint: number;
+}
+
 export interface GeneratedSolution {
   id: string;
   problem: string;

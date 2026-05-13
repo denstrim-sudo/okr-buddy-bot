@@ -68,4 +68,6 @@ export const handler = async (req: Request) => {
     console.error("interpret-okr-input error", e);
     return errorJson(e instanceof Error ? e.message : "Unknown error", 500);
   }
-});
+};
+
+Deno.serve(handler);

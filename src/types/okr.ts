@@ -53,6 +53,10 @@ export interface OkrDraft {
   global_assumptions: string[];
   global_warnings: string[];
   score_hint: number;
+  self_audit?: {
+    critical_fails: string[];
+    important_fails: string[];
+  };
   horizon_fit?: HorizonFit;
 }
 

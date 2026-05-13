@@ -285,6 +285,22 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             )}>
               Самооценка {draft.score_hint}/100
             </span>
+            {draft.self_audit && (draft.self_audit.critical_fails.length > 0 || draft.self_audit.important_fails.length > 0) && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                  draft.self_audit.critical_fails.length > 0
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-warning-soft text-warning",
+                )}
+                title="Самоаудит по тем же правилам, что и Модуль 2"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {draft.self_audit.critical_fails.length > 0
+                  ? `Критичных в аудите: ${draft.self_audit.critical_fails.join(", ")}`
+                  : `Важных в аудите: ${draft.self_audit.important_fails.join(", ")}`}
+              </span>
+            )}
             {draft.horizon_fit && (
               <span className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",

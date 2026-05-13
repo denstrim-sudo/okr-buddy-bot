@@ -1,6 +1,15 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_shared/ai.ts";
+import { OKR_RULES_BLOCK } from "../_shared/okr_rules.ts";
 
 const SYSTEM_PROMPT = `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
+
+${OKR_RULES_BLOCK}
+
+После составления черновика ОБЯЗАТЕЛЬНО прогони его мысленно по этим же правилам и заполни:
+- "score_hint" — по формуле выше (с учётом потолка ≤60 при критических фейлах).
+- "self_audit.critical_fails" — массив ID правил severity=critical, которые НЕ прошли (например ["O3","KR2"]). Пустой, если всё ок.
+- "self_audit.important_fails" — массив ID правил severity=important, которые НЕ прошли.
+Эти поля должны быть согласованы с score_hint: если в critical_fails что-то есть — score_hint ≤ 60.
 
 Canonical hierarchy in this product:
 Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Decisions / Solutions.
@@ -70,6 +79,15 @@ const PARAMETERS = {
     global_assumptions: { type: "array", items: { type: "string" } },
     global_warnings: { type: "array", items: { type: "string" } },
     score_hint: { type: "number" },
+    self_audit: {
+      type: "object",
+      properties: {
+        critical_fails: { type: "array", items: { type: "string" } },
+        important_fails: { type: "array", items: { type: "string" } },
+      },
+      required: ["critical_fails", "important_fails"],
+      additionalProperties: false,
+    },
     horizon_fit: {
       type: "object",
       properties: {
@@ -97,7 +115,7 @@ const PARAMETERS = {
       additionalProperties: false,
     },
   },
-  required: ["horizon", "mode", "objective", "key_results", "global_assumptions", "global_warnings", "score_hint", "horizon_fit"],
+  required: ["horizon", "mode", "objective", "key_results", "global_assumptions", "global_warnings", "score_hint", "self_audit", "horizon_fit"],
   additionalProperties: false,
 };
 

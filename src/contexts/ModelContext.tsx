@@ -5,9 +5,12 @@ export const AI_MODELS = [
   { id: "gpt-4.1", label: "GPT-4.1", hint: "Сильнее, дороже" },
   { id: "gpt-4o", label: "GPT-4o", hint: "Топ OpenAI, мультимодал" },
   { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Дешёвый и быстрый" },
-  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", hint: "Отлично для текста и аудита" },
+  { id: "gpt-5-mini", label: "GPT-5 mini", hint: "Новое поколение, быстрый" },
+  { id: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", hint: "Отлично для текста и аудита" },
+  { id: "claude-haiku-4.5", label: "Claude Haiku 4.5", hint: "Быстрый и дешёвый" },
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Большой контекст" },
-  { id: "deepseek-chat", label: "DeepSeek Chat", hint: "Очень дешёвый" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Быстрый Gemini" },
+  { id: "deepseek-v3.1", label: "DeepSeek V3.1", hint: "Очень дешёвый" },
 ] as const;
 
 export type AiModelId = (typeof AI_MODELS)[number]["id"];

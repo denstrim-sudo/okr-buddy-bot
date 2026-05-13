@@ -345,6 +345,12 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
                     Похоже на activity, а не outcome — требует доработки
                   </p>
                 )}
+                {(() => {
+                  const fit = draft.horizon_fit?.key_results?.find((f) => f.index === idx);
+                  return fit ? (
+                    <HorizonNote item={fit} horizon={draft.horizon} onApply={(s) => applyKrSuggestion(idx, s)} />
+                  ) : null;
+                })()}
               </div>
             ))}
           </div>

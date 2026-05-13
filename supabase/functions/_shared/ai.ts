@@ -82,13 +82,15 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
-    console.error("AIAI.BY fetch failed", e);
+    console.error("AIAI.BY fetch failed", args.model, e);
     const isAbort = e instanceof Error && e.name === "TimeoutError";
     return {
       ok: false,
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
-      errorMessage: isAbort ? "Запрос к AI занял слишком много времени" : "Не удалось связаться с AIAI.BY",
+      errorMessage: isAbort
+        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (Gemini Flash, GPT-4.1 mini).`
+        : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };
   }

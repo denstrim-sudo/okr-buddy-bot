@@ -12,9 +12,19 @@ Given an Objective and a list of Key Results, evaluate them against these RULES:
 - KR4: KRs are time-bound and have a progress gradient (not binary)
 - KR10: At least one KR is a LEADING (predictive) indicator
 
+For EACH rule you MUST return:
+- "severity": уровень важности замечания
+  - "critical" — без исправления OKR методологически некорректен (Objective с цифрами, KR без метрики, KR-задача вместо outcome, нет baseline/target там, где нужны)
+  - "important" — снижает качество и управляемость, но OKR работоспособен (нет ни одного leading-индикатора, размытая формулировка, отсутствует временной горизонт)
+  - "improve" — точечное усиление: стилистика, уточнение сегмента, более конкретная метрика
+  - Для pass=true ставь "improve" (или опускай).
+- "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно — как это влияет на измеримость, фокус, outcome-ориентированность или управленческий review. БЕЗ методологической лекции. Для pass=true можно оставить пустым.
+
+Пример: { id:"O3", label:"Objective без цифр", pass:false, severity:"critical", hint:"Уберите проценты из Objective", why:"Цифры в Objective подменяют качественную цель и сдвигают фокус на метрику." }
+
 Return STRICT JSON only via the provided tool.
 
-IMPORTANT: All text fields (label, hint, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids stay as codes (O1, KR1, etc.). status enum stays English.`;
+IMPORTANT: All text fields (label, hint, why, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
 
 const PARAMETERS = {
   type: "object",

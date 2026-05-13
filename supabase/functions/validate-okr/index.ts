@@ -1,16 +1,11 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
+import { OKR_RULES_BLOCK } from "../_shared/okr_rules.ts";
 
 const SYSTEM_PROMPT = `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
 
-Given an Objective and a list of Key Results, evaluate them against these RULES:
-- O1: Objective is qualitative and inspiring (not a metric)
-- O2: Objective is ambitious, time-bound, memorable
-- O3: Objective contains NO KPIs, percentages or numbers
-- KR1: Each KR is measurable (a number/metric, not an activity)
-- KR2: Each KR has explicit baseline and target (FROM → TO)
-- KR3: KRs describe OUTCOMES, not tasks/activities (no "conduct", "support", "build", "launch")
-- KR4: KRs are time-bound and have a progress gradient (not binary)
-- KR10: At least one KR is a LEADING (predictive) indicator
+Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
+
+${OKR_RULES_BLOCK}
 
 For EACH rule you MUST return:
 - "severity": уровень важности замечания

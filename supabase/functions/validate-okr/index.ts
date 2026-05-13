@@ -98,4 +98,6 @@ export const handler = async (req: Request) => {
     console.error("validate-okr error", e);
     return errorJson(e instanceof Error ? e.message : "Unknown error", 500);
   }
-});
+};
+
+Deno.serve(handler);

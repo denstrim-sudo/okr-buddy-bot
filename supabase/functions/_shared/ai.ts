@@ -44,7 +44,7 @@ interface CallResult {
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
-const REQUEST_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 90_000;
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
@@ -82,13 +82,15 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
-    console.error("AIAI.BY fetch failed", e);
+    console.error("AIAI.BY fetch failed", args.model, e);
     const isAbort = e instanceof Error && e.name === "TimeoutError";
     return {
       ok: false,
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
-      errorMessage: isAbort ? "Запрос к AI занял слишком много времени" : "Не удалось связаться с AIAI.BY",
+      errorMessage: isAbort
+        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (Gemini Flash, GPT-4.1 mini).`
+        : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };
   }

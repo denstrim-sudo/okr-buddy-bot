@@ -32,6 +32,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
+  const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const { buildContext } = useDocs();
@@ -42,6 +43,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setObjective(draft.objective);
     setKrs(draft.key_results.length ? draft.key_results : [""]);
     setKrsFull(draft.key_results_full ?? null);
+    if (draft.horizon) setHorizon(draft.horizon);
     setReport(null);
   }, [draft]);
 

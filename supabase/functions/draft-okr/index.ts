@@ -146,7 +146,7 @@ export const handler = async (req: Request) => {
       ? `\n\nFOCUS_HORIZON_FIT: true — переформулируй KR так, чтобы они строго соответствовали горизонту ${h}.${prior_horizon_fit ? `\nPRIOR_HORIZON_FIT (что было не так в прошлой попытке):\n${JSON.stringify(prior_horizon_fit, null, 2).slice(0, 4000)}` : ""}`
       : "";
 
-    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
+    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nIMPORTANT: response field "horizon" MUST equal "${h}" exactly. Same for horizon_fit.horizon. Do not change it to anything else.\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
 
     const res = await callAITool({
       systemPrompt: SYSTEM_PROMPT,

@@ -89,7 +89,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
       errorMessage: isAbort
-        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (Gemini Flash, GPT-4.1 mini).`
+        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (GPT-4o mini, Gemini 2.0 Flash).`
         : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };

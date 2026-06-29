@@ -85,7 +85,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, extra_context, model },
+        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

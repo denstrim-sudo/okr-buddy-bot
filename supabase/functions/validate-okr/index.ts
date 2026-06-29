@@ -57,13 +57,14 @@ export const handler = async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, key_results, key_results_full, extra_context, model } = await req.json();
+    const { objective, key_results, key_results_full, horizon, extra_context, model } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
     if (!Array.isArray(key_results) || key_results.length === 0) {
       return errorJson("At least one Key Result is required", 400);
     }
+    const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
 
     // Если переданы расширенные KR (с baseline/target/metric/kr_type) — используем их.
     // Иначе — fallback к простому списку строк.

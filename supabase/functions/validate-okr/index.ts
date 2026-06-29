@@ -1,16 +1,18 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
-import { OKR_RULES_BLOCK } from "../_shared/okr_rules.ts";
+import { getRulesBlock } from "../_shared/okr_rules.ts";
 
-const SYSTEM_PROMPT = `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+
+HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR10→critical и доп. правилами Q-Focus, Q-Theme, Q-Reach)." : ""}
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 
-${OKR_RULES_BLOCK}
+${getRulesBlock(horizon)}
 
 For EACH rule you MUST return:
 - "severity": уровень важности замечания
   - "critical" — без исправления OKR методологически некорректен (Objective с цифрами, KR без метрики, KR-задача вместо outcome, нет baseline/target там, где нужны)
-  - "important" — снижает качество и управляемость, но OKR работоспособен (нет ни одного leading-индикатора, размытая формулировка, отсутствует временной горизонт)
+  - "important" — снижает качество и управляемость, но OKR работоспособен (размытая формулировка, отсутствует временной горизонт)
   - "improve" — точечное усиление: стилистика, уточнение сегмента, более конкретная метрика
   - Для pass=true ставь "improve" (или опускай).
 - "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно — как это влияет на измеримость, фокус, outcome-ориентированность или управленческий review. БЕЗ методологической лекции. Для pass=true можно оставить пустым.

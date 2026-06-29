@@ -41,7 +41,7 @@ interface CallResult {
 
 // AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
 const REQUEST_TIMEOUT_MS = 90_000;
@@ -108,7 +108,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
       errorMessage: isAbort
-        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (GPT-4o mini, Gemini 2.0 Flash).`
+        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите стабильную модель GPT-4o.`
         : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };
@@ -133,7 +133,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
         ok: false,
         status: 502,
         errorCode: "model_unavailable",
-        errorMessage: `Модель "${requestedModel}" сейчас недоступна у AI-провайдера. Запрос будет выполнен через GPT-4o mini.`,
+        errorMessage: `Модель "${requestedModel}" сейчас недоступна у AI-провайдера. Запрос будет выполнен через GPT-4o.`,
         retryable: false,
       };
     }
@@ -143,7 +143,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
         ok: false,
         status: 502,
         errorCode: "provider_unavailable",
-        errorMessage: `Провайдер модели "${requestedModel}" временно недоступен. Запрос будет выполнен через GPT-4o mini.`,
+        errorMessage: `Провайдер модели "${requestedModel}" временно недоступен. Запрос будет выполнен через GPT-4o.`,
         retryable: false,
       };
     }

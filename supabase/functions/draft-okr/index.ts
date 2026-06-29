@@ -15,6 +15,7 @@ Canonical hierarchy in this product:
 Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
 
 HARD RULES:
+- The "horizon" field in your response MUST be EXACTLY equal to the HORIZON value sent in the user message. Do NOT change it. Same for "horizon_fit.horizon".
 - Exactly 1 Objective.
 - Between 1 and 3 Key Results. Never more than 3.
 - Each KR must be an OUTCOME, not an activity/task. Forbidden root verbs: "провести", "поддержать", "запустить", "построить", "разработать", "внедрить", "conduct", "support", "build", "launch", "develop", "ship".

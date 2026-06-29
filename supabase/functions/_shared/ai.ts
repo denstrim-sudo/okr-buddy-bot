@@ -62,7 +62,7 @@ const getProviderError = (txt: string) => {
 
 const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
   if (!requestedModel || requestedModel === DEFAULT_MODEL || res.ok) return false;
-  return res.errorCode === "model_unavailable" || res.errorCode === "provider_unavailable";
+  return ["model_unavailable", "provider_unavailable", "timeout", "network_error"].includes(res.errorCode ?? "");
 };
 
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {

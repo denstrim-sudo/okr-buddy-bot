@@ -118,6 +118,7 @@ export interface ValidationDraft {
   objective: string;
   key_results: string[];
   key_results_full?: ValidationKR[];
+  horizon?: OkrHorizon;
 }
 
 export interface SolutionReport {

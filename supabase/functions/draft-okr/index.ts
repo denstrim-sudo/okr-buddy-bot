@@ -12,10 +12,10 @@ ${OKR_RULES_BLOCK}
 Эти поля должны быть согласованы с score_hint: если в critical_fails что-то есть — score_hint ≤ 60.
 
 Canonical hierarchy in this product:
-Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Decisions / Solutions.
-Quarterly OKRs are NOT used here.
+Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
 
 HARD RULES:
+- The "horizon" field in your response MUST be EXACTLY equal to the HORIZON value sent in the user message. Do NOT change it. Same for "horizon_fit.horizon".
 - Exactly 1 Objective.
 - Between 1 and 3 Key Results. Never more than 3.
 - Each KR must be an OUTCOME, not an activity/task. Forbidden root verbs: "провести", "поддержать", "запустить", "построить", "разработать", "внедрить", "conduct", "support", "build", "launch", "develop", "ship".
@@ -24,6 +24,7 @@ HARD RULES:
 - Horizon awareness:
   - strategic_3y: 3-year ambitious outcomes, no quarterly framing. Targets are directional/long-term, possibly category-defining ("стать №1 в сегменте", "выйти на 3 новых рынка").
   - block_12m: achievable inside a 12-month annual cycle, concrete numeric metrics, no multi-year horizons like "к 2028".
+  - quarter_3m: укладывается в один квартал (≤90 дней). Objective — одна фокус-тема квартала. KR — конкретные числовые исходы, достижимые за 3 месяца от baseline. ЗАПРЕЩЕНЫ годовые и многолетние формулировки ("по итогам года", "к 2028", "за год"). Желательно ≥1 LEADING KR, потому что за квартал LAG-метрики часто не успевают сдвинуться. Если запрошенный target явно требует >1 квартала — добавь в warnings "target недостижим за квартал, рассмотрите разбивку".
 - Mode:
   - from_scratch: produce a fresh OKR.
   - rewrite_existing: PRESERVE intent and recognizable wording from parsed_existing. Make MINIMAL edits.
@@ -55,7 +56,7 @@ const HORIZON_FIT_ITEM = {
 const PARAMETERS = {
   type: "object",
   properties: {
-    horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+    horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
     mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     objective: { type: "string" },
     key_results: {
@@ -91,7 +92,7 @@ const PARAMETERS = {
     horizon_fit: {
       type: "object",
       properties: {
-        horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+        horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
         overall_verdict: { type: "string", enum: ["fits", "too_short", "too_long", "mixed"] },
         overall_score: { type: "number" },
         objective: HORIZON_FIT_ITEM,
@@ -131,7 +132,7 @@ export const handler = async (req: Request) => {
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
     }
-    const h: string = horizon === "strategic_3y" || horizon === "block_12m" ? horizon : "block_12m";
+    const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
     const m: string = mode === "rewrite_existing" ? "rewrite_existing" : "from_scratch";
 
     const interpBlock = interpretation
@@ -145,7 +146,7 @@ export const handler = async (req: Request) => {
       ? `\n\nFOCUS_HORIZON_FIT: true — переформулируй KR так, чтобы они строго соответствовали горизонту ${h}.${prior_horizon_fit ? `\nPRIOR_HORIZON_FIT (что было не так в прошлой попытке):\n${JSON.stringify(prior_horizon_fit, null, 2).slice(0, 4000)}` : ""}`
       : "";
 
-    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
+    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nIMPORTANT: response field "horizon" MUST equal "${h}" exactly. Same for horizon_fit.horizon. Do not change it to anything else.\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
 
     const res = await callAITool({
       systemPrompt: SYSTEM_PROMPT,
@@ -158,10 +159,17 @@ export const handler = async (req: Request) => {
 
     try {
       const data = await res.clone().json();
-      if (data && Array.isArray(data.key_results) && data.key_results.length > 3) {
-        data.key_results = data.key_results.slice(0, 3);
-        if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
-          data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
+      if (data && typeof data === "object" && !data.error) {
+        // Force horizon to match request — модель иногда возвращает прошлый дефолт.
+        data.horizon = h;
+        if (data.horizon_fit && typeof data.horizon_fit === "object") {
+          data.horizon_fit.horizon = h;
+        }
+        if (Array.isArray(data.key_results) && data.key_results.length > 3) {
+          data.key_results = data.key_results.slice(0, 3);
+          if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
+            data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
+          }
         }
         return json(data);
       }

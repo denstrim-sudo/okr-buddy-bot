@@ -1,4 +1,4 @@
-export type OkrHorizon = "strategic_3y" | "block_12m";
+export type OkrHorizon = "strategic_3y" | "block_12m" | "quarter_3m";
 export type OkrMode = "from_scratch" | "rewrite_existing";
 
 export interface OkrInputInterpretation {

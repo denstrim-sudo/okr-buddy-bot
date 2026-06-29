@@ -1,16 +1,18 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
-import { OKR_RULES_BLOCK } from "../_shared/okr_rules.ts";
+import { getRulesBlock } from "../_shared/okr_rules.ts";
 
-const SYSTEM_PROMPT = `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+
+HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR10→critical и доп. правилами Q-Focus, Q-Theme, Q-Reach)." : ""}
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 
-${OKR_RULES_BLOCK}
+${getRulesBlock(horizon)}
 
 For EACH rule you MUST return:
 - "severity": уровень важности замечания
   - "critical" — без исправления OKR методологически некорректен (Objective с цифрами, KR без метрики, KR-задача вместо outcome, нет baseline/target там, где нужны)
-  - "important" — снижает качество и управляемость, но OKR работоспособен (нет ни одного leading-индикатора, размытая формулировка, отсутствует временной горизонт)
+  - "important" — снижает качество и управляемость, но OKR работоспособен (размытая формулировка, отсутствует временной горизонт)
   - "improve" — точечное усиление: стилистика, уточнение сегмента, более конкретная метрика
   - Для pass=true ставь "improve" (или опускай).
 - "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно — как это влияет на измеримость, фокус, outcome-ориентированность или управленческий review. БЕЗ методологической лекции. Для pass=true можно оставить пустым.
@@ -55,13 +57,14 @@ export const handler = async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { objective, key_results, key_results_full, extra_context, model } = await req.json();
+    const { objective, key_results, key_results_full, horizon, extra_context, model } = await req.json();
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
     if (!Array.isArray(key_results) || key_results.length === 0) {
       return errorJson("At least one Key Result is required", 400);
     }
+    const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
 
     // Если переданы расширенные KR (с baseline/target/metric/kr_type) — используем их.
     // Иначе — fallback к простому списку строк.
@@ -94,7 +97,7 @@ export const handler = async (req: Request) => {
     const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть — обязательно учитывай их при проверке правил KR2 «from X to Y» и KR1 «измеримость»):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology. В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
     return await callAITool({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildSystemPrompt(h),
       userPrompt,
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",

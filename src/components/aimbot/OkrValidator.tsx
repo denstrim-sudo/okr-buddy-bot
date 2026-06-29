@@ -7,10 +7,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
+import type { OkrHorizon, ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
 import { RuleList, scoreBadgeClass } from "./RuleList";
+
+const HORIZON_LABELS: Record<OkrHorizon, string> = {
+  strategic_3y: "Стратегия · 3 года",
+  block_12m: "Блок · 12 мес",
+  quarter_3m: "Квартал · 3 мес",
+};
 
 interface Props {
   draft?: ValidationDraft | null;
@@ -26,6 +32,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
+  const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const { buildContext } = useDocs();
@@ -36,6 +43,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setObjective(draft.objective);
     setKrs(draft.key_results.length ? draft.key_results : [""]);
     setKrsFull(draft.key_results_full ?? null);
+    if (draft.horizon) setHorizon(draft.horizon);
     setReport(null);
   }, [draft]);
 
@@ -77,7 +85,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, extra_context, model },
+        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -159,6 +167,29 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       </header>
 
       <div className="space-y-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Горизонт OKR</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(["strategic_3y", "block_12m", "quarter_3m"] as OkrHorizon[]).map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setHorizon(h)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs font-medium transition",
+                  horizon === h ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60",
+                )}
+              >
+                {HORIZON_LABELS[h]}
+              </button>
+            ))}
+          </div>
+          {horizon === "quarter_3m" && (
+            <p className="text-[11px] text-muted-foreground">
+              Применяю квартальный набор правил: KR10 (leading) повышен до critical, плюс Q-Focus (2–4 KR), Q-Theme (одна тема), Q-Reach (достижимость за 90 дней).
+            </p>
+          )}
+        </div>
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>
           <Input

@@ -12,7 +12,7 @@ import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
 
 interface Props {
-  onGenerated: (plan: GeneratedPlan, objective: string) => void;
+  onGenerated: (plan: GeneratedPlan, objective: string, horizon: OkrHorizon) => void;
 }
 
 type Phase = "input" | "interpreting" | "clarify" | "drafting" | "draft_ready";
@@ -151,7 +151,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
 
   const sendToAudit = () => {
     if (!draft) return;
-    onGenerated(draftToGeneratedPlan(draft), draft.objective);
+    onGenerated(draftToGeneratedPlan(draft), draft.objective, horizon);
     toast.success("Черновик передан в аудит (Модуль 2)");
   };
 

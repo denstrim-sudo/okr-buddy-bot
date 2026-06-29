@@ -155,7 +155,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     toast.success("Черновик передан в аудит (Модуль 2)");
   };
 
-  const horizonLabel = horizon === "strategic_3y" ? "Strategic · 3 года" : "Block · 12 мес";
+  const horizonLabel = horizonShortLabel(horizon);
 
   return (
     <Card className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
@@ -185,8 +185,8 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Горизонт</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["strategic_3y", "block_12m"] as OkrHorizon[]).map((h) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(["strategic_3y", "block_12m", "quarter_3m"] as OkrHorizon[]).map((h) => (
                 <button
                   key={h}
                   type="button"
@@ -196,7 +196,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
                     horizon === h ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60",
                   )}
                 >
-                  {h === "strategic_3y" ? "Strategic · 3 года" : "Block · 12 мес"}
+                  {horizonShortLabel(h)}
                 </button>
               ))}
             </div>
@@ -274,7 +274,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">
-              {draft.horizon === "strategic_3y" ? "Strategic · 3 года" : "Block · 12 мес"}
+              {horizonShortLabel(draft.horizon)}
             </span>
             <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
               {draft.mode === "rewrite_existing" ? "Режим: переписывание" : "Режим: с нуля"}
@@ -386,7 +386,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             <div className="space-y-2 rounded-xl border border-warning/40 bg-warning-soft/40 p-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-warning">
                 <CalendarClock className="h-3.5 w-3.5" />
-                Часть формулировок не укладывается в горизонт {draft.horizon === "strategic_3y" ? "3 года" : "12 мес"}
+                Часть формулировок не укладывается в горизонт {horizonDurationLabel(draft.horizon)}
               </div>
               {draft.horizon_fit.notes?.length > 0 && (
                 <ul className="ml-5 list-disc space-y-0.5 text-[11px] text-foreground/80">
@@ -431,7 +431,7 @@ const InterpretationSummary = ({ interp }: { interp: OkrInputInterpretation }) =
   <div className="space-y-2 rounded-xl border border-border bg-secondary/30 p-4">
     <div className="flex flex-wrap gap-2">
       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-        {interp.detected_horizon === "strategic_3y" ? "Strategic · 3 года" : "Block · 12 мес"}
+        {horizonShortLabel(interp.detected_horizon)}
       </span>
       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
         {interp.detected_mode === "rewrite_existing" ? "Распознан существующий OKR" : "С нуля"}
@@ -485,8 +485,24 @@ const horizonFitTone = (score: number, verdict: HorizonFitVerdict) => {
   return "bg-destructive/10 text-destructive";
 };
 
+const horizonShortLabel = (h: OkrHorizon) => {
+  switch (h) {
+    case "strategic_3y": return "Strategic · 3 года";
+    case "block_12m": return "Block · 12 мес";
+    case "quarter_3m": return "Quarter · 3 мес";
+  }
+};
+
+const horizonDurationLabel = (h: OkrHorizon) => {
+  switch (h) {
+    case "strategic_3y": return "3 года";
+    case "block_12m": return "12 мес";
+    case "quarter_3m": return "3 мес";
+  }
+};
+
 const verdictLabel = (v: HorizonFitVerdict, horizon: OkrHorizon) => {
-  const h = horizon === "strategic_3y" ? "3 года" : "12 мес";
+  const h = horizonDurationLabel(horizon);
   switch (v) {
     case "fits": return `Подходит для ${h}`;
     case "too_short": return `Слишком краткосрочно для ${h}`;

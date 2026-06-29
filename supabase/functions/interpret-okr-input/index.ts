@@ -1,11 +1,13 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
 
 const SYSTEM_PROMPT = `You are an OKR Intake Coach. The canonical OKR hierarchy in this product is:
-Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Decisions / Solutions.
-Quarterly OKRs are NOT used here.
+Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
 
 Your job: take the user's free-form input (which may be raw context, a goal idea, or a pasted existing OKR), and INTERPRET it BEFORE drafting anything. Decide:
-- detected_horizon: "strategic_3y" or "block_12m" — guided by the user's selected horizon, but override if input clearly says otherwise.
+- detected_horizon: "strategic_3y", "block_12m" or "quarter_3m" — guided by the user's selected horizon, but override if input clearly says otherwise.
+  - "quarter_3m" — явные маркеры: «квартал», «Q1»/«Q2»/«Q3»/«Q4», «3 месяца», «до конца квартала», «90 дней».
+  - "block_12m" — «год», «годовой», конкретный год вроде «2026», «по итогам года».
+  - "strategic_3y" — «3 года», «к 2028», «стратегия», «долгосрочно», «vision».
 - detected_mode: "rewrite_existing" if input contains a recognizable Objective + Key Results structure (numbered KRs, "Objective:", "KR1:", etc.); else "from_scratch".
 - topic_summary: 1-2 sentence neutral restatement of what the user is trying to achieve.
 - has_existing_okr + parsed_existing: extract the objective and KR strings if present.
@@ -19,7 +21,7 @@ ALL text fields in RUSSIAN. Enum values stay English. Return STRICT JSON via the
 const PARAMETERS = {
   type: "object",
   properties: {
-    detected_horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+    detected_horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
     detected_mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     topic_summary: { type: "string" },
     has_existing_okr: { type: "boolean" },
@@ -52,7 +54,7 @@ export const handler = async (req: Request) => {
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required (min 3 chars)", 400);
     }
-    const horizonHint = horizon === "strategic_3y" || horizon === "block_12m" ? horizon : "block_12m";
+    const horizonHint = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
     const userPrompt = `USER-SELECTED HORIZON: ${horizonHint}\n\nUSER INPUT:\n${raw_input.trim()}${extraBlock}\n\nInterpret this input. Decide horizon, mode (rewrite_existing if a draft OKR is already pasted), extract any existing objective/KRs, list missing info, and generate at most 3 clarifying questions ONLY if truly needed.`;
 

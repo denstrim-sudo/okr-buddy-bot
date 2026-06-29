@@ -12,8 +12,7 @@ ${OKR_RULES_BLOCK}
 Эти поля должны быть согласованы с score_hint: если в critical_fails что-то есть — score_hint ≤ 60.
 
 Canonical hierarchy in this product:
-Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Decisions / Solutions.
-Quarterly OKRs are NOT used here.
+Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
 
 HARD RULES:
 - Exactly 1 Objective.
@@ -24,6 +23,7 @@ HARD RULES:
 - Horizon awareness:
   - strategic_3y: 3-year ambitious outcomes, no quarterly framing. Targets are directional/long-term, possibly category-defining ("стать №1 в сегменте", "выйти на 3 новых рынка").
   - block_12m: achievable inside a 12-month annual cycle, concrete numeric metrics, no multi-year horizons like "к 2028".
+  - quarter_3m: укладывается в один квартал (≤90 дней). Objective — одна фокус-тема квартала. KR — конкретные числовые исходы, достижимые за 3 месяца от baseline. ЗАПРЕЩЕНЫ годовые и многолетние формулировки ("по итогам года", "к 2028", "за год"). Желательно ≥1 LEADING KR, потому что за квартал LAG-метрики часто не успевают сдвинуться. Если запрошенный target явно требует >1 квартала — добавь в warnings "target недостижим за квартал, рассмотрите разбивку".
 - Mode:
   - from_scratch: produce a fresh OKR.
   - rewrite_existing: PRESERVE intent and recognizable wording from parsed_existing. Make MINIMAL edits.
@@ -55,7 +55,7 @@ const HORIZON_FIT_ITEM = {
 const PARAMETERS = {
   type: "object",
   properties: {
-    horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+    horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
     mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     objective: { type: "string" },
     key_results: {
@@ -91,7 +91,7 @@ const PARAMETERS = {
     horizon_fit: {
       type: "object",
       properties: {
-        horizon: { type: "string", enum: ["strategic_3y", "block_12m"] },
+        horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
         overall_verdict: { type: "string", enum: ["fits", "too_short", "too_long", "mixed"] },
         overall_score: { type: "number" },
         objective: HORIZON_FIT_ITEM,
@@ -131,7 +131,7 @@ export const handler = async (req: Request) => {
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
     }
-    const h: string = horizon === "strategic_3y" || horizon === "block_12m" ? horizon : "block_12m";
+    const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
     const m: string = mode === "rewrite_existing" ? "rewrite_existing" : "from_scratch";
 
     const interpBlock = interpretation

@@ -151,7 +151,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
 
   const sendToAudit = () => {
     if (!draft) return;
-    onGenerated(draftToGeneratedPlan(draft), draft.objective);
+    onGenerated(draftToGeneratedPlan(draft), draft.objective, horizon);
     toast.success("Черновик передан в аудит (Модуль 2)");
   };
 

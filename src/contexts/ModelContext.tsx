@@ -1,20 +1,19 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
+// ВАЖНО: используем только ID, реально доступные в шлюзе AIAI.BY (vedai.by/api/v1).
+// Список сверен с https://aiai.by/docs (раздел «Популярные модели»).
 export const AI_MODELS = [
-  { id: "gpt-4.1-mini", label: "GPT-4.1 mini", hint: "Баланс цены и качества (по умолчанию)" },
-  { id: "gpt-4.1", label: "GPT-4.1", hint: "Сильнее, дороже" },
-  { id: "gpt-4o", label: "GPT-4o", hint: "Топ OpenAI, мультимодал" },
-  { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Дешёвый и быстрый" },
-  { id: "gpt-5-mini", label: "GPT-5 mini", hint: "Новое поколение, быстрый" },
-  { id: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", hint: "Отлично для текста и аудита" },
-  { id: "claude-haiku-4.5", label: "Claude Haiku 4.5", hint: "Быстрый и дешёвый" },
-  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Большой контекст" },
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Быстрый Gemini" },
-  { id: "deepseek-v3.1", label: "DeepSeek V3.1", hint: "Очень дешёвый" },
+  { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Быстрый и дешёвый (по умолчанию)" },
+  { id: "gpt-4o", label: "GPT-4o", hint: "Сильнее, дороже" },
+  { id: "claude-3.5-haiku", label: "Claude 3.5 Haiku", hint: "Быстрый Claude" },
+  { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4", hint: "Отлично для текста и аудита" },
+  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Большой контекст, быстрый" },
+  { id: "deepseek-chat", label: "DeepSeek Chat", hint: "Очень дешёвый" },
+  { id: "llama-3.3-70b", label: "Llama 3.3 70B", hint: "Open-source" },
 ] as const;
 
 export type AiModelId = (typeof AI_MODELS)[number]["id"];
-const DEFAULT_MODEL: AiModelId = "gpt-4.1-mini";
+const DEFAULT_MODEL: AiModelId = "gpt-4o-mini";
 const STORAGE_KEY = "aimbot.aiModel";
 
 interface Ctx {

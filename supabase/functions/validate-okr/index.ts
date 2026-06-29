@@ -97,7 +97,7 @@ export const handler = async (req: Request) => {
     const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть — обязательно учитывай их при проверке правил KR2 «from X to Y» и KR1 «измеримость»):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology. В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
     return await callAITool({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildSystemPrompt(h),
       userPrompt,
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",

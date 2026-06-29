@@ -41,7 +41,7 @@ interface CallResult {
 
 // AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
-const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
 const REQUEST_TIMEOUT_MS = 90_000;
@@ -89,7 +89,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       status: isAbort ? 504 : 502,
       errorCode: isAbort ? "timeout" : "network_error",
       errorMessage: isAbort
-        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (Gemini Flash, GPT-4.1 mini).`
+        ? `Модель "${args.model ?? DEFAULT_MODEL}" слишком долго отвечала. Попробуйте ещё раз или выберите более быструю модель (GPT-4o mini, Gemini 2.0 Flash).`
         : "Не удалось связаться с AIAI.BY",
       retryable: true,
     };

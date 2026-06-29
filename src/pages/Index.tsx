@@ -25,7 +25,7 @@ const Index = () => {
 
   const krTexts = useMemo(() => plan?.key_results?.map((k) => k.text) ?? [], [plan]);
 
-  const buildDraft = (p: GeneratedPlan, obj: string): ValidationDraft => ({
+  const buildDraft = (p: GeneratedPlan, obj: string, horizon?: import("@/types/okr").OkrHorizon): ValidationDraft => ({
     objective: p.objective_refined || obj,
     key_results: p.key_results.map((k) => k.text),
     key_results_full: p.key_results.map((k) => ({
@@ -35,12 +35,13 @@ const Index = () => {
       metric: k.metric,
       kr_type: k.kr_type,
     })),
+    horizon,
   });
 
-  const handleGenerated = useCallback((p: GeneratedPlan, obj: string) => {
+  const handleGenerated = useCallback((p: GeneratedPlan, obj: string, horizon?: import("@/types/okr").OkrHorizon) => {
     setPlan(p);
     setObjective(p.objective_refined || obj);
-    setValidatorDraft(buildDraft(p, obj));
+    setValidatorDraft(buildDraft(p, obj, horizon));
   }, []);
 
   const handleSendToSolutions = useCallback((p: GeneratedPlan, obj: string) => {

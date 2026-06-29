@@ -12,7 +12,7 @@ import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
 
 interface Props {
-  onGenerated: (plan: GeneratedPlan, objective: string) => void;
+  onGenerated: (plan: GeneratedPlan, objective: string, horizon: OkrHorizon) => void;
 }
 
 type Phase = "input" | "interpreting" | "clarify" | "drafting" | "draft_ready";

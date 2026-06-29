@@ -149,7 +149,7 @@ export const handler = async (req: Request) => {
     const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nIMPORTANT: response field "horizon" MUST equal "${h}" exactly. Same for horizon_fit.horizon. Do not change it to anything else.\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
 
     const res = await callAITool({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildSystemPrompt(h),
       userPrompt,
       toolName: "draft_okr",
       toolDescription: "Draft a single Objective with 1..3 outcome-based Key Results plus horizon-fit self-check.",

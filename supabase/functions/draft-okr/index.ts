@@ -1,9 +1,9 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_shared/ai.ts";
-import { OKR_RULES_BLOCK } from "../_shared/okr_rules.ts";
+import { getRulesBlock } from "../_shared/okr_rules.ts";
 
-const SYSTEM_PROMPT = `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
+const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
 
-${OKR_RULES_BLOCK}
+${getRulesBlock(horizon)}
 
 После составления черновика ОБЯЗАТЕЛЬНО прогони его мысленно по этим же правилам и заполни:
 - "score_hint" — по формуле выше (с учётом потолка ≤60 при критических фейлах).

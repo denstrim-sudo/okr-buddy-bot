@@ -47,6 +47,24 @@ const DEFAULT_MAX_TOKENS = 4000;
 const REQUEST_TIMEOUT_MS = 90_000;
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
+const getProviderError = (txt: string) => {
+  try {
+    const parsed = JSON.parse(txt);
+    return {
+      message: parsed?.error?.message || parsed?.message || txt,
+      code: parsed?.error?.code || parsed?.code,
+      type: parsed?.error?.type || parsed?.type,
+    };
+  } catch {
+    return { message: txt, code: undefined, type: undefined };
+  }
+};
+
+const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
+  if (!requestedModel || requestedModel === DEFAULT_MODEL || res.ok) return false;
+  return res.errorCode === "model_unavailable" || res.errorCode === "provider_unavailable";
+};
+
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
   const RAW_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
   // Strip whitespace / non-ASCII chars that may have been pasted with the key
@@ -62,6 +80,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
   };
 
   const systemContent = args.systemPrompt + PROMPT_INJECTION_GUARD + (retryHint ? `\n\n${retryHint}` : "");
+  const requestedModel = args.model ?? DEFAULT_MODEL;
 
   let response: Response;
   try {
@@ -69,7 +88,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
       method: "POST",
       headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: args.model ?? DEFAULT_MODEL,
+        model: requestedModel,
         temperature: args.temperature ?? DEFAULT_TEMPERATURE,
         max_tokens: args.maxTokens ?? DEFAULT_MAX_TOKENS,
         messages: [
@@ -107,7 +126,35 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
   if (!response.ok) {
     const txt = await response.text();
     console.error("AIAI.BY error", response.status, txt);
-    return { ok: false, status: response.status >= 500 ? 502 : 500, errorCode: "aiai_error", errorMessage: `AIAI.BY error ${response.status}`, retryable: response.status >= 500 };
+    const providerError = getProviderError(txt);
+
+    if (response.status === 404 || response.status === 410 || providerError.code === "model_not_found") {
+      return {
+        ok: false,
+        status: 502,
+        errorCode: "model_unavailable",
+        errorMessage: `Модель "${requestedModel}" сейчас недоступна у AI-провайдера. Запрос будет выполнен через GPT-4o mini.`,
+        retryable: false,
+      };
+    }
+
+    if (response.status === 503 || providerError.code === "all_providers_failed") {
+      return {
+        ok: false,
+        status: 502,
+        errorCode: "provider_unavailable",
+        errorMessage: `Провайдер модели "${requestedModel}" временно недоступен. Запрос будет выполнен через GPT-4o mini.`,
+        retryable: false,
+      };
+    }
+
+    return {
+      ok: false,
+      status: response.status >= 500 ? 502 : 500,
+      errorCode: "aiai_error",
+      errorMessage: providerError.message ? `AI-провайдер вернул ошибку: ${providerError.message}` : `AI-провайдер вернул ошибку ${response.status}`,
+      retryable: response.status >= 500,
+    };
   }
 
   const data = await response.json();
@@ -133,12 +180,20 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
  */
 export async function callAITool(args: CallArgs): Promise<Response> {
   let res = await openaiToolCall(args);
+  if (shouldFallbackToDefault(res, args.model)) {
+    console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
+    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+  }
   if (!res.ok && res.retryable) {
     await new Promise((r) => setTimeout(r, 800));
     const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
       ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
       : "";
     res = await openaiToolCall(args, hint);
+    if (shouldFallbackToDefault(res, args.model)) {
+      console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
+      res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+    }
   }
   if (!res.ok) {
     return errorJson(res.errorMessage ?? "AI error", res.status);
@@ -152,12 +207,20 @@ export async function callAITool(args: CallArgs): Promise<Response> {
  */
 export async function callAIToolExtended(args: CallArgs): Promise<Response> {
   let res = await openaiToolCall(args);
+  if (shouldFallbackToDefault(res, args.model)) {
+    console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
+    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+  }
   if (!res.ok && res.retryable) {
     await new Promise((r) => setTimeout(r, 800));
     const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
       ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
       : "";
     res = await openaiToolCall(args, hint);
+    if (shouldFallbackToDefault(res, args.model)) {
+      console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
+      res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+    }
   }
 
   const envelope = {

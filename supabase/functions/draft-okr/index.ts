@@ -159,10 +159,17 @@ export const handler = async (req: Request) => {
 
     try {
       const data = await res.clone().json();
-      if (data && Array.isArray(data.key_results) && data.key_results.length > 3) {
-        data.key_results = data.key_results.slice(0, 3);
-        if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
-          data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
+      if (data && typeof data === "object" && !data.error) {
+        // Force horizon to match request — модель иногда возвращает прошлый дефолт.
+        data.horizon = h;
+        if (data.horizon_fit && typeof data.horizon_fit === "object") {
+          data.horizon_fit.horizon = h;
+        }
+        if (Array.isArray(data.key_results) && data.key_results.length > 3) {
+          data.key_results = data.key_results.slice(0, 3);
+          if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
+            data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
+          }
         }
         return json(data);
       }

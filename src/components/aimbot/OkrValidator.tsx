@@ -168,6 +168,29 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
 
       <div className="space-y-3">
         <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Горизонт OKR</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(["strategic_3y", "block_12m", "quarter_3m"] as OkrHorizon[]).map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setHorizon(h)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs font-medium transition",
+                  horizon === h ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60",
+                )}
+              >
+                {HORIZON_LABELS[h]}
+              </button>
+            ))}
+          </div>
+          {horizon === "quarter_3m" && (
+            <p className="text-[11px] text-muted-foreground">
+              Применяю квартальный набор правил: KR10 (leading) повышен до critical, плюс Q-Focus (2–4 KR), Q-Theme (одна тема), Q-Reach (достижимость за 90 дней).
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>
           <Input
             value={objective}

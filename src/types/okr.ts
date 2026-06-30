@@ -109,6 +109,8 @@ export interface ValidationReport {
   /** True, если после одного корректирующего повтора rewritten_objective всё ещё содержит цифру.
    *  UI должен показать предупреждение, не блокируя пользователя. */
   rewritten_objective_warning?: boolean;
+  /** Сервер подменил score, потому что ответ модели расходился с канонической формулой более чем на 10. */
+  score_recomputed?: boolean;
 }
 
 export interface ValidationKR {

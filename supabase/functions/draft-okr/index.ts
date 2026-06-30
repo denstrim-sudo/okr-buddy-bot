@@ -120,6 +120,19 @@ const PARAMETERS = {
   additionalProperties: false,
 };
 
+export function capKeyResults<T extends { key_results?: any; horizon_fit?: any }>(data: T, horizon: string): T {
+  const maxKr = horizon === "quarter_3m" ? 4 : 3;
+  if (data && Array.isArray((data as any).key_results) && (data as any).key_results.length > maxKr) {
+    (data as any).key_results = (data as any).key_results.slice(0, maxKr);
+    if ((data as any).horizon_fit && Array.isArray((data as any).horizon_fit.key_results)) {
+      (data as any).horizon_fit.key_results = (data as any).horizon_fit.key_results.filter(
+        (k: any) => k.index < maxKr,
+      );
+    }
+  }
+  return data;
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;

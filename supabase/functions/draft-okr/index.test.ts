@@ -76,6 +76,23 @@ Deno.test("applyScoreHintRecompute: нет self_audit → no-op", () => {
   assertEquals(data.score_hint_recomputed, undefined);
 });
 
+Deno.test("buildUserPrompt: с parent_kr_context включает блок PARENT KEY RESULT и сам текст", () => {
+  const out = buildUserPrompt({
+    raw_input: "raw", horizon: "quarter_3m", mode: "from_scratch",
+    parent_kr_context: "Block OKR → KR: Активация с 30% до 50%",
+  });
+  assert(out.includes("PARENT KEY RESULT"));
+  assert(out.includes("должен явно продвигать именно этот KR"));
+  assert(out.includes("Активация с 30% до 50%"));
+});
+
+Deno.test("buildUserPrompt: без parent_kr_context НЕ содержит блок", () => {
+  const out = buildUserPrompt({
+    raw_input: "raw", horizon: "block_12m", mode: "from_scratch",
+  });
+  assert(!out.includes("PARENT KEY RESULT"));
+});
+
 
 Deno.test("draft-okr: rejects empty raw_input", async () => {
   const { status } = await callHandler(handler, { raw_input: "", horizon: "block_12m" });

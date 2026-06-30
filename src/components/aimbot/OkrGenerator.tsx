@@ -34,15 +34,32 @@ const draftToGeneratedPlan = (d: OkrDraft): GeneratedPlan => ({
 
 export const OkrGenerator = ({ onGenerated }: Props) => {
   const [phase, setPhase] = useState<Phase>("input");
-  const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
+  const [horizon, setHorizonState] = useState<OkrHorizon>("block_12m");
   const [rawInput, setRawInput] = useState("");
   const [interpretation, setInterpretation] = useState<OkrInputInterpretation | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [draft, setDraft] = useState<OkrDraft | null>(null);
+  const [parentLink, setParentLink] = useState<{ parentOkrId: string; parentKrIndex: number } | null>(null);
 
   const { buildContext } = useDocs();
-  const { save: saveOkr } = useSavedOkrs();
+  const { items: savedItems, save: saveOkr } = useSavedOkrs();
   const { model } = useAiModel();
+
+  const setHorizon = (h: OkrHorizon) => {
+    setHorizonState(h);
+    // Сбрасываем выбранного родителя при смене горизонта — eligible-список меняется,
+    // прошлый parentKrIndex может указывать на родителя неправильного уровня.
+    setParentLink(null);
+  };
+
+  const buildParentKrContext = (): string | undefined => {
+    if (!parentLink) return undefined;
+    const parent = savedItems.find((i) => i.id === parentLink.parentOkrId);
+    if (!parent) return undefined;
+    const kr = parent.plan.key_results?.[parentLink.parentKrIndex];
+    if (!kr) return undefined;
+    return `${parent.objective} → KR: ${kr.text}`;
+  };
 
   const loading = phase === "interpreting" || phase === "drafting";
 

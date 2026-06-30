@@ -126,6 +126,21 @@ export const DocsManager = () => {
         />
       </div>
 
+      {docs.length > 0 && (
+        <div
+          data-testid="docs-usage-summary"
+          className="mt-4 flex items-center justify-between rounded-md border border-border/60 bg-secondary/30 px-3 py-1.5 text-[11px] text-muted-foreground"
+        >
+          <span>
+            Использовано <span className="font-mono text-foreground">{fmtNum(usage.used)}</span> из{" "}
+            <span className="font-mono">{fmtNum(usage.limit)}</span> символов AI-контекста
+          </span>
+          <span className="font-mono">
+            {Math.min(100, Math.round((usage.used / usage.limit) * 100))}%
+          </span>
+        </div>
+      )}
+
       {items.length > 0 && (
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -135,16 +150,29 @@ export const DocsManager = () => {
             </button>
           </div>
           <ul className="space-y-1.5">
-            {items.map((d) => (
-              <li key={d.id} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate text-foreground" title={d.name}>{d.name}</span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{fmtSize(d.text.length)}</span>
-                <button onClick={() => remove(d.id)} className="text-muted-foreground hover:text-destructive" aria-label="Удалить">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
+            {items.map((d) => {
+              const u = usageById.get(d.id);
+              const pct = u && u.totalChars > 0 ? Math.round((u.includedChars / u.totalChars) * 100) : 100;
+              return (
+                <li key={d.id} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate text-foreground" title={d.name}>{d.name}</span>
+                  {u?.truncated && (
+                    <span
+                      data-testid={`doc-truncated-${d.id}`}
+                      title={`В AI-контекст войдёт только ${fmtNum(u.includedChars)} из ${fmtNum(u.totalChars)} символов`}
+                      className="shrink-0 rounded bg-warning-soft px-1.5 py-0.5 font-mono text-[10px] font-semibold text-warning"
+                    >
+                      учтено {pct}%
+                    </span>
+                  )}
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{fmtSize(d.text.length)}</span>
+                  <button onClick={() => remove(d.id)} className="text-muted-foreground hover:text-destructive" aria-label="Удалить">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

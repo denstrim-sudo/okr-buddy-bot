@@ -98,6 +98,11 @@ export interface ValidationRule {
   hint: string;
   severity?: RuleSeverity;
   why?: string;
+  /** Дословная цитата из текста OKR, на которой основан pass=false. Для pass=true — пустая строка. */
+  evidence?: string;
+  /** Серверный сигнал: подтверждена ли evidence реальным фрагментом текста OKR.
+   *  Для pass=true всегда true. Для pass=false: false → правило не подкреплено цитатой. */
+  grounded?: boolean;
 }
 
 export interface ValidationReport {

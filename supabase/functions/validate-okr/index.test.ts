@@ -351,3 +351,108 @@ Deno.test("handler: data.model_used проставлен из _meta.used_model, 
   }
 });
 
+
+// --- isGrounded: чистая логика обоснованности fail-вердикта ---
+import { isGrounded, PARAMETERS } from "./index.ts";
+
+Deno.test("isGrounded: pass=true → всегда true, evidence не требуется", () => {
+  assertEquals(isGrounded({ pass: true }, "obj", ["kr"]), true);
+  assertEquals(isGrounded({ pass: true, evidence: "" }, "obj", ["kr"]), true);
+});
+
+Deno.test("isGrounded: pass=false + evidence реально встречается в KR → true", () => {
+  const obj = "Стать опорой роста";
+  const krs = ["KRs описывают количественные изменения метрики"];
+  assertEquals(isGrounded({ pass: false, evidence: "количественные изменения" }, obj, krs), true);
+});
+
+Deno.test("isGrounded: pass=false + пустая evidence → false", () => {
+  assertEquals(isGrounded({ pass: false, evidence: "" }, "obj text", ["kr text"]), false);
+  assertEquals(isGrounded({ pass: false }, "obj text", ["kr text"]), false);
+});
+
+Deno.test("isGrounded: pass=false + выдуманная цитата → false", () => {
+  assertEquals(
+    isGrounded(
+      { pass: false, evidence: "эта фраза точно не встречается в OKR" },
+      "Стать опорой роста",
+      ["KR один", "KR два"],
+    ),
+    false,
+  );
+});
+
+Deno.test("isGrounded: регистронезависимость и нормализация пробелов/переносов", () => {
+  const obj = "Стать  ПРЕДСКАЗУЕМОЙ\nопорой\tроста";
+  assertEquals(isGrounded({ pass: false, evidence: "предсказуемой опорой роста" }, obj, []), true);
+  assertEquals(isGrounded({ pass: false, evidence: "ПРЕДСКАЗУЕМОЙ   ОПОРОЙ" }, obj, []), true);
+});
+
+// --- PARAMETERS схема требует evidence ---
+Deno.test("PARAMETERS.rules.items.required включает 'evidence'", () => {
+  const required = (PARAMETERS as any).properties.rules.items.required as string[];
+  assert(required.includes("evidence"), `required=${JSON.stringify(required)}`);
+});
+
+// --- handler: серверный расчёт grounded ---
+
+const rulesWithEvidence = [
+  { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  // evidence реально встречается во втором KR
+  { id: "KR3", label: "L", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
+  // evidence выдумана
+  { id: "KR2", label: "L", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
+  { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "KR10", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+];
+const reportWithEvidence = {
+  score: 78,
+  status: "pass",
+  summary: "ok",
+  rules: rulesWithEvidence,
+  rewritten_objective: "Стать опорой роста для команды",
+  rewritten_key_results: ["Поднять активацию", "NPS вырастет"],
+};
+
+Deno.test("handler: добавляет grounded=true для pass=false с реально встречающейся evidence", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([reportWithEvidence]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    const r = data.rules.find((x: any) => x.id === "KR3");
+    assertEquals(r.grounded, true);
+    // pass/severity сохранены
+    assertEquals(r.pass, false);
+    assertEquals(r.severity, "important");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: добавляет grounded=false для pass=false с выдуманной evidence", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([reportWithEvidence]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    const r = data.rules.find((x: any) => x.id === "KR2");
+    assertEquals(r.grounded, false);
+    assertEquals(r.pass, false, "pass не должен переопределяться");
+    assertEquals(r.severity, "important", "severity не должна переопределяться");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: pass=true правила получают grounded=true автоматически", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([reportWithEvidence]);
+  try {
+    const { data } = await callHandler(handler, baseBody);
+    const r = data.rules.find((x: any) => x.id === "O1");
+    assertEquals(r.grounded, true);
+  } finally {
+    _restoreFetch();
+  }
+});

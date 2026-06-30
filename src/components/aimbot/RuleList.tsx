@@ -45,6 +45,15 @@ const renderRule = (r: ValidationRule, isSm: boolean) => {
             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />{r.hint}
           </p>
         )}
+        {!r.pass && r.grounded === false && (
+          <p
+            data-testid={`rule-ungrounded-${r.id}`}
+            className={cn("mt-0.5 flex items-start gap-1 text-muted-foreground/70", isSm ? "text-[11px]" : "text-[11px]")}
+          >
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            ⚠ не подтверждено цитатой из текста — возможно, модель ошиблась
+          </p>
+        )}
         {!isSm && !r.pass && r.why && (
           <p className="mt-0.5 flex items-start gap-1 text-[11px] italic text-muted-foreground/80">
             <Info className="mt-0.5 h-3 w-3 shrink-0 text-primary/70" />

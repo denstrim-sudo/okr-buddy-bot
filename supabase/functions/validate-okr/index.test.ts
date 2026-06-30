@@ -229,3 +229,125 @@ Deno.test("isAuditSuspicious: data=null → true", () => {
   assertEquals(isAuditSuspicious(null), true);
 });
 
+// =====================================================================
+// Интеграционные тесты retry-логики handler (suspicious → один retry).
+// Мокаем globalThis.fetch (как в _shared/ai.test.ts), чтобы держать всё
+// в памяти без сетевых вызовов.
+// =====================================================================
+
+const _origFetch = globalThis.fetch;
+const _origKey = Deno.env.get("AIAI_API_KEY");
+function _restoreFetch() {
+  globalThis.fetch = _origFetch;
+  if (_origKey !== undefined) Deno.env.set("AIAI_API_KEY", _origKey);
+}
+
+interface FetchCall { model: string; userPrompt: string; }
+
+/**
+ * Очередь tool-call-ответов в openai-формате. Каждый элемент — payload, который
+ * вернётся как arguments при следующем fetch. Возвращает getter истории вызовов.
+ */
+function queueAiResponses(payloads: unknown[]): () => FetchCall[] {
+  const history: FetchCall[] = [];
+  let i = 0;
+  globalThis.fetch = ((_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    const userMsg = body.messages?.find((m: any) => m.role === "user")?.content ?? "";
+    history.push({ model: body.model, userPrompt: String(userMsg) });
+    const payload = payloads[Math.min(i, payloads.length - 1)];
+    i++;
+    const resp = {
+      choices: [{ message: { tool_calls: [{ function: { name: "validate_okr", arguments: JSON.stringify(payload) } }] } }],
+      usage: {},
+    };
+    return Promise.resolve(
+      new Response(JSON.stringify(resp), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+  }) as typeof fetch;
+  return () => history;
+}
+
+const cleanRules = [
+  { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "O3", label: "L", pass: false, hint: "h", severity: "critical", why: "w" },
+  { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR2", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR3", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR10", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+];
+const cleanReport = {
+  score: 78,
+  status: "pass",
+  summary: "ok",
+  rules: cleanRules,
+  rewritten_objective: "Стать опорой роста для команды",
+  rewritten_key_results: ["KR1 без цифр в этой строке", "KR2 без цифр в этой строке"],
+};
+const suspiciousReport = { ...cleanReport, score: 0, status: "fail", rules: [] };
+
+const baseBody = {
+  objective: "Стать самым любимым онбордингом для команды",
+  key_results: ["Поднять активацию", "NPS вырастет"],
+  horizon: "block_12m",
+  model: "claude-haiku-4.5",
+};
+
+Deno.test("handler: первый ответ suspicious → ровно ОДИН retry без явного model (DEFAULT_MODEL)", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const getHistory = queueAiResponses([suspiciousReport, cleanReport]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    const history = getHistory();
+    assertEquals(status, 200);
+    assertEquals(history.length, 2, "должно быть ровно 2 fetch'а (initial + один retry)");
+    assertEquals(history[0].model, "claude-haiku-4.5");
+    assertEquals(history[1].model, "gpt-4o", "retry должен идти на DEFAULT_MODEL");
+    // финальный ответ — из retry, без флага audit_unreliable
+    assertEquals(data.audit_unreliable, undefined);
+    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: retry тоже suspicious → audit_unreliable=true, ответ всё равно возвращается", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const getHistory = queueAiResponses([suspiciousReport, suspiciousReport]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 2);
+    assertEquals(data.audit_unreliable, true);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: первый ответ НЕ suspicious → повторного вызова НЕ происходит", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const getHistory = queueAiResponses([cleanReport]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 1, "должен быть ровно 1 fetch — никакого retry");
+    assertEquals(data.audit_unreliable, undefined);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: data.model_used проставлен из _meta.used_model, служебное __model_used отсутствует", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([suspiciousReport, cleanReport]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    // retry прошёл через DEFAULT_MODEL → model_used должно быть gpt-4o
+    assertEquals(data.model_used, "gpt-4o");
+    assertEquals(data.__model_used, undefined, "__model_used не должно утекать в публичный JSON");
+  } finally {
+    _restoreFetch();
+  }
+});
+

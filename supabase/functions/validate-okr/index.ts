@@ -110,6 +110,16 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
   return data;
 }
 
+/**
+ * Эвристика: пустой/полностью проваленный rules[] — признак того, что
+ * модель не справилась с форматом или вернула мусор. Используется для
+ * принудительного retry через DEFAULT_MODEL.
+ */
+export function isAuditSuspicious(data: any): boolean {
+  if (!data || !Array.isArray(data.rules) || data.rules.length === 0) return true;
+  return data.rules.every((r: any) => r?.pass === false);
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -160,7 +170,30 @@ export const handler = async (req: Request) => {
       model: modelArg,
     });
     if (first.status !== 200) return first;
-    const firstData = await first.json();
+    let firstData = await first.json();
+
+    // Подозрительный ответ (пустой/всё-fail) → один retry на DEFAULT_MODEL.
+    if (isAuditSuspicious(firstData)) {
+      const retryPrompt = `${userPrompt}\n\nВАЖНО: твой предыдущий ответ оказался некорректным (пустой или полностью проваленный список правил). Перепроверь OKR честно: некоторые правила, скорее всего, выполнены. Верни полный набор rules с реалистичной оценкой pass/fail.`;
+      const retry = await callAITool({
+        systemPrompt,
+        userPrompt: retryPrompt,
+        toolName: "validate_okr",
+        toolDescription: "Audit an OKR and return rule-by-rule findings.",
+        parameters: PARAMETERS,
+        // model не передаём → форсируем DEFAULT_MODEL
+      });
+      if (retry.status === 200) {
+        const retryData = await retry.json();
+        if (!isAuditSuspicious(retryData)) {
+          firstData = retryData;
+        } else {
+          firstData.audit_unreliable = true;
+        }
+      } else {
+        firstData.audit_unreliable = true;
+      }
+    }
 
     const finalData = await sanitizeRewrittenObjective(firstData, async () => {
       const retryPrompt = `${userPrompt}\n\nВАЖНО: ${SANITIZE_HINT}`;
@@ -173,11 +206,17 @@ export const handler = async (req: Request) => {
         model: modelArg,
       });
       if (r.status !== 200) {
-        // redo не удался — оставляем первый ответ как есть; sanitize пометит warning.
         return firstData;
       }
       return await r.json();
     });
+
+    // Извлекаем служебное __model_used и нормализуем в публичное поле model_used.
+    const modelUsed = typeof (finalData as any).__model_used === "string"
+      ? (finalData as any).__model_used
+      : undefined;
+    delete (finalData as any).__model_used;
+    if (modelUsed) (finalData as any).model_used = modelUsed;
 
     applyScoreRecompute(finalData, h);
     return json(finalData);

@@ -27,7 +27,7 @@ Return STRICT JSON only via the provided tool.
 
 IMPORTANT: All text fields (label, hint, why, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
 
-const PARAMETERS = {
+export const PARAMETERS = {
   type: "object",
   properties: {
     score: { type: "number", description: "0-100 overall validation score" },
@@ -44,8 +44,9 @@ const PARAMETERS = {
           hint: { type: "string" },
           severity: { type: "string", enum: ["critical", "important", "improve"] },
           why: { type: "string" },
+          evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
         },
-        required: ["id", "label", "pass", "hint", "severity", "why"],
+        required: ["id", "label", "pass", "hint", "severity", "why", "evidence"],
         additionalProperties: false,
       },
     },
@@ -55,6 +56,24 @@ const PARAMETERS = {
   required: ["score", "status", "summary", "rules", "rewritten_objective", "rewritten_key_results"],
   additionalProperties: false,
 };
+
+/**
+ * Проверяет, обоснован ли вердикт fail дословной цитатой из текста OKR.
+ * pass=true → всегда true (обоснование не требуется).
+ * pass=false → evidence должна быть непустой подстрокой объединённого текста
+ * objective + krTexts (без учёта регистра/повторяющихся пробелов).
+ */
+export function isGrounded(
+  rule: { pass: boolean; evidence?: string },
+  objective: string,
+  krTexts: string[],
+): boolean {
+  if (rule.pass) return true;
+  const ev = (rule.evidence ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (ev.length < 3) return false;
+  const haystack = [objective, ...krTexts].join(" \n ").toLowerCase().replace(/\s+/g, " ");
+  return haystack.includes(ev);
+}
 
 const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило O3. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
 

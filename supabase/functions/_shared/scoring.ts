@@ -51,3 +51,46 @@ export function recomputeScore(rules: ScoringRule[]): number {
   const raw = Math.round((100 * passedWeight) / totalWeight);
   return hasCriticalFail ? Math.min(raw, CRITICAL_FAIL_CAP) : raw;
 }
+
+/**
+ * true, если |modelScore - recomputed| > 10.
+ * Используется как триггер серверной подмены score: чтобы не дёргать UI
+ * на мелких округлениях модели, но ловить системные расхождения с формулой.
+ */
+export function scoreDiscrepancy(modelScore: number, recomputed: number): boolean {
+  return Math.abs(modelScore - recomputed) > 10;
+}
+
+/**
+ * Канонический id → severity для правил из okr_rules.ts.
+ * Источник правды — BASE_RULES и QUARTER-SPECIFIC overrides в okr_rules.ts.
+ */
+export const SEVERITY_BY_RULE_ID: Record<string, RuleSeverity> = {
+  O1: "important",
+  O2: "important",
+  O3: "critical",
+  KR1: "critical",
+  KR2: "critical",
+  KR3: "critical",
+  KR4: "important",
+  KR10: "important",
+  // quarter-only:
+  "Q-Focus": "important",
+  "Q-Theme": "improve",
+  "Q-Reach": "important",
+};
+
+/**
+ * Резолвит severity по id правила c учётом horizon-override.
+ * Для quarter_3m KR10 повышается до critical (см. OKR_RULES_BLOCK_QUARTER).
+ */
+export function severityFor(ruleId: string, horizon?: string): RuleSeverity {
+  if (horizon === "quarter_3m" && ruleId === "KR10") return "critical";
+  return SEVERITY_BY_RULE_ID[ruleId] ?? "improve";
+}
+
+/** Полный список known rule ids для горизонта — нужен draft-okr, чтобы из self_audit собрать псевдо-rules. */
+export function knownRuleIdsFor(horizon?: string): string[] {
+  const base = ["O1", "O2", "O3", "KR1", "KR2", "KR3", "KR4", "KR10"];
+  return horizon === "quarter_3m" ? [...base, "Q-Focus", "Q-Theme", "Q-Reach"] : base;
+}

@@ -1,5 +1,5 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { recomputeScore, type ScoringRule } from "./scoring.ts";
+import { recomputeScore, scoreDiscrepancy, severityFor, type ScoringRule } from "./scoring.ts";
 
 Deno.test("recomputeScore: 100 при всех правилах pass=true", () => {
   const rules: ScoringRule[] = [
@@ -57,3 +57,36 @@ Deno.test("recomputeScore: improve-fail НЕ триггерит потолок 6
 Deno.test("recomputeScore: пустой массив → 0", () => {
   assertEquals(recomputeScore([]), 0);
 });
+
+// --- scoreDiscrepancy ---
+
+Deno.test("scoreDiscrepancy: разница 11 → true", () => {
+  assertEquals(scoreDiscrepancy(85, 74), true);
+});
+
+Deno.test("scoreDiscrepancy: граница 10 → false", () => {
+  assertEquals(scoreDiscrepancy(85, 75), false);
+});
+
+Deno.test("scoreDiscrepancy: разница 0 → false", () => {
+  assertEquals(scoreDiscrepancy(60, 60), false);
+});
+
+Deno.test("scoreDiscrepancy: модель занизила (60 vs 71) → true", () => {
+  assertEquals(scoreDiscrepancy(60, 71), true);
+});
+
+// --- severityFor: KR10 override для quarter_3m ---
+
+Deno.test("severityFor: KR10 для block_12m → important", () => {
+  assertEquals(severityFor("KR10", "block_12m"), "important");
+});
+
+Deno.test("severityFor: KR10 для quarter_3m → critical (override)", () => {
+  assertEquals(severityFor("KR10", "quarter_3m"), "critical");
+});
+
+Deno.test("severityFor: неизвестный id → improve", () => {
+  assertEquals(severityFor("XYZ"), "improve");
+});
+

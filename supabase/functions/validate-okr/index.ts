@@ -179,6 +179,7 @@ export const handler = async (req: Request) => {
       return await r.json();
     });
 
+    applyScoreRecompute(finalData, h);
     return json(finalData);
   } catch (e) {
     console.error("validate-okr error", e);

@@ -13,3 +13,13 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => {},
   }),
 });
+
+// jsdom polyfills required by Radix UI primitives (Select, Dropdown, etc.)
+if (typeof Element !== "undefined") {
+  const proto = Element.prototype as any;
+  if (!proto.hasPointerCapture) proto.hasPointerCapture = () => false;
+  if (!proto.releasePointerCapture) proto.releasePointerCapture = () => {};
+  if (!proto.scrollIntoView) proto.scrollIntoView = () => {};
+}
+
+

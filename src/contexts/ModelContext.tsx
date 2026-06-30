@@ -8,9 +8,9 @@ export interface AiModelEntry {
   hint: string;
 }
 
-const DEFAULT_MODEL = "gpt-4o";
+export const DEFAULT_MODEL = "gpt-4o";
 const STORAGE_KEY = "aimbot.aiModel";
-const FALLBACK_CATALOG: AiModelEntry[] = [
+export const FALLBACK_CATALOG: AiModelEntry[] = [
   { id: "gpt-4o", label: "GPT-4o", hint: "Стабильный режим (по умолчанию)" },
   { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Дешевле" },
 ];
@@ -28,6 +28,41 @@ const ModelContext = createContext<Ctx>({
   models: FALLBACK_CATALOG,
   loading: false,
 });
+
+export type InvokeFn = (name: string) => Promise<{ data: any; error: any }>;
+
+/**
+ * Pure fetcher: returns curated catalog from list-ai-models, or FALLBACK_CATALOG
+ * on any failure (network / non-200 / empty list). Never throws.
+ */
+export async function fetchModelCatalog(
+  invoke: InvokeFn,
+): Promise<{ models: AiModelEntry[]; degraded: boolean }> {
+  try {
+    const { data, error } = await invoke("list-ai-models");
+    if (error) throw error;
+    const next: AiModelEntry[] = Array.isArray(data?.models) && data.models.length
+      ? data.models
+      : FALLBACK_CATALOG;
+    return { models: next, degraded: Boolean(data?.degraded) || next === FALLBACK_CATALOG };
+  } catch (e) {
+    console.warn("list-ai-models failed, using fallback catalog", e);
+    return { models: FALLBACK_CATALOG, degraded: true };
+  }
+}
+
+/**
+ * Pure: if stored model is missing from catalog, fall back to DEFAULT_MODEL (or first available).
+ */
+export function resolveInitialModel(
+  stored: string,
+  catalog: AiModelEntry[],
+): { model: string; switched: boolean } {
+  if (catalog.some((m) => m.id === stored)) return { model: stored, switched: false };
+  const fallback =
+    catalog.find((m) => m.id === DEFAULT_MODEL)?.id ?? catalog[0]?.id ?? DEFAULT_MODEL;
+  return { model: fallback, switched: true };
+}
 
 export const ModelProvider = ({ children }: { children: ReactNode }) => {
   const [model, setModelState] = useState<string>(() => {
@@ -51,24 +86,15 @@ export const ModelProvider = ({ children }: { children: ReactNode }) => {
     }
     let cancelled = false;
     (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("list-ai-models");
-        if (cancelled) return;
-        if (error) throw error;
-        const next: AiModelEntry[] = Array.isArray(data?.models) && data.models.length ? data.models : FALLBACK_CATALOG;
-        setModels(next);
-        // Если сохранённая модель больше недоступна — сбросить на дефолт.
-        if (!next.some((m) => m.id === model)) {
-          const fallback = next.find((m) => m.id === DEFAULT_MODEL)?.id ?? next[0].id;
-          setModelState(fallback);
-          toast.info(`Ранее выбранная модель «${model}» больше недоступна. Переключено на «${fallback}».`);
-        }
-      } catch (e) {
-        console.warn("list-ai-models failed, using fallback catalog", e);
-        if (!cancelled) setModels(FALLBACK_CATALOG);
-      } finally {
-        if (!cancelled) setLoading(false);
+      const { models: next } = await fetchModelCatalog((name) => supabase.functions.invoke(name));
+      if (cancelled) return;
+      setModels(next);
+      const { model: resolved, switched } = resolveInitialModel(model, next);
+      if (switched) {
+        setModelState(resolved);
+        toast.info(`Ранее выбранная модель «${model}» больше недоступна. Переключено на «${resolved}».`);
       }
+      setLoading(false);
     })();
     return () => {
       cancelled = true;

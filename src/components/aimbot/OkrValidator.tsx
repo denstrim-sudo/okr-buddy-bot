@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { OkrHorizon, ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
-import { useAiModel } from "@/contexts/ModelContext";
+import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 
 const HORIZON_LABELS: Record<OkrHorizon, string> = {

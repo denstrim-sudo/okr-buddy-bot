@@ -29,6 +29,7 @@ const formatDate = (iso: string) => {
 
 export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
   const { items, remove, clear } = useSavedOkrs();
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   if (!items.length) return null;
 

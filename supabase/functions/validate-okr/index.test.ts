@@ -24,9 +24,19 @@ Deno.test("containsDigits: чистый текст → false", () => {
 
 // --- sanitizeRewrittenObjective: чистая логика, без сети ---
 
-const makeReport = (rewritten: string) => ({
+interface TestReport {
+  score: number;
+  status: "pass" | "warn" | "fail";
+  summary: string;
+  rules: unknown[];
+  rewritten_objective: string;
+  rewritten_key_results: string[];
+  rewritten_objective_warning?: boolean;
+}
+
+const makeReport = (rewritten: string): TestReport => ({
   score: 75,
-  status: "pass" as const,
+  status: "pass",
   summary: "ok",
   rules: [],
   rewritten_objective: rewritten,

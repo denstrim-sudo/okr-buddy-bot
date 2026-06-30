@@ -178,59 +178,86 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
  * One automatic retry on transient failures (rate limit, invalid JSON, network).
  * Returns Response in legacy shape (parsed JSON object) for backward compat with existing edge functions.
  */
-export async function callAITool(args: CallArgs): Promise<Response> {
+export interface AiMeta {
+  requested_model: string;
+  used_model: string;
+  fallback_reason?: string;
+}
+
+const buildMeta = (
+  requested: string | undefined,
+  used: string,
+  fallbackReason?: string,
+): AiMeta => ({
+  requested_model: requested || used,
+  used_model: used,
+  ...(fallbackReason ? { fallback_reason: fallbackReason } : {}),
+});
+
+async function runWithFallback(args: CallArgs): Promise<{ res: CallResult; meta: AiMeta }> {
+  const requested = args.model;
+  let usedModel = requested ?? DEFAULT_MODEL;
+  let fallbackReason: string | undefined;
+
   let res = await openaiToolCall(args);
   if (shouldFallbackToDefault(res, args.model)) {
     console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
-    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+    fallbackReason = res.errorCode;
+    usedModel = DEFAULT_MODEL;
+    res = await openaiToolCall(
+      { ...args, model: DEFAULT_MODEL },
+      `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
+    );
   }
   if (!res.ok && res.retryable) {
     await new Promise((r) => setTimeout(r, 800));
     const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
       ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
       : "";
-    res = await openaiToolCall(args, hint);
+    res = await openaiToolCall({ ...args, model: usedModel === DEFAULT_MODEL ? DEFAULT_MODEL : args.model }, hint);
     if (shouldFallbackToDefault(res, args.model)) {
       console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
-      res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
+      fallbackReason = res.errorCode;
+      usedModel = DEFAULT_MODEL;
+      res = await openaiToolCall(
+        { ...args, model: DEFAULT_MODEL },
+        `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
+      );
     }
   }
-  if (!res.ok) {
-    return errorJson(res.errorMessage ?? "AI error", res.status);
-  }
-  return json(res.data);
+
+  return { res, meta: buildMeta(requested, usedModel, fallbackReason) };
 }
 
 /**
- * Extended call for the central ai-assistant function: returns full envelope
- * (result + rawModelResponse + usage + structured error) in a single Response.
+ * Call OpenAI via tool-calling for guaranteed JSON output.
+ * Returns Response in legacy shape (parsed JSON object) plus a `_meta` field
+ * describing the actually-used model and any fallback reason.
+ */
+export async function callAITool(args: CallArgs): Promise<Response> {
+  const { res, meta } = await runWithFallback(args);
+  if (!res.ok) {
+    return json({ error: res.errorMessage ?? "AI error", _meta: meta }, res.status);
+  }
+  const payload = (res.data && typeof res.data === "object") ? res.data as Record<string, unknown> : {};
+  return json({ ...payload, _meta: meta });
+}
+
+/**
+ * Extended call for the central ai-assistant function.
  */
 export async function callAIToolExtended(args: CallArgs): Promise<Response> {
-  let res = await openaiToolCall(args);
-  if (shouldFallbackToDefault(res, args.model)) {
-    console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
-    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
-  }
-  if (!res.ok && res.retryable) {
-    await new Promise((r) => setTimeout(r, 800));
-    const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
-      ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
-      : "";
-    res = await openaiToolCall(args, hint);
-    if (shouldFallbackToDefault(res, args.model)) {
-      console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
-      res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`);
-    }
-  }
-
+  const { res, meta } = await runWithFallback(args);
   const envelope = {
     result: res.ok ? res.data : null,
     rawModelResponse: res.rawText ?? "",
     usage: res.usage ?? null,
     error: res.ok ? null : { code: res.errorCode, message: res.errorMessage, retryable: res.retryable ?? false },
+    _meta: meta,
   };
   return json(envelope, res.ok ? 200 : res.status);
 }
+
 
 export function handleCors(req: Request): Response | null {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

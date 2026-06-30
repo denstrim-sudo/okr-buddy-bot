@@ -237,10 +237,10 @@ async function runWithFallback(args: CallArgs): Promise<{ res: CallResult; meta:
 export async function callAITool(args: CallArgs): Promise<Response> {
   const { res, meta } = await runWithFallback(args);
   if (!res.ok) {
-    return json({ error: res.errorMessage ?? "AI error", _meta: meta }, res.status);
+    return json({ error: res.errorMessage ?? "AI error", _meta: meta, __model_used: meta.used_model }, res.status);
   }
   const payload = (res.data && typeof res.data === "object") ? res.data as Record<string, unknown> : {};
-  return json({ ...payload, _meta: meta });
+  return json({ ...payload, _meta: meta, __model_used: meta.used_model });
 }
 
 /**

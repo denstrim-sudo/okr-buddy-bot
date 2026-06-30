@@ -162,4 +162,43 @@ describe("OkrValidator (Module 2)", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
     expect(invokeMock.mock.calls[0][1].body.horizon).toBe("quarter_3m");
   });
+
+  it("рендерит бейдж с реально использованной моделью (report.model_used)", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: { ...validReport, model_used: "claude-haiku-4.5" },
+      error: null,
+    });
+    renderWithProviders(<OkrValidator draft={{ objective: "Test Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const badge = await screen.findByTestId("model-used-badge");
+    expect(badge).toHaveTextContent(/claude-haiku-4\.5/);
+  });
+
+  it("НЕ рендерит бейдж модели, если report.model_used отсутствует", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Test Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    expect(screen.queryByTestId("model-used-badge")).not.toBeInTheDocument();
+  });
+
+  it("рендерит warning-баннер при audit_unreliable=true", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: { ...validReport, audit_unreliable: true },
+      error: null,
+    });
+    renderWithProviders(<OkrValidator draft={{ objective: "Test Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const warn = await screen.findByTestId("audit-unreliable-warning");
+    expect(warn).toHaveTextContent(/ненадёжным/i);
+    expect(warn).toHaveTextContent(/GPT-4o/);
+  });
+
+  it("НЕ рендерит warning-баннер при audit_unreliable=false/undefined", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Test Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    expect(screen.queryByTestId("audit-unreliable-warning")).not.toBeInTheDocument();
+  });
 });

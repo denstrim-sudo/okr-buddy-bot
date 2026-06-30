@@ -112,6 +112,10 @@ export interface ValidationReport {
   rewritten_objective_warning?: boolean;
   /** Сервер подменил score, потому что ответ модели расходился с канонической формулой более чем на 10. */
   score_recomputed?: boolean;
+  /** Аудит признан ненадёжным: модель вернула пустой/всё-fail набор правил даже после retry на DEFAULT_MODEL. */
+  audit_unreliable?: boolean;
+  /** Модель, которая реально ответила (после возможного fallback на DEFAULT_MODEL). */
+  model_used?: string;
 }
 
 export interface ValidationKR {

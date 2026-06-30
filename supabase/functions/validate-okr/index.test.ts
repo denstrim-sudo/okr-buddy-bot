@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
@@ -206,4 +206,25 @@ Deno.test({
     assert(Array.isArray(data.rules) && data.rules.length >= 5);
     assertEquals(data.rewritten_key_results.length, 2);
   },
+});
+
+// --- isAuditSuspicious: чистая логика ---
+
+Deno.test("isAuditSuspicious: rules=[] → true", () => {
+  assertEquals(isAuditSuspicious({ rules: [] }), true);
+});
+Deno.test("isAuditSuspicious: rules=undefined → true", () => {
+  assertEquals(isAuditSuspicious({ rules: undefined }), true);
+});
+Deno.test("isAuditSuspicious: все правила pass=false → true", () => {
+  assertEquals(
+    isAuditSuspicious({ rules: [{ pass: false }, { pass: false }, { pass: false }] }),
+    true,
+  );
+});
+Deno.test("isAuditSuspicious: смешанный pass — норма → false", () => {
+  assertEquals(isAuditSuspicious({ rules: [{ pass: true }, { pass: false }] }), false);
+});
+Deno.test("isAuditSuspicious: data=null → true", () => {
+  assertEquals(isAuditSuspicious(null), true);
 });

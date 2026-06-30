@@ -89,6 +89,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       setReport(data as ValidationReport);
       toast.success(`Аудит готов · оценка ${(data as ValidationReport).score}/100`);
     } catch (e: any) {

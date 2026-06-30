@@ -442,7 +442,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               type="button"
               variant="outline"
               onClick={() => {
-                saveOkr(draft.objective, draftToGeneratedPlan(draft));
+                saveOkr(draft.objective, draftToGeneratedPlan(draft), parentLink ?? undefined);
                 toast.success("Черновик OKR сохранён");
               }}
               className="sm:w-auto"

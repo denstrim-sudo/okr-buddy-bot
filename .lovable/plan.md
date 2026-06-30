@@ -1,52 +1,76 @@
-# План: добавить горизонт «Квартал» (только в Модуль 1)
+# План: устранение конфликта O2↔O3 + guard цифр в rewritten_objective (TDD)
 
-## Что меняем
+## Проблема
+Правило O2 требовало «ограниченности по времени» Objective → модель вписывала дату/число → автоматически проваливала O3 (без цифр в Objective) → потолок score≤60. Горизонт уже передаётся отдельным полем `horizon`, поэтому требование цифр в тексте O2 избыточно.
 
-### 1. Тип `OkrHorizon` (`src/types/okr.ts`)
-Расширить: `"strategic_3y" | "block_12m" | "quarter_3m"`. Это центральная точка, от которой зависят и UI, и контракты Edge Functions, и тесты. Поле `HorizonFit.horizon` и `HorizonFitVerdict` остаются без изменений (`fits / too_short / too_long / mixed` корректно работают и для квартала).
+## Шаги (строго TDD: RED → GREEN → REFACTOR)
 
-### 2. UI Модуля 1 (`src/components/aimbot/OkrGenerator.tsx`)
-- Добавить третью кнопку выбора горизонта: `Quarter · 3 мес` рядом с `Strategic · 3 года` и `Block · 12 мес`. Дефолт остаётся `block_12m` — не трогаем.
-- В `horizonLabel`, в подписи drafted-плана и в баннере «Часть формулировок не укладывается в горизонт …» добавить ветку для `quarter_3m` ("3 мес").
-- `verdictLabel` тоже расширить, чтобы тексты `too_long / too_short` читались под квартал ("слишком масштабно для 3 мес" и т.п.).
-- Никакие другие модули (валидатор, студия решений) не трогаем — там горизонт не используется.
+### ШАГ 1 (RED) — `supabase/functions/_shared/okr_rules.test.ts`
+Создать/дополнить тесты:
+1. `BASE_RULES` НЕ содержит связки «ограничен … времени», но содержит фразу `"соответствует выбранному горизонту"`.
+2. `BASE_RULES` явно говорит, что цифра/дата в Objective не требуется (ассерт на ключевую фразу из новой редакции).
+3. И `OKR_RULES_BLOCK`, и `OKR_RULES_BLOCK_QUARTER` содержат обновлённую формулировку O2 (регрессия — квартальный блок не унаследовал старый текст).
 
-### 3. Edge Function `interpret-okr-input`
-- В описание системы и в enum `detected_horizon` добавить `"quarter_3m"`.
-- В нормализатор `horizonHint` принять три значения вместо двух (дефолт остаётся `block_12m`).
-- В подсказке для модели описать критерий выбора: явные слова «квартал / Q1..Q4 / 3 месяца / до конца квартала» → `quarter_3m`; «год / 2026 / по итогам года» → `block_12m`; «3 года / 2028 / стратегия» → `strategic_3y`.
+### ШАГ 2 (GREEN) — `supabase/functions/_shared/okr_rules.ts`
+Заменить строку O2 на:
+```
+- O2 [important]  Objective амбициозный, запоминающийся, по масштабу и смыслу соответствует выбранному горизонту (НЕ требует явного срока/даты/номера периода в тексте — горизонт уже зафиксирован отдельным полем "horizon").
+```
+Тесты ШАГа 1 → зелёные.
 
-### 4. Edge Function `draft-okr`
-- Расширить enum `horizon` и enum внутри `horizon_fit.horizon` / `horizon_fit.key_results[].* ` (там, где enum упоминает горизонт) до трёх значений.
-- Дополнить guidance:
-  - `quarter_3m`: фокус на одной фокус-теме квартала; KR — конкретные числовые исходы, достижимые за 3 месяца; запрещены годовые/многолетние формулировки («к 2028», «по итогам года»); baseline/target ставятся на 90 дней.
-- В `userPrompt` нормализатор `h` теперь принимает три значения.
+### ШАГ 3 (RED) — `supabase/functions/validate-okr/index.test.ts`
+Юнит-тест на `containsDigits` из нового `supabase/functions/_shared/textGuards.ts`:
+- `containsDigits("Удвоить выручку к 2026 году") === true`
+- `containsDigits("Стать предсказуемой опорой роста для команды") === false`
 
-### 5. Тесты
-- `supabase/functions/interpret-okr-input/index.test.ts`: разрешить `quarter_3m` в `assert([...].includes(data.detected_horizon))`, добавить кейс «Хочу за квартал поднять активацию» → ожидаем `quarter_3m`.
-- `supabase/functions/draft-okr/index.test.ts`: добавить smoke-кейс с `horizon: "quarter_3m"`, проверить `data.horizon_fit.horizon === "quarter_3m"`.
-- `src/components/aimbot/__tests__/OkrGenerator.test.tsx`: убедиться, что отрисовываются три кнопки горизонта; существующие проверки `block_12m` не трогаем.
+### ШАГ 4 (GREEN) — `supabase/functions/_shared/textGuards.ts`
+```ts
+export function containsDigits(text: string): boolean {
+  return /\d/.test(text);
+}
+```
 
-### 6. Модуль 2 (аудит) — не трогаем код, а предлагаем уточнения правил
-Ниже — предложение, которое мы либо реализуем отдельной итерацией, либо отложим. В рамках этой задачи **код Модуля 2 не меняем**.
+### ШАГ 5 (RED) — интеграционные тесты validate-okr
+Вынести логику в чистую функцию `sanitizeRewrittenObjective(callAITool, args, firstResult)` (тестируемую без сети, с моком `callAITool`):
+1. Если `rewritten_objective` содержит цифру → выполняется ровно один повторный вызов с явной инструкцией убрать цифры.
+2. Если после повтора цифра осталась → возвращается ответ с `rewritten_objective_warning: true`, без дальнейших ретраев.
+3. Если изначально цифр нет → `callAITool` вызывается ровно 1 раз (без лишнего вызова).
 
-Предлагаемые квартальные уточнения для `OKR_RULES_BLOCK` (когда `horizon === "quarter_3m"`):
-- **O2-Q**: Objective явно умещается в один квартал (≤90 дней); запрещены формулировки «в течение года», «к 2028», «по итогам года».
-- **KR2-Q**: target должен быть достижим за 3 месяца от baseline; если дельта явно требует >1 квартала (например, ×5 от текущего за квартал без обоснования) — important fail с подсказкой «разнесите на несколько кварталов или снизьте target».
-- **KR4-Q**: время-граница KR не выходит за конец текущего квартала; формулировки вида «к Q4 следующего года» недопустимы.
-- **KR10-Q (усиленное)**: для квартального OKR минимум один LEADING KR обязателен (severity повышается с important до critical), потому что за 3 месяца LAG-метрика часто не успевает сдвинуться.
-- **Q-Focus (новое правило, important)**: квартальный OKR содержит ровно 1 Objective и 2–4 KR; больше — расфокусировка квартала.
-- **Q-Theme (новое правило, improve)**: Objective связан с одной фокус-темой квартала, а не с разрозненным набором инициатив.
+В `src/types/okr.ts` добавить опциональное:
+```ts
+rewritten_objective_warning?: boolean;
+```
 
-Эти правки требуют новой константы `OKR_RULES_BLOCK_QUARTER` и ветки выбора набора правил в `validate-okr` и `draft-okr` по `horizon`. Сделаем отдельным шагом — после подтверждения формулировок.
+### ШАГ 6 (GREEN) — `supabase/functions/validate-okr/index.ts`
+После получения результата:
+- Парсим `data.rewritten_objective`.
+- Если `containsDigits` → один повторный `callAITool` с дополнением к user prompt: «Твой предыдущий rewritten_objective содержал цифры, что нарушает правило O3. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.»
+- Если после повтора всё ещё цифра — `rewritten_objective_warning = true`, отдать как есть (без бесконечных ретраев).
 
-## Что НЕ трогаем
-- Никакой код в `validate-okr`, `validate-solution`, `generate-solutions`, `SolutionStudio`, `OkrValidator`, `RuleList`.
-- Дефолтный горизонт остаётся `block_12m`.
-- Существующие правила `OKR_RULES_BLOCK` остаются без изменений.
+### ШАГ 7 (REFACTOR + UI)
+- `src/components/aimbot/OkrValidator.tsx`: рядом с блоком «Переписанная формулировка» при `report.rewritten_objective_warning === true` показать пометку:
+  `⚠ Переписанная версия всё ещё может содержать цифру — проверьте вручную.`
+- `src/components/aimbot/__tests__/OkrValidator.test.tsx`: тест на рендер этой пометки.
 
-## Проверка после реализации
-- `bunx vitest run` — фронтовые тесты зелёные.
-- `supabase--curl_edge_functions /interpret-okr-input` с `horizon: "quarter_3m"` → 200, `detected_horizon` приходит.
-- `supabase--curl_edge_functions /draft-okr` с `horizon: "quarter_3m"` → 200, `horizon_fit.horizon === "quarter_3m"`.
-- В UI выбор «Quarter · 3 мес» проходит сквозь Interpret → Clarify → Draft без ошибок.
+## Технические детали
+
+**Файлы, которые меняются:**
+- `supabase/functions/_shared/okr_rules.ts` — текст O2.
+- `supabase/functions/_shared/okr_rules.test.ts` — новый/дополненный.
+- `supabase/functions/_shared/textGuards.ts` — новый.
+- `supabase/functions/validate-okr/index.ts` — guard-логика после `callAITool`, экспорт `sanitizeRewrittenObjective` для тестируемости.
+- `supabase/functions/validate-okr/index.test.ts` — тесты guard'а с моком.
+- `src/types/okr.ts` — опциональное поле `rewritten_objective_warning?: boolean`.
+- `src/components/aimbot/OkrValidator.tsx` — UI-пометка.
+- `src/components/aimbot/__tests__/OkrValidator.test.tsx` — тест на пометку.
+
+**Контракты:**
+- `containsDigits(text: string): boolean` — `/\d/.test(text)`.
+- `sanitizeRewrittenObjective(...)` — максимум 1 корректирующий ретрай, помечает `rewritten_objective_warning` если не удалось, никаких циклов.
+- Поле `rewritten_objective_warning` опциональное — обратная совместимость сохраняется.
+
+## Acceptance
+- [x] Новая редакция O2 покрыта снапшот-тестом, конфликт с O3 исчез.
+- [x] При цифрах в `rewritten_objective` — ровно 1 корректирующий повтор.
+- [x] При неуспехе — UI показывает предупреждение.
+- [x] При чистом ответе — никаких лишних AI-вызовов.

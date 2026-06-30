@@ -90,4 +90,24 @@ describe("OkrValidator (Module 2)", () => {
     const sendBtn = await screen.findByRole("button", { name: /Передать в Решения/i });
     expect(sendBtn).toBeDisabled();
   });
+
+  it("renders rewritten_objective_warning notice when flag is true", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        ...validReport,
+        rewritten_objective: "Удвоить выручку к 2026 году",
+        rewritten_key_results: ["", ""],
+        rewritten_objective_warning: true,
+      },
+      error: null,
+    });
+    renderWithProviders(
+      <OkrValidator
+        draft={{ objective: "Старый objective", key_results: ["KR1", "KR2"] }}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const warn = await screen.findByTestId("rewritten-objective-warning");
+    expect(warn).toHaveTextContent(/всё ещё может содержать цифру/i);
+  });
 });

@@ -1,5 +1,7 @@
-import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
+import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
 import { getRulesBlock } from "../_shared/okr_rules.ts";
+import { buildExtraBlock } from "../_shared/ai.ts";
+import { containsDigits } from "../_shared/textGuards.ts";
 
 const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
 
@@ -11,13 +13,13 @@ ${getRulesBlock(horizon)}
 
 For EACH rule you MUST return:
 - "severity": уровень важности замечания
-  - "critical" — без исправления OKR методологически некорректен (Objective с цифрами, KR без метрики, KR-задача вместо outcome, нет baseline/target там, где нужны)
-  - "important" — снижает качество и управляемость, но OKR работоспособен (размытая формулировка, отсутствует временной горизонт)
+  - "critical" — без исправления OKR методологически некорректен
+  - "important" — снижает качество и управляемость, но OKR работоспособен
   - "improve" — точечное усиление: стилистика, уточнение сегмента, более конкретная метрика
   - Для pass=true ставь "improve" (или опускай).
-- "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно — как это влияет на измеримость, фокус, outcome-ориентированность или управленческий review. БЕЗ методологической лекции. Для pass=true можно оставить пустым.
+- "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно. Для pass=true можно оставить пустым.
 
-Пример: { id:"O3", label:"Objective без цифр", pass:false, severity:"critical", hint:"Уберите проценты из Objective", why:"Цифры в Objective подменяют качественную цель и сдвигают фокус на метрику." }
+ВАЖНО про O2 + O3: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило O3. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
 
 Return STRICT JSON only via the provided tool.
 
@@ -34,12 +36,12 @@ const PARAMETERS = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string", description: "Rule code, e.g. O1, KR2" },
-          label: { type: "string", description: "Short rule label in Russian." },
+          id: { type: "string" },
+          label: { type: "string" },
           pass: { type: "boolean" },
-          hint: { type: "string", description: "Short suggestion in Russian if failing, else empty." },
+          hint: { type: "string" },
           severity: { type: "string", enum: ["critical", "important", "improve"] },
-          why: { type: "string", description: "≤140 chars Russian explanation of why this matters." },
+          why: { type: "string" },
         },
         required: ["id", "label", "pass", "hint", "severity", "why"],
         additionalProperties: false,
@@ -51,6 +53,35 @@ const PARAMETERS = {
   required: ["score", "status", "summary", "rules", "rewritten_objective", "rewritten_key_results"],
   additionalProperties: false,
 };
+
+const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило O3. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
+
+/**
+ * Гарантирует, что rewritten_objective не содержит цифр.
+ * - если изначально чист → возвращает initial как есть (БЕЗ повторного вызова).
+ * - если содержит цифру → делает РОВНО один redo() и возвращает его результат.
+ * - если после redo цифра всё ещё есть → возвращает второй результат с пометкой
+ *   rewritten_objective_warning: true (без бесконечных ретраев).
+ */
+export async function sanitizeRewrittenObjective<T extends { rewritten_objective?: string; rewritten_objective_warning?: boolean }>(
+  initial: T,
+  redo: () => Promise<T>,
+): Promise<T> {
+  const firstObj = initial?.rewritten_objective ?? "";
+  if (!containsDigits(firstObj)) return initial;
+  let second: T;
+  try {
+    second = await redo();
+  } catch (e) {
+    console.error("sanitize redo failed", e);
+    return { ...initial, rewritten_objective_warning: true };
+  }
+  const secondObj = second?.rewritten_objective ?? "";
+  if (containsDigits(secondObj)) {
+    return { ...second, rewritten_objective_warning: true };
+  }
+  return second;
+}
 
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
@@ -66,8 +97,6 @@ export const handler = async (req: Request) => {
     }
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
 
-    // Если переданы расширенные KR (с baseline/target/metric/kr_type) — используем их.
-    // Иначе — fallback к простому списку строк.
     const enriched = Array.isArray(key_results_full) && key_results_full.length
       ? key_results_full
       : (key_results as string[]).map((t) => ({ text: String(t) }));
@@ -76,15 +105,11 @@ export const handler = async (req: Request) => {
       .map((k: any, i: number) => {
         const text = String(k?.text ?? "").trim();
         if (text.length < 4) return "";
-        const baseline = k?.baseline ? String(k.baseline).trim() : "";
-        const target = k?.target ? String(k.target).trim() : "";
-        const metric = k?.metric ? String(k.metric).trim() : "";
-        const kr_type = k?.kr_type ? String(k.kr_type).trim() : "";
         const meta: string[] = [];
-        if (baseline) meta.push(`baseline: ${baseline}`);
-        if (target) meta.push(`target: ${target}`);
-        if (metric) meta.push(`metric: ${metric}`);
-        if (kr_type) meta.push(`type: ${kr_type}`);
+        if (k?.baseline) meta.push(`baseline: ${String(k.baseline).trim()}`);
+        if (k?.target) meta.push(`target: ${String(k.target).trim()}`);
+        if (k?.metric) meta.push(`metric: ${String(k.metric).trim()}`);
+        if (k?.kr_type) meta.push(`type: ${String(k.kr_type).trim()}`);
         return `KR${i + 1}: ${text}${meta.length ? `\n  (${meta.join(" · ")})` : ""}`;
       })
       .filter((s) => s.length > 0)
@@ -94,16 +119,40 @@ export const handler = async (req: Request) => {
       extra_context,
       "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
     );
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть — обязательно учитывай их при проверке правил KR2 «from X to Y» и KR1 «измеримость»):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, an overall score (0-100), a short summary, and rewritten Objective + KRs aligned with Doerr methodology. В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит O3). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
-    return await callAITool({
-      systemPrompt: buildSystemPrompt(h),
+    const systemPrompt = buildSystemPrompt(h);
+    const modelArg = typeof model === "string" && model ? model : undefined;
+
+    const first = await callAITool({
+      systemPrompt,
       userPrompt,
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",
       parameters: PARAMETERS,
-      model: typeof model === "string" && model ? model : undefined,
+      model: modelArg,
     });
+    if (first.status !== 200) return first;
+    const firstData = await first.json();
+
+    const finalData = await sanitizeRewrittenObjective(firstData, async () => {
+      const retryPrompt = `${userPrompt}\n\nВАЖНО: ${SANITIZE_HINT}`;
+      const r = await callAITool({
+        systemPrompt,
+        userPrompt: retryPrompt,
+        toolName: "validate_okr",
+        toolDescription: "Audit an OKR and return rule-by-rule findings.",
+        parameters: PARAMETERS,
+        model: modelArg,
+      });
+      if (r.status !== 200) {
+        // redo не удался — оставляем первый ответ как есть; sanitize пометит warning.
+        return firstData;
+      }
+      return await r.json();
+    });
+
+    return json(finalData);
   } catch (e) {
     console.error("validate-okr error", e);
     return errorJson(e instanceof Error ? e.message : "Unknown error", 500);

@@ -1,5 +1,5 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { recomputeScore, type ScoringRule } from "./scoring.ts";
+import { recomputeScore, scoreDiscrepancy, severityFor, type ScoringRule } from "./scoring.ts";
 
 Deno.test("recomputeScore: 100 при всех правилах pass=true", () => {
   const rules: ScoringRule[] = [

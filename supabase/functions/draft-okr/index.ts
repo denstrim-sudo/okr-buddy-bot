@@ -60,7 +60,7 @@ const PARAMETERS = {
     mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     objective: { type: "string" },
     key_results: {
-      type: "array", minItems: 1, maxItems: 3,
+      type: "array", minItems: 1, maxItems: 4,
       items: {
         type: "object",
         properties: {
@@ -120,6 +120,19 @@ const PARAMETERS = {
   additionalProperties: false,
 };
 
+export function capKeyResults<T extends { key_results?: any; horizon_fit?: any }>(data: T, horizon: string): T {
+  const maxKr = horizon === "quarter_3m" ? 4 : 3;
+  if (data && Array.isArray((data as any).key_results) && (data as any).key_results.length > maxKr) {
+    (data as any).key_results = (data as any).key_results.slice(0, maxKr);
+    if ((data as any).horizon_fit && Array.isArray((data as any).horizon_fit.key_results)) {
+      (data as any).horizon_fit.key_results = (data as any).horizon_fit.key_results.filter(
+        (k: any) => k.index < maxKr,
+      );
+    }
+  }
+  return data;
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -165,11 +178,8 @@ export const handler = async (req: Request) => {
         if (data.horizon_fit && typeof data.horizon_fit === "object") {
           data.horizon_fit.horizon = h;
         }
-        if (Array.isArray(data.key_results) && data.key_results.length > 3) {
-          data.key_results = data.key_results.slice(0, 3);
-          if (data.horizon_fit && Array.isArray(data.horizon_fit.key_results)) {
-            data.horizon_fit.key_results = data.horizon_fit.key_results.filter((k: any) => k.index < 3);
-          }
+        if (Array.isArray(data.key_results)) {
+          capKeyResults(data, h);
         }
         return json(data);
       }

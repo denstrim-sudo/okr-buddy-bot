@@ -1,7 +1,39 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler } from "./index.ts";
+import { handler, capKeyResults } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
+
+Deno.test("capKeyResults: quarter_3m НЕ обрезает 4 KR", () => {
+  const data = {
+    key_results: [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }],
+    horizon_fit: { key_results: [{ index: 0 }, { index: 1 }, { index: 2 }, { index: 3 }] },
+  };
+  const out = capKeyResults(data, "quarter_3m");
+  assertEquals(out.key_results.length, 4);
+  assertEquals(out.horizon_fit.key_results.length, 4);
+});
+
+Deno.test("capKeyResults: block_12m обрезает 4 KR до 3", () => {
+  const data = {
+    key_results: [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }],
+    horizon_fit: { key_results: [{ index: 0 }, { index: 1 }, { index: 2 }, { index: 3 }] },
+  };
+  const out = capKeyResults(data, "block_12m");
+  assertEquals(out.key_results.length, 3);
+  assertEquals(out.horizon_fit.key_results.length, 3);
+});
+
+Deno.test("capKeyResults: strategic_3y обрезает 4 KR до 3", () => {
+  const data = { key_results: [1, 2, 3, 4] as any };
+  const out = capKeyResults(data, "strategic_3y");
+  assertEquals(out.key_results.length, 3);
+});
+
+Deno.test("capKeyResults: не трогает, если KR <= лимита", () => {
+  const data = { key_results: [{ text: "a" }, { text: "b" }] };
+  assertEquals(capKeyResults(data, "block_12m").key_results.length, 2);
+  assertEquals(capKeyResults(data, "quarter_3m").key_results.length, 2);
+});
 
 Deno.test("draft-okr: rejects empty raw_input", async () => {
   const { status } = await callHandler(handler, { raw_input: "", horizon: "block_12m" });

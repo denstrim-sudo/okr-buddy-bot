@@ -3,7 +3,7 @@ import { getRulesBlock } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
-const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
 
 HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR10→critical и доп. правилами Q-Focus, Q-Theme, Q-Reach)." : ""}
 

@@ -118,4 +118,48 @@ describe("OkrValidator (Module 2)", () => {
     await screen.findByText(/Оценка 85\/100/);
     expect(screen.queryByTestId("rewritten-objective-warning")).not.toBeInTheDocument();
   });
+
+  it("рендерит 3 кнопки выбора горизонта, дефолт block_12m активен", () => {
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест Objective", key_results: ["KR1"] }} />);
+    const strategic = screen.getByRole("button", { name: /Стратегия · 3 года/ });
+    const block = screen.getByRole("button", { name: /Блок · 12 мес/ });
+    const quarter = screen.getByRole("button", { name: /Квартал · 3 мес/ });
+    expect(strategic).toBeInTheDocument();
+    expect(quarter).toBeInTheDocument();
+    expect(block.className).toMatch(/border-primary/);
+    expect(strategic.className).not.toMatch(/border-primary/);
+    expect(quarter.className).not.toMatch(/border-primary/);
+  });
+
+  it("клик на 'Квартал · 3 мес' переключает активную кнопку и показывает пояснение", async () => {
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест Objective", key_results: ["KR1"] }} />);
+    const quarter = screen.getByRole("button", { name: /Квартал · 3 мес/ });
+    await userEvent.click(quarter);
+    expect(quarter.className).toMatch(/border-primary/);
+    expect(screen.getByText(/квартальный набор правил/i)).toBeInTheDocument();
+    expect(screen.getByText(/Q-Focus/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-Theme/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-Reach/)).toBeInTheDocument();
+  });
+
+  it("draft с horizon='quarter_3m' автоматически активирует квартальную кнопку", () => {
+    renderWithProviders(
+      <OkrValidator
+        draft={{ objective: "Тест Objective", key_results: ["KR1"], horizon: "quarter_3m" }}
+      />,
+    );
+    const quarter = screen.getByRole("button", { name: /Квартал · 3 мес/ });
+    const block = screen.getByRole("button", { name: /Блок · 12 мес/ });
+    expect(quarter.className).toMatch(/border-primary/);
+    expect(block.className).not.toMatch(/border-primary/);
+  });
+
+  it("передаёт выбранный horizon в payload validate-okr при запуске аудита", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Квартал · 3 мес/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.horizon).toBe("quarter_3m");
+  });
 });

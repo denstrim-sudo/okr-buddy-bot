@@ -104,6 +104,9 @@ export interface ValidationReport {
   rules: ValidationRule[];
   rewritten_objective: string;
   rewritten_key_results: string[];
+  /** True, если после одного корректирующего повтора rewritten_objective всё ещё содержит цифру.
+   *  UI должен показать предупреждение, не блокируя пользователя. */
+  rewritten_objective_warning?: boolean;
 }
 
 export interface ValidationKR {

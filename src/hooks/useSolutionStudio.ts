@@ -186,6 +186,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       const list: GeneratedSolution[] = (data as any).solutions ?? [];
       patchSlice({ solutions: list });
       toast.success(`Сгенерировано ${list.length} решений`);

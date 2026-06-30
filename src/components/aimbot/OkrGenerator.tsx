@@ -10,6 +10,7 @@ import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrD
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
+import { ParentKrPicker } from "@/components/aimbot/ParentKrPicker";
 
 interface Props {
   onGenerated: (plan: GeneratedPlan, objective: string, horizon: OkrHorizon) => void;

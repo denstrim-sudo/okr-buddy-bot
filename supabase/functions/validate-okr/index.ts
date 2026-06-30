@@ -84,6 +84,32 @@ export async function sanitizeRewrittenObjective<T extends { rewritten_objective
   return second;
 }
 
+/**
+ * Серверный пересчёт score: если ответ модели расходится с канонической формулой
+ * больше чем на 10 пунктов — подменяем data.score и ставим флаг score_recomputed.
+ * Severity берётся из правила, при отсутствии — из severityFor(rule.id, horizon).
+ */
+export function applyScoreRecompute<T extends { score?: number; rules?: any[]; score_recomputed?: boolean }>(
+  data: T,
+  horizon?: string,
+): T {
+  if (!data || !Array.isArray(data.rules) || data.rules.length === 0) return data;
+  const normalized: ScoringRule[] = data.rules.map((r: any) => ({
+    id: typeof r?.id === "string" ? r.id : undefined,
+    pass: Boolean(r?.pass),
+    severity: r?.severity === "critical" || r?.severity === "important" || r?.severity === "improve"
+      ? r.severity
+      : (typeof r?.id === "string" ? severityFor(r.id, horizon) : "improve"),
+  }));
+  const recomputed = recomputeScore(normalized);
+  const modelScore = typeof data.score === "number" ? data.score : 0;
+  if (scoreDiscrepancy(modelScore, recomputed)) {
+    data.score = recomputed;
+    data.score_recomputed = true;
+  }
+  return data;
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;

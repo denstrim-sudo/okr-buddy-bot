@@ -110,4 +110,12 @@ describe("OkrValidator (Module 2)", () => {
     const warn = await screen.findByTestId("rewritten-objective-warning");
     expect(warn).toHaveTextContent(/всё ещё может содержать цифру/i);
   });
+
+  it("does NOT render warning notice when flag is false/undefined", async () => {
+    invokeMock.mockResolvedValueOnce({ data: { ...validReport, rewritten_objective_warning: false }, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Test Objective", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    expect(screen.queryByTestId("rewritten-objective-warning")).not.toBeInTheDocument();
+  });
 });

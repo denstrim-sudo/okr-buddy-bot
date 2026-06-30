@@ -57,8 +57,8 @@ describe("OkrTree", () => {
     ];
     render(<OkrTree items={items} />);
     expect(screen.getByText("СкрытоеДитя")).toBeInTheDocument();
-    const collapseBtn = screen.getByRole("button", { name: "Свернуть" });
-    await user.click(collapseBtn);
+    const collapseBtns = screen.getAllByRole("button", { name: "Свернуть" });
+    await user.click(collapseBtns[0]);
     expect(screen.queryByText("СкрытоеДитя")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Развернуть" }));
     expect(screen.getByText("СкрытоеДитя")).toBeInTheDocument();

@@ -10,6 +10,7 @@ import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrD
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel } from "@/contexts/ModelContext";
+import { ParentKrPicker } from "@/components/aimbot/ParentKrPicker";
 
 interface Props {
   onGenerated: (plan: GeneratedPlan, objective: string, horizon: OkrHorizon) => void;
@@ -33,15 +34,32 @@ const draftToGeneratedPlan = (d: OkrDraft): GeneratedPlan => ({
 
 export const OkrGenerator = ({ onGenerated }: Props) => {
   const [phase, setPhase] = useState<Phase>("input");
-  const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
+  const [horizon, setHorizonState] = useState<OkrHorizon>("block_12m");
   const [rawInput, setRawInput] = useState("");
   const [interpretation, setInterpretation] = useState<OkrInputInterpretation | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [draft, setDraft] = useState<OkrDraft | null>(null);
+  const [parentLink, setParentLink] = useState<{ parentOkrId: string; parentKrIndex: number } | null>(null);
 
   const { buildContext } = useDocs();
-  const { save: saveOkr } = useSavedOkrs();
+  const { items: savedItems, save: saveOkr } = useSavedOkrs();
   const { model } = useAiModel();
+
+  const setHorizon = (h: OkrHorizon) => {
+    setHorizonState(h);
+    // Сбрасываем выбранного родителя при смене горизонта — eligible-список меняется,
+    // прошлый parentKrIndex может указывать на родителя неправильного уровня.
+    setParentLink(null);
+  };
+
+  const buildParentKrContext = (): string | undefined => {
+    if (!parentLink) return undefined;
+    const parent = savedItems.find((i) => i.id === parentLink.parentOkrId);
+    if (!parent) return undefined;
+    const kr = parent.plan.key_results?.[parentLink.parentKrIndex];
+    if (!kr) return undefined;
+    return `${parent.objective} → KR: ${kr.text}`;
+  };
 
   const loading = phase === "interpreting" || phase === "drafting";
 
@@ -96,6 +114,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     setPhase("drafting");
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
+      const parent_kr_context = buildParentKrContext();
       const { data, error } = await supabase.functions.invoke("draft-okr", {
         body: {
           raw_input: rawInput,
@@ -107,6 +126,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           model,
           focus_horizon_fit: opts?.focus_horizon_fit ?? false,
           prior_horizon_fit: opts?.prior_horizon_fit ?? undefined,
+          ...(parent_kr_context ? { parent_kr_context } : {}),
         },
       });
       if (error) throw error;
@@ -202,6 +222,14 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               ))}
             </div>
           </div>
+
+          <ParentKrPicker
+            items={savedItems}
+            horizon={horizon}
+            value={parentLink}
+            onChange={setParentLink}
+          />
+
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -414,7 +442,11 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               type="button"
               variant="outline"
               onClick={() => {
-                saveOkr(draft.objective, draftToGeneratedPlan(draft));
+                if (parentLink) {
+                  saveOkr(draft.objective, draftToGeneratedPlan(draft), parentLink);
+                } else {
+                  saveOkr(draft.objective, draftToGeneratedPlan(draft));
+                }
                 toast.success("Черновик OKR сохранён");
               }}
               className="sm:w-auto"

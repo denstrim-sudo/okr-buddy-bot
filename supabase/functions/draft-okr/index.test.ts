@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, capKeyResults, applyScoreHintRecompute } from "./index.ts";
+import { handler, capKeyResults, applyScoreHintRecompute, buildUserPrompt } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 
 Deno.test("capKeyResults: quarter_3m НЕ обрезает 4 KR", () => {
@@ -74,6 +74,23 @@ Deno.test("applyScoreHintRecompute: нет self_audit → no-op", () => {
   applyScoreHintRecompute(data, "block_12m");
   assertEquals(data.score_hint, 42);
   assertEquals(data.score_hint_recomputed, undefined);
+});
+
+Deno.test("buildUserPrompt: с parent_kr_context включает блок PARENT KEY RESULT и сам текст", () => {
+  const out = buildUserPrompt({
+    raw_input: "raw", horizon: "quarter_3m", mode: "from_scratch",
+    parent_kr_context: "Block OKR → KR: Активация с 30% до 50%",
+  });
+  assert(out.includes("PARENT KEY RESULT"));
+  assert(out.includes("должен явно продвигать именно этот KR"));
+  assert(out.includes("Активация с 30% до 50%"));
+});
+
+Deno.test("buildUserPrompt: без parent_kr_context НЕ содержит блок", () => {
+  const out = buildUserPrompt({
+    raw_input: "raw", horizon: "block_12m", mode: "from_scratch",
+  });
+  assert(!out.includes("PARENT KEY RESULT"));
 });
 
 

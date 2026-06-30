@@ -164,6 +164,36 @@ export function applyScoreHintRecompute<T extends {
   return data;
 }
 
+export interface BuildUserPromptParams {
+  raw_input: string;
+  horizon: string;
+  mode: string;
+  interpretation?: unknown;
+  clarifying_answers?: string[];
+  focus_horizon_fit?: boolean;
+  prior_horizon_fit?: unknown;
+  parent_kr_context?: string;
+  extra_block?: string;
+}
+
+export function buildUserPrompt(p: BuildUserPromptParams): string {
+  const interpBlock = p.interpretation
+    ? `\n\nINTERPRETATION CONTEXT:\n${JSON.stringify(p.interpretation, null, 2).slice(0, 6000)}`
+    : "";
+  const answersBlock = Array.isArray(p.clarifying_answers) && p.clarifying_answers.length
+    ? `\n\nCLARIFYING ANSWERS FROM USER (in order):\n${p.clarifying_answers.map((a, i) => `Q${i + 1}: ${String(a).trim() || "(skipped)"}`).join("\n")}`
+    : "";
+  const focusBlock = p.focus_horizon_fit
+    ? `\n\nFOCUS_HORIZON_FIT: true — переформулируй KR так, чтобы они строго соответствовали горизонту ${p.horizon}.${p.prior_horizon_fit ? `\nPRIOR_HORIZON_FIT (что было не так в прошлой попытке):\n${JSON.stringify(p.prior_horizon_fit, null, 2).slice(0, 4000)}` : ""}`
+    : "";
+  const parentKrBlock = p.parent_kr_context && p.parent_kr_context.trim()
+    ? `\n\nPARENT KEY RESULT (этот Objective должен явно продвигать именно этот KR родителя, а не тему вообще):\n${p.parent_kr_context.trim()}`
+    : "";
+  const extraBlock = p.extra_block ?? "";
+  return `HORIZON: ${p.horizon}\nMODE: ${p.mode}\n\nIMPORTANT: response field "horizon" MUST equal "${p.horizon}" exactly. Same for horizon_fit.horizon. Do not change it to anything else.\n\nORIGINAL USER INPUT:\n${p.raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${parentKrBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
+}
+
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;

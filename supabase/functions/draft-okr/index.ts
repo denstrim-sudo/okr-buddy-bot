@@ -134,6 +134,35 @@ export function capKeyResults<T extends { key_results?: any; horizon_fit?: any }
   return data;
 }
 
+/**
+ * Серверный пересчёт score_hint из self_audit.{critical_fails,important_fails}.
+ * Собираем псевдо-rules[] по known ids для горизонта (KR10 для quarter_3m → critical),
+ * считаем recomputeScore и подменяем score_hint при расхождении >10.
+ */
+export function applyScoreHintRecompute<T extends {
+  score_hint?: number;
+  self_audit?: { critical_fails?: string[]; important_fails?: string[] };
+  score_hint_recomputed?: boolean;
+}>(data: T, horizon?: string): T {
+  if (!data || !data.self_audit) return data;
+  const critical = Array.isArray(data.self_audit.critical_fails) ? data.self_audit.critical_fails : [];
+  const important = Array.isArray(data.self_audit.important_fails) ? data.self_audit.important_fails : [];
+  const failed = new Set<string>([...critical, ...important]);
+  const ids = knownRuleIdsFor(horizon);
+  const pseudo: ScoringRule[] = ids.map((id) => ({
+    id,
+    pass: !failed.has(id),
+    severity: severityFor(id, horizon),
+  }));
+  const recomputed = recomputeScore(pseudo);
+  const modelScore = typeof data.score_hint === "number" ? data.score_hint : 0;
+  if (scoreDiscrepancy(modelScore, recomputed)) {
+    data.score_hint = recomputed;
+    data.score_hint_recomputed = true;
+  }
+  return data;
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;

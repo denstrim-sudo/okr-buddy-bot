@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 

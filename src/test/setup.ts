@@ -16,17 +16,10 @@ Object.defineProperty(window, "matchMedia", {
 
 // jsdom polyfills required by Radix UI primitives (Select, Dropdown, etc.)
 if (typeof Element !== "undefined") {
-  if (!Element.prototype.hasPointerCapture) {
-    // @ts-expect-error polyfill for jsdom
-    Element.prototype.hasPointerCapture = () => false;
-  }
-  if (!Element.prototype.releasePointerCapture) {
-    // @ts-expect-error polyfill for jsdom
-    Element.prototype.releasePointerCapture = () => {};
-  }
-  if (!Element.prototype.scrollIntoView) {
-    // @ts-expect-error polyfill for jsdom
-    Element.prototype.scrollIntoView = () => {};
-  }
+  const proto = Element.prototype as any;
+  if (!proto.hasPointerCapture) proto.hasPointerCapture = () => false;
+  if (!proto.releasePointerCapture) proto.releasePointerCapture = () => {};
+  if (!proto.scrollIntoView) proto.scrollIntoView = () => {};
 }
+
 

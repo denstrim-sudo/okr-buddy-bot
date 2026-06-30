@@ -114,6 +114,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     setPhase("drafting");
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
+      const parent_kr_context = buildParentKrContext();
       const { data, error } = await supabase.functions.invoke("draft-okr", {
         body: {
           raw_input: rawInput,
@@ -125,6 +126,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           model,
           focus_horizon_fit: opts?.focus_horizon_fit ?? false,
           prior_horizon_fit: opts?.prior_horizon_fit ?? undefined,
+          ...(parent_kr_context ? { parent_kr_context } : {}),
         },
       });
       if (error) throw error;

@@ -148,8 +148,9 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           ...(parent_kr_context ? { parent_kr_context } : {}),
         },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) {
+        throw new Error(await extractEdgeError(error, data, "Ошибка генерации черновика"));
+      }
       notifyModelFallback(data);
       const d = data as OkrDraft;
       setDraft(d);

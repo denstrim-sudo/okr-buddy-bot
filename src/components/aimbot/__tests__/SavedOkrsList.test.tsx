@@ -61,4 +61,34 @@ describe("SavedOkrsList view mode toggle", () => {
     expect(screen.getByText("Родительский OKR")).toBeInTheDocument();
     expect(screen.getByText("Дочерний OKR")).toBeInTheDocument();
   });
+
+  it("в режиме Дерево действия «В Решения» и «Удалить» работают как в списке", async () => {
+    const user = userEvent.setup();
+    seed([
+      {
+        id: "n1",
+        objective: "Single OKR",
+        savedAt: "2025-01-01T00:00:00.000Z",
+        plan: {
+          objective_refined: "Single OKR",
+          score: 80,
+          horizon: "block_12m",
+          key_results: [
+            { text: "KR-1", baseline: "0", target: "1", metric: "%", kr_type: "leading", solutions: [] },
+          ],
+        },
+      },
+    ]);
+
+    const onSend = vi.fn();
+    render(<SavedOkrsList onSendToSolutions={onSend} />);
+    await user.click(screen.getByRole("button", { name: /Дерево/i }));
+
+    await user.click(screen.getByRole("button", { name: /Передать OKR в генератор решений/i }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend.mock.calls[0][1]).toBe("Single OKR");
+
+    await user.click(screen.getByRole("button", { name: /Удалить OKR/i }));
+    expect(screen.queryByText("Single OKR")).toBeNull();
+  });
 });

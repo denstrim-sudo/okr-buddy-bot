@@ -45,6 +45,13 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
     toast.success("Все OKR удалены");
   };
 
+  const handleSendToSolutions = onSendToSolutions
+    ? (plan: GeneratedPlan, objective: string) => {
+        onSendToSolutions(plan, objective);
+        toast.success("OKR передан в Генератор решений");
+      }
+    : undefined;
+
   return (
     <Card className="flex flex-col gap-4 border-border/60 bg-card p-6 shadow-md">
       <header className="flex items-center justify-between gap-3">
@@ -85,7 +92,7 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
       </header>
 
       {viewMode === "tree" ? (
-        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={onSendToSolutions} />
+        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} />
       ) : (
       <ul className="space-y-3">
 
@@ -114,14 +121,11 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
                 <p className="mt-1.5 text-sm font-semibold text-foreground">{item.objective}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {onSendToSolutions && (
+                {handleSendToSolutions && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      onSendToSolutions(item.plan, item.objective);
-                      toast.success("OKR передан в Генератор решений");
-                    }}
+                    onClick={() => handleSendToSolutions(item.plan, item.objective)}
                     className="h-8 border-hypothesis/30 text-hypothesis hover:bg-hypothesis-soft"
                     aria-label="Передать OKR в генератор решений"
                   >

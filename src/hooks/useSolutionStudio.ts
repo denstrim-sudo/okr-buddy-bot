@@ -216,6 +216,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       patchSlice({ report: data as SolutionReport });
       toast.success(`Аудит готов · ${(data as SolutionReport).score}/100`);
     } catch (e) {

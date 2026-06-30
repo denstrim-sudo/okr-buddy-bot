@@ -15,12 +15,18 @@ const CATEGORIES: { key: DocCategory; label: string; hint: string; icon: React.R
 
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
+const BUDGET_LIMIT = 12000;
+const fmtNum = (n: number) => n.toLocaleString("ru-RU");
+
 export const DocsManager = () => {
-  const { docs, add, remove, clear } = useDocs();
+  const { docs, add, remove, clear, buildContextWithUsage } = useDocs();
   const [active, setActive] = useState<DocCategory>("okr_context");
   const [loading, setLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const usage = buildContextWithUsage(["okr_context", "methodology", "solutions_kb"], BUDGET_LIMIT);
+  const usageById = new Map(usage.docs.map((d) => [d.id, d]));
 
   const handleFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files);

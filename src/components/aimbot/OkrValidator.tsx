@@ -370,6 +370,15 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   <p className="font-medium text-foreground">{report.rewritten_objective}</p>
                 </div>
               </div>
+              {report.rewritten_objective_warning && (
+                <p
+                  role="status"
+                  data-testid="rewritten-objective-warning"
+                  className="rounded-md border border-warning/40 bg-warning-soft px-2 py-1 text-[11px] font-medium text-warning"
+                >
+                  ⚠ Переписанная версия всё ещё может содержать цифру — проверьте вручную.
+                </p>
+              )}
               <div className="flex gap-2 pt-1">
                 <Button size="sm" onClick={acceptObjective} className="h-8 bg-success text-success-foreground hover:bg-success/90">
                   <Check className="mr-1 h-3.5 w-3.5" /> Принять новую

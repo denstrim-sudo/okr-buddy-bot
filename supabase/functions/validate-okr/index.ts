@@ -239,6 +239,24 @@ export const handler = async (req: Request) => {
     if (modelUsed) (finalData as any).model_used = modelUsed;
 
     applyScoreRecompute(finalData, h);
+
+    // Серверная проверка обоснованности: для каждого правила добавляем
+    // computed-поле grounded (не доверяя самооценке модели, не переопределяя pass/severity).
+    const objectiveText = String(objective).trim();
+    const krHaystack: string[] = enriched.map((k: any) => {
+      const parts: string[] = [String(k?.text ?? "")];
+      if (k?.baseline) parts.push(String(k.baseline));
+      if (k?.target) parts.push(String(k.target));
+      if (k?.metric) parts.push(String(k.metric));
+      return parts.join(" ");
+    });
+    if (Array.isArray((finalData as any).rules)) {
+      (finalData as any).rules = (finalData as any).rules.map((r: any) => ({
+        ...r,
+        grounded: isGrounded(r, objectiveText, krHaystack),
+      }));
+    }
+
     return json(finalData);
   } catch (e) {
     console.error("validate-okr error", e);

@@ -281,6 +281,23 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
 
           {report && (
             <>
+              {report.audit_unreliable && (
+                <div
+                  role="alert"
+                  data-testid="audit-unreliable-warning"
+                  className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive"
+                >
+                  ⚠ Аудит может быть ненадёжным — модель не справилась с форматом дважды. Попробуйте GPT-4o.
+                </div>
+              )}
+              {report.model_used && (
+                <p
+                  data-testid="model-used-badge"
+                  className="mb-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                >
+                  Модель: {report.model_used}
+                </p>
+              )}
               {report.summary && <p className="mb-3 text-sm text-foreground">{report.summary}</p>}
               {(() => {
                 const failed = report.rules.filter((r) => !r.pass);

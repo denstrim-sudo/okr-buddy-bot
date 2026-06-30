@@ -131,6 +131,65 @@ Deno.test("sanitize: если redo бросает — initial помечаетс
   assertEquals(result.rewritten_objective, "Удвоить выручку к 2026 году");
 });
 
+// --- applyScoreRecompute: чистая логика серверного пересчёта ---
+
+Deno.test("applyScoreRecompute: расхождение >10 → подменяет score, ставит флаг", () => {
+  // 1 critical fail из 7 правил, остальные pass → recomputed=60 (потолок). Модель отдала 85.
+  const data: any = {
+    score: 85,
+    rules: [
+      { id: "O3", pass: false, severity: "critical" },
+      { id: "KR1", pass: true, severity: "critical" },
+      { id: "KR2", pass: true, severity: "critical" },
+      { id: "KR3", pass: true, severity: "critical" },
+      { id: "O1", pass: true, severity: "important" },
+      { id: "KR4", pass: true, severity: "important" },
+      { id: "KR10", pass: true, severity: "important" },
+    ],
+  };
+  applyScoreRecompute(data);
+  assertEquals(data.score, 60);
+  assertEquals(data.score_recomputed, true);
+});
+
+Deno.test("applyScoreRecompute: расхождение ≤10 → не трогает score, без флага", () => {
+  const data: any = {
+    score: 85,
+    rules: [
+      { id: "A", pass: true, severity: "critical" },
+      { id: "B", pass: true, severity: "important" },
+      { id: "C", pass: false, severity: "improve" },
+    ],
+  };
+  // recomputed = round(100 * 5/6) = 83. |85-83| = 2 ≤ 10.
+  applyScoreRecompute(data);
+  assertEquals(data.score, 85);
+  assertEquals(data.score_recomputed, undefined);
+});
+
+Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR10 для quarter_3m = critical)", () => {
+  // KR10 без severity, pass=false, horizon=quarter_3m → должен сработать потолок 60.
+  const data: any = {
+    score: 90,
+    rules: [
+      { id: "KR10", pass: false }, // нет severity, но id → critical для quarter
+      { id: "O1", pass: true },
+      { id: "KR1", pass: true },
+    ],
+  };
+  applyScoreRecompute(data, "quarter_3m");
+  assert(data.score <= 60, `expected ≤60, got ${data.score}`);
+  assertEquals(data.score_recomputed, true);
+});
+
+Deno.test("applyScoreRecompute: пустые/отсутствующие rules → no-op", () => {
+  const data: any = { score: 42 };
+  applyScoreRecompute(data);
+  assertEquals(data.score, 42);
+  assertEquals(data.score_recomputed, undefined);
+});
+
+
 Deno.test({
   name: "validate-okr [AI]: returns rules + rewrites with same KR count",
   ignore: !RUN_AI,

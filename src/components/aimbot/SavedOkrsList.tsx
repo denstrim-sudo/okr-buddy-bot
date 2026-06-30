@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles } from "lucide-react";
+import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles, List, Network } from "lucide-react";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { GeneratedPlan } from "@/types/okr";
+import { OkrTree } from "./OkrTree";
 
 interface Props {
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
 }
+
+type ViewMode = "list" | "tree";
 
 const formatDate = (iso: string) => {
   try {
@@ -25,6 +29,7 @@ const formatDate = (iso: string) => {
 
 export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
   const { items, remove, clear } = useSavedOkrs();
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   if (!items.length) return null;
 
@@ -52,12 +57,38 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
             <p className="text-xs text-muted-foreground">{items.length} записей · хранятся локально</p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive">
-          Очистить все
-        </Button>
+        <div className="flex items-center gap-1">
+          <div role="group" aria-label="Режим отображения" className="flex rounded-md border border-border bg-background p-0.5">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("list")}
+              aria-pressed={viewMode === "list"}
+              className="h-7 px-2 text-xs"
+            >
+              <List className="mr-1 h-3.5 w-3.5" /> Список
+            </Button>
+            <Button
+              variant={viewMode === "tree" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("tree")}
+              aria-pressed={viewMode === "tree"}
+              className="h-7 px-2 text-xs"
+            >
+              <Network className="mr-1 h-3.5 w-3.5" /> Дерево
+            </Button>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive">
+            Очистить все
+          </Button>
+        </div>
       </header>
 
+      {viewMode === "tree" ? (
+        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={onSendToSolutions} />
+      ) : (
       <ul className="space-y-3">
+
         {items.map((item) => (
           <li
             key={item.id}
@@ -135,6 +166,7 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
           </li>
         ))}
       </ul>
+      )}
     </Card>
   );
 };

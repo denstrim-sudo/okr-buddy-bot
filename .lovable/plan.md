@@ -1,113 +1,70 @@
-## Цель
-Сделать `recomputeScore` источником истины: серверный пересчёт подменяет `score`/`score_hint`, если ответ модели расходится с канонической формулой более чем на 10 пунктов. Гейты в UI начнут опираться на пересчитанное число автоматически (контракт `data.score` сохраняется).
+## Причина (подтверждена логами)
 
-## ШАГ 3a — `scoreDiscrepancy` (RED → GREEN)
+В edge-логах `draft-okr` видно:
 
-**Файл:** `supabase/functions/_shared/scoring.test.ts` (дополнить)
-
-Новые тесты:
-1. `scoreDiscrepancy(85, 74) === true` (разница 11 → расхождение).
-2. `scoreDiscrepancy(85, 75) === false` (граница 10 → НЕ расхождение).
-3. `scoreDiscrepancy(60, 60) === false` (разница 0).
-4. `scoreDiscrepancy(60, 71) === true` (асимметрия: модель занизила).
-
-**Файл:** `supabase/functions/_shared/scoring.ts`
-
-```ts
-export function scoreDiscrepancy(modelScore: number, recomputed: number): boolean {
-  return Math.abs(modelScore - recomputed) > 10;
-}
+```
+ERROR AIAI.BY error 404 {"error":{"message":"Model 'claude-3-5-sonnet-latest' not found or not available","code":"model_not_found"}}
+WARNING AI model fallback claude-3-5-sonnet-latest -> gpt-4o model_unavailable
 ```
 
-## ШАГ 3b — карта severity по rule id (общий хелпер)
+То есть выбор модели **уходит на бэкенд корректно** (фронт прокидывает `model` во все 6 edge-функций, бэкенд читает и передаёт в `chat/completions`), но AIAI.BY возвращает `404 model_not_found` для большинства ID из нашего жёсткого списка. В `_shared/ai.ts` это намеренно ловится и **молча** падает в `gpt-4o` — поэтому в статистике vedai всегда виден только `gpt-4o`. Пользователь не получает никакого сигнала о подмене.
 
-**Файл:** `supabase/functions/_shared/scoring.ts`
+## Что делаем
 
-Чтобы и `validate-okr`, и `draft-okr` могли пересчитывать счёт, выносим знание «id → severity» в shared-таблицу (источник правды — комментарии в `okr_rules.ts`):
+### 1. Источник истины для списка моделей — live-каталог AIAI.BY
+- Новая edge-функция `list-ai-models` (GET): дергает `${AIAI_BASE_URL}/models` с `AIAI_API_KEY`, кэширует ответ в памяти на 10 минут, возвращает массив `{ id, label, hint }`.
+- Падение апстрима → возвращаем последний удачный кэш либо безопасный мини-список (`gpt-4o`, `gpt-4o-mini`) c пометкой `degraded: true`.
 
-```ts
-export const SEVERITY_BY_RULE_ID: Record<string, RuleSeverity> = {
-  O1: "important", O2: "important", O3: "critical",
-  KR1: "critical", KR2: "critical", KR3: "critical",
-  KR4: "important", KR10: "important",
-  // quarter-only:
-  "Q-Focus": "important", "Q-Theme": "improve", "Q-Reach": "important",
-};
+### 2. Фронт берёт список с бэкенда, а не хардкодит
+- `ModelContext.tsx`: вместо константы `AI_MODELS` — `useEffect` грузит каталог через `supabase.functions.invoke("list-ai-models")` один раз при монтировании, кладёт в state, селект ждёт загрузку (skeleton в `ModelSelector`).
+- Если сохранённый в localStorage ID отсутствует в свежем каталоге — сбрасываем на дефолт и показываем тост «Ранее выбранная модель больше недоступна, переключено на …».
+- Удаляем устаревший хардкод (`claude-sonnet-4-5`, `claude-3-5-sonnet-latest`, `gemini-1.5-pro` и т.д.) — оставляем только то, что реально вернул каталог.
 
-export function severityFor(ruleId: string, horizon?: string): RuleSeverity {
-  if (horizon === "quarter_3m" && ruleId === "KR10") return "critical"; // override
-  return SEVERITY_BY_RULE_ID[ruleId] ?? "improve";
-}
+### 3. Видимая пользователю подмена модели (нет тихих fallback)
+Бэкенд (`_shared/ai.ts`) уже знает, когда подменил модель. Сейчас факт подмены теряется в ответе.
+- В `callAITool` / `callAIToolExtended` добавляем в JSON-ответ служебное поле `_meta: { requested_model, used_model, fallback_reason }`.
+- Все 6 edge-функций пропускают это поле наружу (минимальная правка — оно уже в общем envelope).
+- На фронте после каждого `supabase.functions.invoke` проверяем `data._meta?.used_model !== data._meta?.requested_model` и показываем единый toast: «Модель <X> сейчас недоступна у провайдера, запрос выполнен через <Y>».
+
+### 4. TDD-покрытие
+- `supabase/functions/_shared/ai.test.ts` (новый): мок `fetch`, кейсы — успешный запрос (`_meta.used_model === requested`), 404 → fallback (`_meta.fallback_reason === "model_unavailable"`, `used_model === "gpt-4o"`), 503 → fallback.
+- `supabase/functions/list-ai-models/index.test.ts`: моки на `/models`, проверка кэша (второй вызов не ходит в сеть), деградация при ошибке апстрима.
+- `src/contexts/__tests__/ModelContext.test.tsx`: ремаунт грузит каталог; сохранённый невалидный ID сбрасывается; селект отдаёт текущий выбор в `useAiModel`.
+- Существующие тесты edge-функций обновляем под новый формат ответа (`{ ...data, _meta }`).
+
+### 5. Документация в UI
+В тултип селектора моделей добавить строку: «Список загружен из AIAI.BY. Если выбранная модель временно недоступна, провайдер выполнит запрос через GPT-4o — вы увидите уведомление».
+
+## Что не трогаем
+- Не меняем формат сохранённых OKR (`SavedOkr`), не трогаем `OkrTree`, `ParentKrPicker`, `scoring.ts`, `okr_rules.ts`.
+- Не вводим Lovable AI Gateway вместо AIAI.BY — пользователь сознательно выбрал внешнего провайдера в одной из прошлых фаз.
+- Не убираем дефолтный `gpt-4o` как fallback — это последняя страховка от полного отказа.
+
+## Технические детали
+
+```text
+Frontend                          Edge function                     AIAI.BY
+ModelSelector ─┐
+               ├─► list-ai-models ─────────────────► GET /v1/models
+ModelContext ◄─┘   (cache 10m)
+
+OkrGenerator ──► draft-okr ──► callAITool({model})
+                                     │
+                                     ├─ POST /v1/chat/completions
+                                     │     model: claude-haiku-4-5
+                                     │     ◄── 404 model_not_found
+                                     │
+                                     └─ retry with gpt-4o
+                                            └─ возвращает + _meta:{
+                                                 requested_model: "claude-haiku-4-5",
+                                                 used_model: "gpt-4o",
+                                                 fallback_reason: "model_unavailable" }
+
+Frontend читает _meta → toast «Модель X недоступна, выполнено через Y»
 ```
 
-Покрываем 2 unit-теста:
-- `severityFor("KR10", "block_12m") === "important"`.
-- `severityFor("KR10", "quarter_3m") === "critical"`.
-
-## ШАГ 3c — `applyScoreRecompute` в validate-okr (RED → GREEN)
-
-**Файл:** `supabase/functions/validate-okr/index.test.ts` (дополнить, без сети)
-
-Новые тесты на чистую функцию `applyScoreRecompute(data, horizon?)`:
-1. «Расхождение >10 → подменяет score и ставит флаг» — даём `rules` где один critical fail (recomputed=60), а `data.score=85` → ожидаем `data.score === 60`, `data.score_recomputed === true`.
-2. «Расхождение ≤10 → ничего не трогаем» — `recomputed=83`, `data.score=85` → `data.score === 85`, флаг отсутствует.
-3. «Severity в правиле отсутствует — берётся из `SEVERITY_BY_RULE_ID` по id» — даём `rules: [{id:"O3", pass:false}]` без severity → пересчёт всё равно понимает critical и применяет потолок 60.
-4. Интеграционный тест на `handler` (без RUN_AI): мокать AI слой нельзя без рефакторинга, поэтому покрываем через прямой вызов экспортируемой функции на форме данных, идентичной ответу модели. Это даёт acceptance «handler-level», т.к. `applyScoreRecompute` — единственная развилка между ответом модели и `json(finalData)`.
-
-**Файл:** `supabase/functions/validate-okr/index.ts`
-
-- Экспортировать `applyScoreRecompute(data, horizon)`. Логика: нормализовать severity через `severityFor(rule.id, horizon)` при отсутствии в правиле; `const recomputed = recomputeScore(normalized)`; если `scoreDiscrepancy(data.score, recomputed)` → `data.score = recomputed; data.score_recomputed = true`.
-- Вызвать после `sanitizeRewrittenObjective`, перед `json(finalData)`, передав уже валидированный `h`.
-- Расширить `PARAMETERS` опциональным `score_recomputed: boolean` НЕ нужно — модель его не возвращает, поле проставляется сервером.
-
-**Файл:** `src/types/okr.ts`
-
-В `ValidationReport`:
-```ts
-score_recomputed?: boolean;
-```
-
-## ШАГ 3d — то же для draft-okr (RED → GREEN)
-
-**Файл:** `supabase/functions/draft-okr/index.test.ts` (дополнить)
-
-Новые тесты на экспорт `applyScoreHintRecompute(data, horizon)`:
-1. «`self_audit.critical_fails: ["O3"]`, `important_fails: []`, `score_hint=85` → пересчёт по полному набору правил горизонта: все правила, кроме O3, считаются passed; критический fail включает потолок 60 → `score_hint=60`, `score_hint_recomputed=true`».
-2. «Все правила прошли (`critical_fails=[]`, `important_fails=[]`), `score_hint=92` → recomputed=100, разница 8 ≤ 10 → флаг не ставится, `score_hint=92`».
-3. «quarter_3m + `critical_fails: ["KR10"]` — KR10 для квартала critical → потолок 60 применяется, score_hint подменяется».
-
-**Файл:** `supabase/functions/draft-okr/index.ts`
-
-- Экспортировать `applyScoreHintRecompute(data, horizon)`:
-  1. Собрать «известный набор правил для горизонта»: `["O1","O2","O3","KR1","KR2","KR3","KR4","KR10"]` + `["Q-Focus","Q-Theme","Q-Reach"]` если `horizon === "quarter_3m"`.
-  2. Для каждого id: `pass = !(critical_fails ∪ important_fails).includes(id)`, `severity = severityFor(id, horizon)`.
-  3. `recomputed = recomputeScore(pseudoRules)`; если `scoreDiscrepancy(data.score_hint, recomputed)` → `data.score_hint = recomputed; data.score_hint_recomputed = true`.
-- Вызвать в `handler` сразу после `capKeyResults(data, h)`.
-
-**Файл:** `src/types/okr.ts`
-
-В `OkrDraft`:
-```ts
-score_hint_recomputed?: boolean;
-```
-
-## Регрессионные гарантии
-- `sanitizeRewrittenObjective`, `capKeyResults`, `buildSystemPrompt`, `okr_rules`, существующие `recomputeScore` тесты не меняются.
-- UI-гейт «Передать в Решения» в `OkrValidator.tsx` уже читает `report.score >= 70` — никаких правок UI не требуется, новый порог сработает автоматически (но я могу опционально показать индикатор «score пересчитан сервером», если попросите).
-- `score_recomputed` / `score_hint_recomputed` — опциональные поля, обратной совместимости не ломают.
-
-## Acceptance Criteria
-- [x] `scoreDiscrepancy` покрыта тестами включая граничное значение 10.
-- [x] `validate-okr` экспортирует и вызывает `applyScoreRecompute` — проверено unit-тестами на чистой функции с реальной формой ответа модели.
-- [x] `draft-okr` экспортирует и вызывает `applyScoreHintRecompute` для всех трёх горизонтов.
-- [x] `severityFor` отдельно покрыта на override KR10 для quarter_3m.
-- [x] Все ранее зелёные тесты (`validate-okr`, `draft-okr`, `okr_rules`, `scoring`) остаются зелёными.
-
-## Файлы, которые буду менять
-- `supabase/functions/_shared/scoring.ts` (+ `scoreDiscrepancy`, `SEVERITY_BY_RULE_ID`, `severityFor`)
-- `supabase/functions/_shared/scoring.test.ts` (+ тесты)
-- `supabase/functions/validate-okr/index.ts` (+ `applyScoreRecompute`, вызов в handler)
-- `supabase/functions/validate-okr/index.test.ts` (+ тесты)
-- `supabase/functions/draft-okr/index.ts` (+ `applyScoreHintRecompute`, вызов в handler)
-- `supabase/functions/draft-okr/index.test.ts` (+ тесты)
-- `src/types/okr.ts` (+ опциональные поля флагов пересчёта)
+## Acceptance criteria
+- [ ] В селекторе моделей видны только ID, которые реально отвечают `200` у AIAI.BY (проверяется тем, что в vedai-статистике после выбора этой модели приходит запрос именно с её ID).
+- [ ] При выборе модели, которая внезапно стала недоступна, UI явно сообщает о подмене (toast), а не делает её молча.
+- [ ] Каталог моделей не хардкодится во фронте — приходит с бэкенда.
+- [ ] Все существующие тесты + новые 3 файла зелёные.

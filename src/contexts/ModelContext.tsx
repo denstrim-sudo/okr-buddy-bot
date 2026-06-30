@@ -39,18 +39,29 @@ export type InvokeFn = (name: string) => Promise<{ data: any; error: any }>;
  */
 export async function fetchModelCatalog(
   invoke: InvokeFn,
+  opts: { retry?: boolean; retryDelayMs?: number } = {},
 ): Promise<{ models: AiModelEntry[]; degraded: boolean }> {
-  try {
-    const { data, error } = await invoke("list-ai-models");
-    if (error) throw error;
-    const next: AiModelEntry[] = Array.isArray(data?.models) && data.models.length
-      ? data.models
-      : FALLBACK_CATALOG;
-    return { models: next, degraded: Boolean(data?.degraded) || next === FALLBACK_CATALOG };
-  } catch (e) {
-    console.warn("list-ai-models failed, using fallback catalog", e);
-    return { models: FALLBACK_CATALOG, degraded: true };
-  }
+  const retry = opts.retry ?? true;
+  const delay = opts.retryDelayMs ?? 1200;
+  const attempt = async (): Promise<{ models: AiModelEntry[]; degraded: boolean }> => {
+    try {
+      const { data, error } = await invoke("list-ai-models");
+      if (error) throw error;
+      const next: AiModelEntry[] = Array.isArray(data?.models) && data.models.length
+        ? data.models
+        : FALLBACK_CATALOG;
+      return { models: next, degraded: Boolean(data?.degraded) || next === FALLBACK_CATALOG };
+    } catch (e) {
+      console.warn("list-ai-models failed", e);
+      return { models: FALLBACK_CATALOG, degraded: true };
+    }
+  };
+  const first = await attempt();
+  if (!retry || !first.degraded) return first;
+  if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+  const second = await attempt();
+  // If second attempt is no longer degraded, use it; else keep first.
+  return second.degraded ? first : second;
 }
 
 /**
@@ -80,32 +91,39 @@ export const ModelProvider = ({ children }: { children: ReactNode }) => {
     } catch {}
   }, [model]);
 
+  const loadCatalog = async (manual = false) => {
+    setLoading(true);
+    const { models: next, degraded } = await fetchModelCatalog((name) =>
+      supabase.functions.invoke(name),
+    );
+    setModels(next);
+    const { model: resolved, switched } = resolveInitialModel(model, next);
+    if (switched) {
+      setModelState(resolved);
+      toast.info(`Ранее выбранная модель «${model}» больше недоступна. Переключено на «${resolved}».`);
+    }
+    setLoading(false);
+    if (manual) {
+      if (degraded) toast.warning("Каталог моделей временно недоступен — показан сокращённый список.");
+      else toast.success(`Загружено моделей: ${next.length}`);
+    }
+  };
+
   useEffect(() => {
-    // Skip live catalog fetch in unit-test env to keep existing invoke mocks deterministic.
     if (import.meta.env.MODE === "test") {
       setLoading(false);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      const { models: next } = await fetchModelCatalog((name) => supabase.functions.invoke(name));
-      if (cancelled) return;
-      setModels(next);
-      const { model: resolved, switched } = resolveInitialModel(model, next);
-      if (switched) {
-        setModelState(resolved);
-        toast.info(`Ранее выбранная модель «${model}» больше недоступна. Переключено на «${resolved}».`);
-      }
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void loadCatalog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const refresh = async () => {
+    await loadCatalog(true);
+  };
+
   return (
-    <ModelContext.Provider value={{ model, setModel: setModelState, models, loading }}>
+    <ModelContext.Provider value={{ model, setModel: setModelState, models, loading, refresh }}>
       {children}
     </ModelContext.Provider>
   );

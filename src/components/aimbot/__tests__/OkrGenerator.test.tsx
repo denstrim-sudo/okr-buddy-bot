@@ -62,6 +62,8 @@ const draft = {
 describe("OkrGenerator (Module 1)", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    savedState.items = [];
+    savedState.save.mockReset();
     localStorage.clear();
     sessionStorage.clear();
   });

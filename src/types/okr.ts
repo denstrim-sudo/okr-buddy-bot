@@ -86,6 +86,7 @@ export interface GeneratedPlan {
   objective_refined: string;
   score: number;
   key_results: GeneratedKR[];
+  horizon?: OkrHorizon;
 }
 
 export type RuleSeverity = "critical" | "important" | "improve";

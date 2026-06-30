@@ -20,6 +20,7 @@ type Phase = "input" | "interpreting" | "clarify" | "drafting" | "draft_ready";
 const draftToGeneratedPlan = (d: OkrDraft): GeneratedPlan => ({
   objective_refined: d.objective,
   score: d.score_hint ?? 0,
+  horizon: d.horizon,
   key_results: d.key_results.map((k) => ({
     text: k.text,
     baseline: k.baseline ?? "",

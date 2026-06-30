@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useDocs } from "@/contexts/DocsContext";
-import { useAiModel } from "@/contexts/ModelContext";
+import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import type { GeneratedSolution, SolutionReport } from "@/types/okr";
 
 export const EMPTY_SOL: GeneratedSolution = {
@@ -154,6 +154,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       patchSlice({ cardReports: { ...cr, [idx]: data as SolutionReport } });
       toast.success(`Аудит ${s.id || `S${idx + 1}`} · ${(data as SolutionReport).score}/100`);
     } catch (e) {
@@ -185,6 +186,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       const list: GeneratedSolution[] = (data as any).solutions ?? [];
       patchSlice({ solutions: list });
       toast.success(`Сгенерировано ${list.length} решений`);
@@ -214,6 +216,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       patchSlice({ report: data as SolutionReport });
       toast.success(`Аудит готов · ${(data as SolutionReport).score}/100`);
     } catch (e) {

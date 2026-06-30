@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
-import { useAiModel } from "@/contexts/ModelContext";
+import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { ParentKrPicker } from "@/components/aimbot/ParentKrPicker";
 
 interface Props {
@@ -92,6 +92,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       const interp = data as OkrInputInterpretation;
       setInterpretation(interp);
       setAnswers(new Array(interp.clarifying_questions?.length ?? 0).fill(""));
@@ -131,6 +132,7 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       const d = data as OkrDraft;
       setDraft(d);
       setPhase("draft_ready");

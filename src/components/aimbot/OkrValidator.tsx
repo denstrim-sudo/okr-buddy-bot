@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { OkrHorizon, ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
-import { useAiModel } from "@/contexts/ModelContext";
+import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 
 const HORIZON_LABELS: Record<OkrHorizon, string> = {
@@ -89,6 +89,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
       setReport(data as ValidationReport);
       toast.success(`Аудит готов · оценка ${(data as ValidationReport).score}/100`);
     } catch (e: any) {

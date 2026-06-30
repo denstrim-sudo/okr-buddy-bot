@@ -2,7 +2,7 @@ import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_sh
 import { getRulesBlock } from "../_shared/okr_rules.ts";
 import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
 
-const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
+export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
 
 ${getRulesBlock(horizon)}
 

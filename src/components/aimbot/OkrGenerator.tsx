@@ -223,6 +223,14 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             </div>
           </div>
 
+          <ParentKrPicker
+            items={savedItems}
+            horizon={horizon}
+            value={parentLink}
+            onChange={setParentLink}
+          />
+
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Свободный ввод <span className="font-normal normal-case text-muted-foreground/70">— цель, контекст, или уже написанный OKR для переписывания</span>

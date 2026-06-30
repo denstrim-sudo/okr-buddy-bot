@@ -19,7 +19,7 @@ describe("ModelSelector", () => {
 
   it("рендерит список моделей из useAiModel().models", async () => {
     const setModel = vi.fn();
-    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel, models: catalog, loading: false });
+    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel, models: catalog, loading: false, refresh: vi.fn() });
     render(<ModelSelector />);
     const trigger = screen.getByRole("combobox", { name: /Модель AI/i });
     await userEvent.click(trigger);
@@ -28,7 +28,7 @@ describe("ModelSelector", () => {
   });
 
   it("disabled, пока loading=true", () => {
-    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel: vi.fn(), models: catalog, loading: true });
+    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel: vi.fn(), models: catalog, loading: true, refresh: vi.fn() });
     render(<ModelSelector />);
     const trigger = screen.getByRole("combobox", { name: /Модель AI/i });
     expect(trigger).toBeDisabled();
@@ -36,10 +36,18 @@ describe("ModelSelector", () => {
 
   it("выбор модели вызывает setModel", async () => {
     const setModel = vi.fn();
-    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel, models: catalog, loading: false });
+    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel, models: catalog, loading: false, refresh: vi.fn() });
     render(<ModelSelector />);
     await userEvent.click(screen.getByRole("combobox", { name: /Модель AI/i }));
     await userEvent.click(await screen.findByText("Claude Haiku"));
     expect(setModel).toHaveBeenCalledWith("claude-haiku-4.5");
+  });
+
+  it("клик по кнопке «Обновить список моделей» вызывает refresh из контекста", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    useAiModelMock.mockReturnValue({ model: "gpt-4o", setModel: vi.fn(), models: catalog, loading: false, refresh });
+    render(<ModelSelector />);
+    await userEvent.click(screen.getByRole("button", { name: /Обновить список моделей/i }));
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

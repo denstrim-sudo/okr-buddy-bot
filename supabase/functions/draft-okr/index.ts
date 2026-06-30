@@ -211,6 +211,7 @@ export const handler = async (req: Request) => {
         if (Array.isArray(data.key_results)) {
           capKeyResults(data, h);
         }
+        applyScoreHintRecompute(data, h);
         return json(data);
       }
     } catch { /* pass through */ }

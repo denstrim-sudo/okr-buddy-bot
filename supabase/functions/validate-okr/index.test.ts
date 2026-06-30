@@ -14,6 +14,48 @@ Deno.test("validate-okr: requires at least one KR", async () => {
   assertEquals(status, 400);
 });
 
+// --- buildSystemPrompt: правила переключаются по горизонту ---
+Deno.test("buildSystemPrompt('quarter_3m') содержит маркеры квартальных правил", () => {
+  const p = buildSystemPrompt("quarter_3m");
+  assert(p.includes("Q-Focus"));
+  assert(p.includes("Q-Theme"));
+  assert(p.includes("Q-Reach"));
+  assert(p.includes("применяй КВАРТАЛЬНЫЙ набор правил"));
+});
+
+Deno.test("buildSystemPrompt('block_12m') НЕ содержит квартальных маркеров", () => {
+  const p = buildSystemPrompt("block_12m");
+  assert(!p.includes("Q-Focus"));
+  assert(!p.includes("Q-Theme"));
+  assert(!p.includes("Q-Reach"));
+});
+
+Deno.test("buildSystemPrompt('strategic_3y') НЕ содержит квартальных маркеров", () => {
+  const p = buildSystemPrompt("strategic_3y");
+  assert(!p.includes("Q-Focus"));
+  assert(!p.includes("применяй КВАРТАЛЬНЫЙ"));
+});
+
+Deno.test({
+  name: "validate-okr [AI]: quarter_3m + no leading KR → KR10 critical fail",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Сфокусироваться на удержании активных пользователей квартала",
+      key_results: [
+        "Retention 30d вырос с 40% до 50%",
+        "MRR вырос с 100k до 130k",
+      ],
+      horizon: "quarter_3m",
+    });
+    assertEquals(status, 200);
+    const kr10 = (data.rules || []).find((r: any) => r.id === "KR10");
+    assert(kr10, "KR10 must be present in rules");
+    assertEquals(kr10.pass, false);
+    assertEquals(kr10.severity, "critical");
+  },
+});
+
 // --- textGuards (продублирован тут на случай, если раннер не подхватывает _shared) ---
 Deno.test("containsDigits: 'Удвоить выручку к 2026 году' → true", () => {
   assertEquals(containsDigits("Удвоить выручку к 2026 году"), true);

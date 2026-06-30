@@ -40,6 +40,21 @@ describe("fetchModelCatalog", () => {
     const res = await fetchModelCatalog(invoke);
     expect(res.models).toBe(FALLBACK_CATALOG);
   });
+
+  it("повторяет вызов один раз, если первый ответ degraded — и берёт успешный второй", async () => {
+    const fullModels = [
+      { id: "gpt-4o", label: "GPT-4o", hint: "" },
+      { id: "claude-haiku-4.5", label: "Claude Haiku", hint: "" },
+      { id: "gemini-2.5-pro", label: "Gemini", hint: "" },
+    ];
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: new Error("cold start") })
+      .mockResolvedValueOnce({ data: { models: fullModels, degraded: false }, error: null });
+    const res = await fetchModelCatalog(invoke, { retryDelayMs: 0 });
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(res.models).toEqual(fullModels);
+    expect(res.degraded).toBe(false);
+  });
 });
 
 describe("resolveInitialModel", () => {

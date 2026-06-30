@@ -63,10 +63,27 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
 
   const loading = phase === "interpreting" || phase === "drafting";
 
+  const extractEdgeError = async (error: any, data: any, fallback: string): Promise<string> => {
+    if (data && typeof data === "object" && typeof (data as any).error === "string") {
+      return (data as any).error;
+    }
+    if (error) {
+      const ctx = (error as any)?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.json();
+          if (body?.error && typeof body.error === "string") return body.error;
+        } catch {}
+      }
+      if (typeof error.message === "string" && error.message) return error.message;
+    }
+    return fallback;
+  };
+
   const handleError = (e: any, fallback: string) => {
     const msg = e?.message || fallback;
-    if (msg.includes("Rate")) toast.error("Слишком много запросов. Подождите немного.");
-    else if (msg.includes("credits") || msg.includes("payment")) toast.error("Закончились AI-кредиты. Пополните баланс.");
+    if (msg.includes("Rate") || msg.includes("Слишком много")) toast.error("Слишком много запросов. Подождите немного.");
+    else if (msg.includes("credits") || msg.includes("payment") || msg.includes("AI-кредиты")) toast.error("Закончились AI-кредиты. Пополните баланс.");
     else toast.error(msg);
   };
 
@@ -90,8 +107,9 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
       const { data, error } = await supabase.functions.invoke("interpret-okr-input", {
         body: { raw_input: rawInput, horizon, extra_context, model },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) {
+        throw new Error(await extractEdgeError(error, data, "Ошибка интерпретации"));
+      }
       notifyModelFallback(data);
       const interp = data as OkrInputInterpretation;
       setInterpretation(interp);
@@ -130,8 +148,9 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           ...(parent_kr_context ? { parent_kr_context } : {}),
         },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) {
+        throw new Error(await extractEdgeError(error, data, "Ошибка генерации черновика"));
+      }
       notifyModelFallback(data);
       const d = data as OkrDraft;
       setDraft(d);

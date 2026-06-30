@@ -1,4 +1,4 @@
-import { Cpu } from "lucide-react";
+import { Cpu, RefreshCw } from "lucide-react";
 import { useAiModel } from "@/contexts/ModelContext";
 import {
   Select,
@@ -7,9 +7,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 export const ModelSelector = () => {
-  const { model, setModel, models, loading } = useAiModel();
+  const { model, setModel, models, loading, refresh } = useAiModel();
   return (
     <div className="flex items-center gap-1.5">
       <Cpu className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden="true" />
@@ -32,6 +33,18 @@ export const ModelSelector = () => {
           ))}
         </SelectContent>
       </Select>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Обновить список моделей"
+        title="Обновить список моделей"
+        onClick={() => void refresh()}
+        disabled={loading}
+        className="h-9 w-9 shrink-0"
+      >
+        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+      </Button>
     </div>
   );
 };

@@ -6,8 +6,9 @@ const invokeMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...a: any[]) => invokeMock(...a) } },
 }));
+const toastErrorMock = vi.fn();
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
+  toast: { success: vi.fn(), error: (...a: any[]) => toastErrorMock(...a), message: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
 const savedState = vi.hoisted(() => ({
@@ -177,5 +178,19 @@ describe("OkrGenerator (Module 1)", () => {
 
     expect(savedState.save).toHaveBeenCalledTimes(1);
     expect(savedState.save.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("показывает точное сообщение из data.error edge-функции", async () => {
+    toastErrorMock.mockReset();
+    invokeMock.mockResolvedValueOnce({
+      data: { error: "Модель \"claude-opus-4.6\" сейчас недоступна у AI-провайдера." },
+      error: null,
+    });
+    renderWithProviders(<OkrGenerator onGenerated={vi.fn()} />);
+    await userEvent.type(screen.getByPlaceholderText(/Хотим стать самым любимым онбордингом/i), "raw input");
+    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать ввод/i }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+    expect(toastErrorMock.mock.calls.some(([m]) => typeof m === "string" && m.includes("claude-opus-4.6"))).toBe(true);
   });
 });

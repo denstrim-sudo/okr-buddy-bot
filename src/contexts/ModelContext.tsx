@@ -20,6 +20,7 @@ interface Ctx {
   setModel: (m: string) => void;
   models: AiModelEntry[];
   loading: boolean;
+  refresh: () => Promise<void>;
 }
 
 const ModelContext = createContext<Ctx>({
@@ -27,6 +28,7 @@ const ModelContext = createContext<Ctx>({
   setModel: () => {},
   models: FALLBACK_CATALOG,
   loading: false,
+  refresh: async () => {},
 });
 
 export type InvokeFn = (name: string) => Promise<{ data: any; error: any }>;

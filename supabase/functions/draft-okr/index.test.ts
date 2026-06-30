@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, capKeyResults } from "./index.ts";
+import { handler, capKeyResults, applyScoreHintRecompute } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 
 Deno.test("capKeyResults: quarter_3m НЕ обрезает 4 KR", () => {

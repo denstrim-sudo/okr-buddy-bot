@@ -207,3 +207,24 @@ Deno.test({
     assertEquals(data.rewritten_key_results.length, 2);
   },
 });
+
+// --- isAuditSuspicious: чистая логика ---
+
+Deno.test("isAuditSuspicious: rules=[] → true", () => {
+  assertEquals(isAuditSuspicious({ rules: [] }), true);
+});
+Deno.test("isAuditSuspicious: rules=undefined → true", () => {
+  assertEquals(isAuditSuspicious({ rules: undefined }), true);
+});
+Deno.test("isAuditSuspicious: все правила pass=false → true", () => {
+  assertEquals(
+    isAuditSuspicious({ rules: [{ pass: false }, { pass: false }, { pass: false }] }),
+    true,
+  );
+});
+Deno.test("isAuditSuspicious: смешанный pass — норма → false", () => {
+  assertEquals(isAuditSuspicious({ rules: [{ pass: true }, { pass: false }] }), false);
+});
+Deno.test("isAuditSuspicious: data=null → true", () => {
+  assertEquals(isAuditSuspicious(null), true);
+});

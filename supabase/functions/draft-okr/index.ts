@@ -171,7 +171,7 @@ export const handler = async (req: Request) => {
   try {
     const {
       raw_input, horizon, mode, interpretation, clarifying_answers,
-      extra_context, model, focus_horizon_fit, prior_horizon_fit,
+      extra_context, model, focus_horizon_fit, prior_horizon_fit, parent_kr_context,
     } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
@@ -179,18 +179,12 @@ export const handler = async (req: Request) => {
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
     const m: string = mode === "rewrite_existing" ? "rewrite_existing" : "from_scratch";
 
-    const interpBlock = interpretation
-      ? `\n\nINTERPRETATION CONTEXT:\n${JSON.stringify(interpretation, null, 2).slice(0, 6000)}`
-      : "";
-    const answersBlock = Array.isArray(clarifying_answers) && clarifying_answers.length
-      ? `\n\nCLARIFYING ANSWERS FROM USER (in order):\n${clarifying_answers.map((a: string, i: number) => `Q${i + 1}: ${String(a).trim() || "(skipped)"}`).join("\n")}`
-      : "";
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
-    const focusBlock = focus_horizon_fit
-      ? `\n\nFOCUS_HORIZON_FIT: true — переформулируй KR так, чтобы они строго соответствовали горизонту ${h}.${prior_horizon_fit ? `\nPRIOR_HORIZON_FIT (что было не так в прошлой попытке):\n${JSON.stringify(prior_horizon_fit, null, 2).slice(0, 4000)}` : ""}`
-      : "";
+    const userPrompt = buildUserPrompt({
+      raw_input, horizon: h, mode: m, interpretation, clarifying_answers,
+      focus_horizon_fit, prior_horizon_fit, parent_kr_context, extra_block: extraBlock,
+    });
 
-    const userPrompt = `HORIZON: ${h}\nMODE: ${m}\n\nIMPORTANT: response field "horizon" MUST equal "${h}" exactly. Same for horizon_fit.horizon. Do not change it to anything else.\n\nORIGINAL USER INPUT:\n${raw_input.trim()}${interpBlock}${answersBlock}${focusBlock}${extraBlock}\n\nDraft 1 Objective and 1..3 outcome-oriented Key Results, then fill horizon_fit self-check. NO solutions.`;
 
     const res = await callAITool({
       systemPrompt: buildSystemPrompt(h),

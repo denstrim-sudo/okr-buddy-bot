@@ -35,6 +35,48 @@ Deno.test("capKeyResults: не трогает, если KR <= лимита", () 
   assertEquals(capKeyResults(data, "quarter_3m").key_results.length, 2);
 });
 
+// --- applyScoreHintRecompute: пересчёт score_hint из self_audit ---
+
+Deno.test("applyScoreHintRecompute: critical_fails=['O3'] на block_12m → потолок 60, флаг", () => {
+  const data: any = {
+    score_hint: 85,
+    self_audit: { critical_fails: ["O3"], important_fails: [] },
+  };
+  applyScoreHintRecompute(data, "block_12m");
+  assertEquals(data.score_hint, 60);
+  assertEquals(data.score_hint_recomputed, true);
+});
+
+Deno.test("applyScoreHintRecompute: все правила прошли, разница 8 ≤ 10 → не трогает", () => {
+  // recomputed по полному набору known ids без фейлов = 100. modelScore=92 → diff=8 ≤ 10.
+  const data: any = {
+    score_hint: 92,
+    self_audit: { critical_fails: [], important_fails: [] },
+  };
+  applyScoreHintRecompute(data, "block_12m");
+  assertEquals(data.score_hint, 92);
+  assertEquals(data.score_hint_recomputed, undefined);
+});
+
+Deno.test("applyScoreHintRecompute: quarter_3m + critical_fails=['KR10'] → потолок 60 (override)", () => {
+  // KR10 на quarter_3m — critical. Модель отдала 88 → подменяем на ≤60.
+  const data: any = {
+    score_hint: 88,
+    self_audit: { critical_fails: ["KR10"], important_fails: [] },
+  };
+  applyScoreHintRecompute(data, "quarter_3m");
+  assert(data.score_hint <= 60, `expected ≤60, got ${data.score_hint}`);
+  assertEquals(data.score_hint_recomputed, true);
+});
+
+Deno.test("applyScoreHintRecompute: нет self_audit → no-op", () => {
+  const data: any = { score_hint: 42 };
+  applyScoreHintRecompute(data, "block_12m");
+  assertEquals(data.score_hint, 42);
+  assertEquals(data.score_hint_recomputed, undefined);
+});
+
+
 Deno.test("draft-okr: rejects empty raw_input", async () => {
   const { status } = await callHandler(handler, { raw_input: "", horizon: "block_12m" });
   assertEquals(status, 400);

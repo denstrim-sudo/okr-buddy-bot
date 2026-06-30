@@ -30,6 +30,7 @@ HARD RULES:
   - from_scratch: produce a fresh OKR.
   - rewrite_existing: PRESERVE intent and recognizable wording from parsed_existing. Make MINIMAL edits.
 - DO NOT generate solutions, bets, hypotheses or actions.
+- Если в user message присутствует блок "PARENT KEY RESULT" — Objective ОБЯЗАН быть прямым ответом на этот конкретный KR родителя, а не более широкой темой. Декомпозируй именно его.
 - "score_hint": honest 0-100 self-estimate of draft quality.
 
 HORIZON FIT SELF-CHECK (REQUIRED in "horizon_fit"):

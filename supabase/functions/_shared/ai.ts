@@ -1,6 +1,8 @@
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.105.1/cors";
-
-export { corsHeaders };
+export const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-retry-count",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+};
 
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {

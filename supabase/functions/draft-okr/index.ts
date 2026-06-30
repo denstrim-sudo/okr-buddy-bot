@@ -60,7 +60,7 @@ const PARAMETERS = {
     mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     objective: { type: "string" },
     key_results: {
-      type: "array", minItems: 1, maxItems: 3,
+      type: "array", minItems: 1, maxItems: 4,
       items: {
         type: "object",
         properties: {

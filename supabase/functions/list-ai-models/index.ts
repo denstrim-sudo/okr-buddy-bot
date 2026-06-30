@@ -5,7 +5,7 @@ import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.105.1/cors";
  * Only IDs in this list are exposed to the UI, even if AIAI.BY publishes more.
  * IDs not present in the live catalog are dropped.
  */
-const CURATED: Array<{ id: string; label: string; hint: string }> = [
+export const CURATED: Array<{ id: string; label: string; hint: string }> = [
   { id: "gpt-4o", label: "GPT-4o", hint: "Стабильный режим (по умолчанию)" },
   { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Дешевле, чуть медленнее" },
   { id: "gpt-5", label: "GPT-5", hint: "OpenAI, сильнейшая модель" },
@@ -28,13 +28,13 @@ const CURATED: Array<{ id: string; label: string; hint: string }> = [
   { id: "grok-4", label: "Grok 4", hint: "xAI" },
 ];
 
-const FALLBACK_LIST = [
+export const FALLBACK_LIST = [
   { id: "gpt-4o", label: "GPT-4o", hint: "Стабильный режим (по умолчанию)" },
   { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Дешевле" },
 ];
 
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
-const CACHE_TTL_MS = 10 * 60 * 1000;
+export const CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface CacheEntry {
   at: number;
@@ -42,6 +42,11 @@ interface CacheEntry {
   degraded: boolean;
 }
 let cache: CacheEntry | null = null;
+
+/** Reset module-level cache between tests. */
+export function __resetCacheForTests() {
+  cache = null;
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -74,7 +79,7 @@ async function fetchLiveIds(): Promise<Set<string> | null> {
   }
 }
 
-Deno.serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const now = Date.now();
@@ -95,4 +100,6 @@ Deno.serve(async (req) => {
   const models = filtered.length ? filtered : FALLBACK_LIST;
   cache = { at: now, models, degraded: !filtered.length };
   return json({ models, degraded: !filtered.length });
-});
+};
+
+Deno.serve(handler);

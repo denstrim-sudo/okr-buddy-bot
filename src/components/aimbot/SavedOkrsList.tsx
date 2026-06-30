@@ -166,6 +166,7 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
           </li>
         ))}
       </ul>
+      )}
     </Card>
   );
 };

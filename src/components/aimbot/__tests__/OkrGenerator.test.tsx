@@ -10,6 +10,22 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
+const savedState = vi.hoisted(() => ({
+  items: [] as any[],
+  save: vi.fn(),
+}));
+vi.mock("@/hooks/useSavedOkrs", () => ({
+  useSavedOkrs: () => ({
+    items: savedState.items,
+    save: savedState.save,
+    remove: vi.fn(),
+    clear: vi.fn(),
+    getChildren: () => [],
+    getRoots: () => savedState.items,
+    removeWithDescendants: vi.fn(),
+  }),
+}));
+
 import { OkrGenerator } from "@/components/aimbot/OkrGenerator";
 
 const interp = {

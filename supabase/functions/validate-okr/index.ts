@@ -206,7 +206,7 @@ export const handler = async (req: Request) => {
         userPrompt: retryPrompt,
         toolName: "validate_okr",
         toolDescription: "Audit an OKR and return rule-by-rule findings.",
-        parameters: PARAMETERS,
+        parameters: params,
         // model не передаём → форсируем DEFAULT_MODEL
       });
       if (retry.status === 200) {

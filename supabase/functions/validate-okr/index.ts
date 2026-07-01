@@ -186,12 +186,13 @@ export const handler = async (req: Request) => {
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
+    const params = buildParameters(h);
     const first = await callAITool({
       systemPrompt,
       userPrompt,
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",
-      parameters: PARAMETERS,
+      parameters: params,
       model: modelArg,
     });
     if (first.status !== 200) return first;

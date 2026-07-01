@@ -244,7 +244,18 @@ export const handler = async (req: Request) => {
     delete (finalData as any).__model_used;
     if (modelUsed) (finalData as any).model_used = modelUsed;
 
+    // Серверная переопределение severity: канонический источник истины —
+    // severityFor(id, horizon), а не то, что вернула модель. Делаем ДО
+    // applyScoreRecompute, чтобы пересчёт шёл по каноническим весам.
+    if (Array.isArray((finalData as any).rules)) {
+      (finalData as any).rules = (finalData as any).rules.map((r: any) => ({
+        ...r,
+        severity: severityFor(r?.id, h),
+      }));
+    }
+
     applyScoreRecompute(finalData, h);
+
 
     // Серверная проверка обоснованности: для каждого правила добавляем
     // computed-поле grounded (не доверяя самооценке модели, не переопределяя pass/severity).

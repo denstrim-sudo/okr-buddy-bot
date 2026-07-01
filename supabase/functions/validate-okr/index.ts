@@ -228,7 +228,7 @@ export const handler = async (req: Request) => {
         userPrompt: retryPrompt,
         toolName: "validate_okr",
         toolDescription: "Audit an OKR and return rule-by-rule findings.",
-        parameters: PARAMETERS,
+        parameters: params,
         model: modelArg,
       });
       if (r.status !== 200) {

@@ -556,14 +556,3 @@ Deno.test({
     assertEquals(returnedIds, [...expected].sort());
   },
 });
-
-  Deno.env.set("AIAI_API_KEY", "test-key");
-  queueAiResponses([reportWithEvidence]);
-  try {
-    const { data } = await callHandler(handler, baseBody);
-    const r = data.rules.find((x: any) => x.id === "O1");
-    assertEquals(r.grounded, true);
-  } finally {
-    _restoreFetch();
-  }
-});

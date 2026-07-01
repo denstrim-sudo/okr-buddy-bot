@@ -445,9 +445,9 @@ Deno.test("handler: добавляет grounded=true для pass=false с реа
     assertEquals(status, 200);
     const r = data.rules.find((x: any) => x.id === "KR3");
     assertEquals(r.grounded, true);
-    // pass/severity сохранены
+    // pass сохранён; severity — канонический (KR3 → critical)
     assertEquals(r.pass, false);
-    assertEquals(r.severity, "important");
+    assertEquals(r.severity, "critical");
   } finally {
     _restoreFetch();
   }
@@ -462,13 +462,101 @@ Deno.test("handler: добавляет grounded=false для pass=false с вы�
     const r = data.rules.find((x: any) => x.id === "KR2");
     assertEquals(r.grounded, false);
     assertEquals(r.pass, false, "pass не должен переопределяться");
-    assertEquals(r.severity, "important", "severity не должна переопределяться");
+    // severity — канонический (KR2 → critical), даже если модель прислала другое
+    assertEquals(r.severity, "critical");
   } finally {
     _restoreFetch();
   }
 });
 
 Deno.test("handler: pass=true правила получают grounded=true автоматически", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([reportWithEvidence]);
+  try {
+    const { data } = await callHandler(handler, baseBody);
+    const r = data.rules.find((x: any) => x.id === "O1");
+    assertEquals(r.grounded, true);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+// --- handler: серверное переопределение severity по канонической таблице ---
+
+Deno.test("handler: KR10 c severity='critical' от модели для block_12m → серверно исправлен на 'important'", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const rulesModelWrongSeverity = [
+    { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    // Модель прислала critical, но для block_12m по severityFor должно быть important
+    { id: "KR10", label: "L", pass: true, hint: "", severity: "critical", why: "", evidence: "" },
+    { id: "O3", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  ];
+  queueAiResponses([{ ...reportWithEvidence, rules: rulesModelWrongSeverity }]);
+  try {
+    const { data } = await callHandler(handler, { ...baseBody, horizon: "block_12m" });
+    const kr10 = data.rules.find((x: any) => x.id === "KR10");
+    assertEquals(kr10.severity, "important", "severity KR10 должна быть серверно исправлена на important");
+    // O3 canonical = critical → должен быть переопределён из improve в critical
+    const o3 = data.rules.find((x: any) => x.id === "O3");
+    assertEquals(o3.severity, "critical");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: KR10 для quarter_3m серверно ставится 'critical' независимо от модели", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const rules = [
+    { id: "KR10", label: "L", pass: false, hint: "h", severity: "improve", why: "w", evidence: "" },
+    { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  ];
+  queueAiResponses([{ ...reportWithEvidence, rules }]);
+  try {
+    const { data } = await callHandler(handler, { ...baseBody, horizon: "quarter_3m" });
+    const kr10 = data.rules.find((x: any) => x.id === "KR10");
+    assertEquals(kr10.severity, "critical");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+// --- AI-интеграционный тест: стабильность набора id между прогонами ---
+
+Deno.test({
+  name: "validate-okr [AI]: набор id ровно совпадает с knownRuleIdsFor(horizon) (block_12m)",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Стать самым любимым онбордингом",
+      key_results: ["Поднять активацию с 30% до 50% к концу года", "NPS вырастет с 32 до 50"],
+      horizon: "block_12m",
+    });
+    assertEquals(status, 200);
+    const expected = knownRuleIdsFor("block_12m");
+    assertEquals(data.rules.length, expected.length);
+    const returnedIds = (data.rules as any[]).map((r) => r.id).sort();
+    assertEquals(returnedIds, [...expected].sort());
+  },
+});
+
+Deno.test({
+  name: "validate-okr [AI]: набор id ровно совпадает с knownRuleIdsFor(horizon) (quarter_3m)",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Сфокусироваться на удержании активных пользователей квартала",
+      key_results: ["Retention 30d вырос с 40% до 50%", "MRR вырос с 100k до 130k"],
+      horizon: "quarter_3m",
+    });
+    assertEquals(status, 200);
+    const expected = knownRuleIdsFor("quarter_3m");
+    assertEquals(data.rules.length, expected.length);
+    const returnedIds = (data.rules as any[]).map((r) => r.id).sort();
+    assertEquals(returnedIds, [...expected].sort());
+  },
+});
+
   Deno.env.set("AIAI_API_KEY", "test-key");
   queueAiResponses([reportWithEvidence]);
   try {

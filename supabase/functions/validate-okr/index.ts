@@ -2,7 +2,7 @@ import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
 import { getRulesBlock } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
-import { recomputeScore, scoreDiscrepancy, severityFor, type ScoringRule } from "../_shared/scoring.ts";
+import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
 
 export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
 
@@ -27,35 +27,40 @@ Return STRICT JSON only via the provided tool.
 
 IMPORTANT: All text fields (label, hint, why, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
 
-export const PARAMETERS = {
-  type: "object",
-  properties: {
-    score: { type: "number", description: "0-100 overall validation score" },
-    status: { type: "string", enum: ["pass", "warn", "fail"] },
-    summary: { type: "string", description: "Short overall verdict in Russian." },
-    rules: {
-      type: "array", minItems: 5,
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          label: { type: "string" },
-          pass: { type: "boolean" },
-          hint: { type: "string" },
-          severity: { type: "string", enum: ["critical", "important", "improve"] },
-          why: { type: "string" },
-          evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
+export function buildParameters(horizon?: string) {
+  const ids = knownRuleIdsFor(horizon);
+  return {
+    type: "object",
+    properties: {
+      score: { type: "number", description: "0-100 overall validation score" },
+      status: { type: "string", enum: ["pass", "warn", "fail"] },
+      summary: { type: "string", description: "Short overall verdict in Russian." },
+      rules: {
+        type: "array",
+        minItems: ids.length,
+        maxItems: ids.length,
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", enum: ids },
+            label: { type: "string" },
+            pass: { type: "boolean" },
+            hint: { type: "string" },
+            severity: { type: "string", enum: ["critical", "important", "improve"] },
+            why: { type: "string" },
+            evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
+          },
+          required: ["id", "label", "pass", "hint", "severity", "why", "evidence"],
+          additionalProperties: false,
         },
-        required: ["id", "label", "pass", "hint", "severity", "why", "evidence"],
-        additionalProperties: false,
       },
+      rewritten_objective: { type: "string" },
+      rewritten_key_results: { type: "array", items: { type: "string" } },
     },
-    rewritten_objective: { type: "string" },
-    rewritten_key_results: { type: "array", items: { type: "string" } },
-  },
-  required: ["score", "status", "summary", "rules", "rewritten_objective", "rewritten_key_results"],
-  additionalProperties: false,
-};
+    required: ["score", "status", "summary", "rules", "rewritten_objective", "rewritten_key_results"],
+    additionalProperties: false,
+  };
+}
 
 /**
  * Проверяет, обоснован ли вердикт fail дословной цитатой из текста OKR.
@@ -181,12 +186,13 @@ export const handler = async (req: Request) => {
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
+    const params = buildParameters(h);
     const first = await callAITool({
       systemPrompt,
       userPrompt,
       toolName: "validate_okr",
       toolDescription: "Audit an OKR and return rule-by-rule findings.",
-      parameters: PARAMETERS,
+      parameters: params,
       model: modelArg,
     });
     if (first.status !== 200) return first;
@@ -200,7 +206,7 @@ export const handler = async (req: Request) => {
         userPrompt: retryPrompt,
         toolName: "validate_okr",
         toolDescription: "Audit an OKR and return rule-by-rule findings.",
-        parameters: PARAMETERS,
+        parameters: params,
         // model не передаём → форсируем DEFAULT_MODEL
       });
       if (retry.status === 200) {
@@ -222,7 +228,7 @@ export const handler = async (req: Request) => {
         userPrompt: retryPrompt,
         toolName: "validate_okr",
         toolDescription: "Audit an OKR and return rule-by-rule findings.",
-        parameters: PARAMETERS,
+        parameters: params,
         model: modelArg,
       });
       if (r.status !== 200) {
@@ -238,7 +244,18 @@ export const handler = async (req: Request) => {
     delete (finalData as any).__model_used;
     if (modelUsed) (finalData as any).model_used = modelUsed;
 
+    // Серверная переопределение severity: канонический источник истины —
+    // severityFor(id, horizon), а не то, что вернула модель. Делаем ДО
+    // applyScoreRecompute, чтобы пересчёт шёл по каноническим весам.
+    if (Array.isArray((finalData as any).rules)) {
+      (finalData as any).rules = (finalData as any).rules.map((r: any) => ({
+        ...r,
+        severity: severityFor(r?.id, h),
+      }));
+    }
+
     applyScoreRecompute(finalData, h);
+
 
     // Серверная проверка обоснованности: для каждого правила добавляем
     // computed-поле grounded (не доверяя самооценке модели, не переопределяя pass/severity).

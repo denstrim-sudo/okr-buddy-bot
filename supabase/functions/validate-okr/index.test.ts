@@ -266,12 +266,12 @@ function queueAiResponses(payloads: unknown[]): () => FetchCall[] {
 }
 
 const cleanRules = [
-  { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "O3", label: "L", reasoning: "", pass: false, hint: "h", severity: "critical", why: "w" },
-  { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR2", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR3", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "OBJ-NO-NUMBERS", label: "L", reasoning: "", pass: false, hint: "h", severity: "critical", why: "w" },
+  { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-BASELINE-TARGET", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-OUTCOME", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-LEADING", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
 ];
 const cleanReport = {
   score: 78,

@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, capKeyResults, applyScoreHintRecompute, buildUserPrompt } from "./index.ts";
+import { handler, capKeyResults, applyScoreHintRecompute, buildUserPrompt, buildSystemPrompt } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 
 Deno.test("capKeyResults: quarter_3m НЕ обрезает 4 KR", () => {
@@ -119,4 +119,16 @@ Deno.test({
     assertEquals(data.horizon_fit.horizon, "block_12m");
     assert(data.horizon_fit.overall_score >= 0 && data.horizon_fit.overall_score <= 100);
   },
+});
+
+// --- grep-guard: старые id правил не встречаются в промпте ---
+Deno.test("draft-okr buildSystemPrompt: старые id правил отсутствуют для всех горизонтов", () => {
+  const horizons = ["strategic_3y", "block_12m", "quarter_3m"];
+  const oldO = /\bO[0-9]\b/;
+  const oldKR = /\bKR(1|2|3|4|10)\b/;
+  for (const h of horizons) {
+    const p = buildSystemPrompt(h);
+    assertEquals(oldO.test(p), false, `old O-id найден в промпте для ${h}`);
+    assertEquals(oldKR.test(p), false, `old KR-id найден в промпте для ${h}`);
+  }
 });

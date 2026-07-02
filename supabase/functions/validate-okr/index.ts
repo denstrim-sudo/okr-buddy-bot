@@ -28,7 +28,7 @@ For EACH rule you MUST return:
 
 ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
 
-ВАЖНО про O2 + O3: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило O3. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
+ВАЖНО про OBJ-AMBITIOUS + OBJ-NO-NUMBERS: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило OBJ-NO-NUMBERS. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
 
 Return STRICT JSON only via the provided tool.
 
@@ -91,7 +91,7 @@ export function isGrounded(
   return haystack.includes(ev);
 }
 
-const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило O3. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
+const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило OBJ-NO-NUMBERS. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
 
 /**
  * Гарантирует, что rewritten_objective не содержит цифр.
@@ -192,7 +192,7 @@ export const handler = async (req: Request) => {
       extra_context,
       "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
     );
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит O3). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит OBJ-NO-NUMBERS). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;

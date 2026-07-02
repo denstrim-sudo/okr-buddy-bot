@@ -582,3 +582,15 @@ Deno.test("buildSystemPrompt('quarter_3m') содержит квартальны
   const p = buildSystemPrompt("quarter_3m");
   assert(/спринт/i.test(p), "квартальный промпт должен содержать эталон со спринтом");
 });
+
+// --- grep-guard: ни один горизонт не содержит старых id правил ---
+Deno.test("buildSystemPrompt: старые id правил (O1..O3, KR1..KR4, KR10) отсутствуют для всех горизонтов", () => {
+  const horizons = ["strategic_3y", "block_12m", "quarter_3m"];
+  const oldO = /\bO[0-9]\b/;
+  const oldKR = /\bKR(1|2|3|4|10)\b/;
+  for (const h of horizons) {
+    const p = buildSystemPrompt(h);
+    assertEquals(oldO.test(p), false, `old O-id найден в промпте для ${h}`);
+    assertEquals(oldKR.test(p), false, `old KR-id найден в промпте для ${h}`);
+  }
+});

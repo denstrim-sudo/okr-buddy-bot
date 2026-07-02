@@ -131,12 +131,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       notifyModelFallback(data);
-      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; model_used?: string };
+      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
       setReport((p) => p ? {
         ...p,
         rewritten_objective: d.rewritten_objective ?? "",
         rewritten_key_results: d.rewritten_key_results ?? [],
         rewritten_objective_warning: d.rewritten_objective_warning,
+        editor_note: d.editor_note,
       } : p);
       toast.success("AI-предложения по улучшению готовы");
     } catch (e: any) {

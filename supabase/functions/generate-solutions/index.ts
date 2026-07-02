@@ -1,6 +1,6 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
 
-const SYSTEM_PROMPT = `You are a Strategic Hypothesis Coach in the OKR-PI framework.
+export const SYSTEM_PROMPT = `You are a Strategic Hypothesis Coach in the OKR-PI framework.
 
 Given an Objective and ONE Key Result (with baseline/target/metric), generate 3-5 Solutions (strategic bets, NOT features/tasks):
 - Each Solution starts with the PROBLEM/JTBD (whose pain it solves)

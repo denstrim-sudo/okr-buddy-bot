@@ -71,12 +71,10 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
         ? "replace"
         : "merge";
       const res = importJson(text, mode);
-      if (!res.ok) {
+      if (res.ok === false) {
         toast.error(res.error);
         return;
       }
-      // narrow
-      const okRes = res;
       const skipMsg = res.skipped ? `, пропущено дублей: ${res.skipped}` : "";
       toast.success(
         mode === "replace"

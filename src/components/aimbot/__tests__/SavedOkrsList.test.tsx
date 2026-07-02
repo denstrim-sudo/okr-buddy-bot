@@ -92,3 +92,61 @@ describe("SavedOkrsList view mode toggle", () => {
     expect(screen.queryByText("Single OKR")).toBeNull();
   });
 });
+
+describe("SavedOkrsList empty state & export/import", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("при пустом items рендерит подсказку и не возвращает null", () => {
+    const { container } = render(<SavedOkrsList />);
+    expect(container.firstChild).not.toBeNull();
+    expect(screen.getByText(/Здесь появятся сохранённые OKR/i)).toBeInTheDocument();
+    expect(screen.getByText(/Сохранённые OKR/i)).toBeInTheDocument();
+    // Переключатель Список/Дерево скрыт
+    expect(screen.queryByRole("button", { name: /Список/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Дерево/i })).toBeNull();
+  });
+
+  it("кнопка Экспорт вызывает скачивание файла (createObjectURL)", async () => {
+    const user = userEvent.setup();
+    seed([
+      {
+        id: "e1",
+        objective: "Export me",
+        savedAt: "2025-01-01T00:00:00.000Z",
+        plan: { objective_refined: "Export me", score: 0, horizon: "block_12m", key_results: [] },
+      },
+    ]);
+    const createUrl = vi.fn(() => "blob:test");
+    const revokeUrl = vi.fn();
+    // @ts-expect-error jsdom
+    URL.createObjectURL = createUrl;
+    // @ts-expect-error jsdom
+    URL.revokeObjectURL = revokeUrl;
+    render(<SavedOkrsList />);
+    await user.click(screen.getByRole("button", { name: /Экспорт/i }));
+    expect(createUrl).toHaveBeenCalled();
+    expect(revokeUrl).toHaveBeenCalled();
+  });
+
+  it("Импорт: выбор файла вызывает importJson и добавляет OKR", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false); // merge
+    render(<SavedOkrsList />);
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const payload = JSON.stringify({
+      version: "aimbot.savedOkrs.v1",
+      items: [
+        {
+          id: "imp_1",
+          objective: "Imported",
+          savedAt: "2025-01-01T00:00:00.000Z",
+          plan: { objective_refined: "Imported", score: 0, horizon: "block_12m", key_results: [] },
+        },
+      ],
+    });
+    const file = new File([payload], "backup.json", { type: "application/json" });
+    await userEvent.upload(fileInput, file);
+    await screen.findByText(/Imported/);
+  });
+});

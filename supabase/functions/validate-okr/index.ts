@@ -48,16 +48,20 @@ export function buildParameters(horizon?: string) {
         maxItems: ids.length,
         items: {
           type: "object",
+          // ВАЖНО: порядок properties влияет на порядок генерации у tool-calling
+          // моделей. reasoning ДОЛЖНО идти раньше pass — сначала рассуждение,
+          // потом вердикт (chain-of-thought до вердикта).
           properties: {
             id: { type: "string", enum: ids },
             label: { type: "string" },
+            reasoning: { type: "string", description: "Сначала рассуждение: к какому типу относится KR (outcome/activity, leading/lagging), сверка с эталоном, и ТОЛЬКО потом вывод. Заполняется ДО pass." },
             pass: { type: "boolean" },
             hint: { type: "string" },
             severity: { type: "string", enum: ["critical", "important", "improve"] },
             why: { type: "string" },
             evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
           },
-          required: ["id", "label", "pass", "hint", "severity", "why", "evidence"],
+          required: ["id", "label", "reasoning", "pass", "hint", "severity", "why", "evidence"],
           additionalProperties: false,
         },
       },

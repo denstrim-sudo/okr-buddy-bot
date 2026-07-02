@@ -135,6 +135,7 @@ const TreeNode = ({
               depth={depth + 1}
               onRemove={onRemove}
               onSendToSolutions={onSendToSolutions}
+              onSendToAudit={onSendToAudit}
             />
           ))}
         </ul>
@@ -143,7 +144,7 @@ const TreeNode = ({
   );
 };
 
-export const OkrTree = ({ items, onRemove, onSendToSolutions }: Props) => {
+export const OkrTree = ({ items, onRemove, onSendToSolutions, onSendToAudit }: Props) => {
   const forest = useMemo(() => buildForest(items), [items]);
   if (!items.length) return null;
   return (
@@ -155,6 +156,7 @@ export const OkrTree = ({ items, onRemove, onSendToSolutions }: Props) => {
           depth={0}
           onRemove={onRemove}
           onSendToSolutions={onSendToSolutions}
+          onSendToAudit={onSendToAudit}
         />
       ))}
     </ul>

@@ -13,7 +13,7 @@ vi.mock("sonner", () => ({
 
 const savedState = vi.hoisted(() => ({
   items: [] as any[],
-  save: vi.fn(),
+  save: vi.fn((..._args: any[]) => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true })) as any,
 }));
 vi.mock("@/hooks/useSavedOkrs", () => ({
   useSavedOkrs: () => ({
@@ -24,6 +24,9 @@ vi.mock("@/hooks/useSavedOkrs", () => ({
     getChildren: () => [],
     getRoots: () => savedState.items,
     removeWithDescendants: vi.fn(),
+    persistError: false,
+    exportJson: () => "{}",
+    importJson: () => ({ ok: true, count: 0 }),
   }),
 }));
 
@@ -65,6 +68,7 @@ describe("OkrGenerator (Module 1)", () => {
     invokeMock.mockReset();
     savedState.items = [];
     savedState.save.mockReset();
+    savedState.save.mockImplementation(() => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true }));
     localStorage.clear();
     sessionStorage.clear();
   });
@@ -192,5 +196,58 @@ describe("OkrGenerator (Module 1)", () => {
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
     expect(toastErrorMock.mock.calls.some(([m]) => typeof m === "string" && m.includes("claude-opus-4.6"))).toBe(true);
+  });
+
+  it("на фазе draft_ready с parentLink показывает индикатор будущей связи", async () => {
+    savedState.items = [{
+      id: "parent_ind",
+      objective: "Родитель X",
+      savedAt: new Date().toISOString(),
+      plan: {
+        objective_refined: "Родитель X",
+        score: 0,
+        horizon: "strategic_3y",
+        key_results: [
+          { text: "KR-A", baseline: "", target: "", metric: "", kr_type: "leading", solutions: [] },
+        ],
+      },
+    }];
+    invokeMock
+      .mockResolvedValueOnce({ data: interp, error: null })
+      .mockResolvedValueOnce({ data: draft, error: null });
+    renderWithProviders(<OkrGenerator onGenerated={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByLabelText(/Родительский OKR/i), "parent_ind");
+    await userEvent.type(screen.getByPlaceholderText(/Хотим стать самым любимым онбордингом/i), "raw");
+    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать ввод/i }));
+    await screen.findByRole("button", { name: /Сохранить/i });
+    expect(screen.getByText(/Будет сохранён как дочерний к:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Родитель X/)).toBeInTheDocument();
+    expect(screen.getByText(/Будет сохранён как дочерний к:/i).textContent).toMatch(/KR1/);
+  });
+
+  it("без parentLink индикатор связи не показывается", async () => {
+    invokeMock
+      .mockResolvedValueOnce({ data: interp, error: null })
+      .mockResolvedValueOnce({ data: draft, error: null });
+    renderWithProviders(<OkrGenerator onGenerated={vi.fn()} />);
+    await userEvent.type(screen.getByPlaceholderText(/Хотим стать самым любимым онбордингом/i), "raw");
+    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать ввод/i }));
+    await screen.findByRole("button", { name: /Сохранить/i });
+    expect(screen.queryByText(/Будет сохранён как дочерний к:/i)).toBeNull();
+  });
+
+  it("при save().ok=false показывает toast.error, а не success", async () => {
+    toastErrorMock.mockReset();
+    savedState.save.mockImplementation(() => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: false }));
+    invokeMock
+      .mockResolvedValueOnce({ data: interp, error: null })
+      .mockResolvedValueOnce({ data: draft, error: null });
+    renderWithProviders(<OkrGenerator onGenerated={vi.fn()} />);
+    await userEvent.type(screen.getByPlaceholderText(/Хотим стать самым любимым онбордингом/i), "raw");
+    await userEvent.click(screen.getByRole("button", { name: /Интерпретировать ввод/i }));
+    await screen.findByRole("button", { name: /Сохранить/i });
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    expect(toastErrorMock).toHaveBeenCalled();
+    expect(toastErrorMock.mock.calls.some(([m]) => typeof m === "string" && /хранилище недоступно/i.test(m))).toBe(true);
   });
 });

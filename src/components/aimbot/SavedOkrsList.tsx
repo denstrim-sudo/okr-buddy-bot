@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles, List, Network } from "lucide-react";
+import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles, List, Network, Download, Upload } from "lucide-react";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,10 +28,9 @@ const formatDate = (iso: string) => {
 };
 
 export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
-  const { items, remove, clear } = useSavedOkrs();
+  const { items, remove, clear, exportJson, importJson } = useSavedOkrs();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-
-  if (!items.length) return null;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleRemove = (id: string) => {
     if (!confirm("Удалить сохранённый OKR?")) return;
@@ -45,12 +44,66 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
     toast.success("Все OKR удалены");
   };
 
+  const handleExport = () => {
+    try {
+      const blob = new Blob([exportJson()], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.href = url;
+      a.download = `aimbot-okrs-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Экспорт готов");
+    } catch (e: any) {
+      toast.error(e?.message || "Не удалось экспортировать");
+    }
+  };
+
+  const readFileAsText = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error ?? new Error("read error"));
+      reader.readAsText(file);
+    });
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await readFileAsText(file);
+      const mode: "replace" | "merge" = confirm(
+        "OK — заменить все текущие OKR содержимым файла.\nОтмена — добавить к текущим (merge).",
+      )
+        ? "replace"
+        : "merge";
+      const res = importJson(text, mode);
+      if (res.ok === false) {
+        toast.error(res.error);
+        return;
+      }
+      const skipMsg = res.skipped ? `, пропущено дублей: ${res.skipped}` : "";
+      toast.success(
+        mode === "replace"
+          ? `Импортировано ${res.count} OKR (заменено)`
+          : `Импортировано ${res.count} OKR (объединено${skipMsg})`,
+      );
+    } catch (e: any) {
+      toast.error(e?.message || "Не удалось импортировать");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSendToSolutions = onSendToSolutions
     ? (plan: GeneratedPlan, objective: string) => {
         onSendToSolutions(plan, objective);
         toast.success("OKR передан в Генератор решений");
       }
     : undefined;
+
+  const isEmpty = items.length === 0;
 
   return (
     <Card className="flex flex-col gap-4 border-border/60 bg-card p-6 shadow-md">
@@ -61,37 +114,76 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
           </div>
           <div>
             <h3 className="text-base font-semibold text-foreground">Сохранённые OKR</h3>
-            <p className="text-xs text-muted-foreground">{items.length} записей · хранятся локально</p>
+            <p className="text-xs text-muted-foreground">
+              {isEmpty ? "пусто · хранятся локально" : `${items.length} записей · хранятся локально`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <div role="group" aria-label="Режим отображения" className="flex rounded-md border border-border bg-background p-0.5">
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-              aria-pressed={viewMode === "list"}
-              className="h-7 px-2 text-xs"
-            >
-              <List className="mr-1 h-3.5 w-3.5" /> Список
-            </Button>
-            <Button
-              variant={viewMode === "tree" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("tree")}
-              aria-pressed={viewMode === "tree"}
-              className="h-7 px-2 text-xs"
-            >
-              <Network className="mr-1 h-3.5 w-3.5" /> Дерево
-            </Button>
-          </div>
-          <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive">
-            Очистить все
+          {!isEmpty && (
+            <div role="group" aria-label="Режим отображения" className="flex rounded-md border border-border bg-background p-0.5">
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+                aria-pressed={viewMode === "list"}
+                className="h-7 px-2 text-xs"
+              >
+                <List className="mr-1 h-3.5 w-3.5" /> Список
+              </Button>
+              <Button
+                variant={viewMode === "tree" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("tree")}
+                aria-pressed={viewMode === "tree"}
+                className="h-7 px-2 text-xs"
+              >
+                <Network className="mr-1 h-3.5 w-3.5" /> Дерево
+              </Button>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExport}
+            disabled={isEmpty}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Download className="mr-1 h-3.5 w-3.5" /> Экспорт
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Upload className="mr-1 h-3.5 w-3.5" /> Импорт
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+            }}
+          />
+          {!isEmpty && (
+            <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive">
+              Очистить все
+            </Button>
+          )}
         </div>
       </header>
 
-      {viewMode === "tree" ? (
+      {isEmpty ? (
+        <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Здесь появятся сохранённые OKR. Сгенерируйте OKR в Модуле 1 и нажмите «Сохранить».
+          </p>
+        </div>
+      ) : viewMode === "tree" ? (
         <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} />
       ) : (
       <ul className="space-y-3">

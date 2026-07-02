@@ -455,6 +455,16 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
             </div>
           )}
 
+          {parentLink && (() => {
+            const parent = savedItems.find((i) => i.id === parentLink.parentOkrId);
+            if (!parent) return null;
+            return (
+              <p className="rounded-md border border-hypothesis/30 bg-hypothesis-soft/40 px-3 py-2 text-[11px] text-foreground">
+                Будет сохранён как дочерний к: <span className="font-semibold">{parent.objective}</span> → KR{parentLink.parentKrIndex + 1}
+              </p>
+            );
+          })()}
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button onClick={sendToAudit} className="flex-1 bg-gradient-primary text-primary-foreground shadow-md hover:opacity-95">
               <ShieldCheck className="mr-2 h-4 w-4" /> Передать в аудит
@@ -463,12 +473,14 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
               type="button"
               variant="outline"
               onClick={() => {
-                if (parentLink) {
-                  saveOkr(draft.objective, draftToGeneratedPlan(draft), parentLink);
+                const res = parentLink
+                  ? saveOkr(draft.objective, draftToGeneratedPlan(draft), parentLink)
+                  : saveOkr(draft.objective, draftToGeneratedPlan(draft));
+                if (res.ok) {
+                  toast.success("Черновик OKR сохранён");
                 } else {
-                  saveOkr(draft.objective, draftToGeneratedPlan(draft));
+                  toast.error("Не удалось сохранить — хранилище недоступно (приватный режим или переполнено)");
                 }
-                toast.success("Черновик OKR сохранён");
               }}
               className="sm:w-auto"
             >

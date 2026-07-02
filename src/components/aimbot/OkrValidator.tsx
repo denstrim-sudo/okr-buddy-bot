@@ -30,6 +30,35 @@ const DEFAULT_DRAFT: ValidationDraft = {
   key_results: ["Поднять удержание пользователей на 15%", "Провести 10 интервью с клиентами"],
 };
 
+/**
+ * Рендерит текст, подсвечивая плейсхолдеры X/Y (в т.ч. X% / Y%) как визуальные
+ * маркеры «сюда нужно вписать реальное число». Используется в rewritten-блоках
+ * коуча-редактора.
+ */
+export const renderWithPlaceholders = (text: string): React.ReactNode => {
+  const parts: React.ReactNode[] = [];
+  const re = /\b([XY])(%?)\b/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <mark
+        key={`ph-${key++}`}
+        data-testid="placeholder-xy"
+        className="mx-0.5 inline-flex items-center rounded bg-warning-soft px-1 py-0 text-[0.95em] font-semibold text-warning"
+        title="Плейсхолдер: подставь реальное значение (см. пояснение коуча)"
+      >
+        {m[1]}{m[2]}
+      </mark>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length ? parts : text;
+};
+
 export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);

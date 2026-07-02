@@ -1,5 +1,5 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
-import { getRulesBlock } from "../_shared/okr_rules.ts";
+import { getRulesBlock, getFewShotBlock } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";

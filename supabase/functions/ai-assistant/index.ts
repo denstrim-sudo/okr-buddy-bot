@@ -119,7 +119,7 @@ const MODE_REGISTRY: Record<Mode, {
   validate_okr: {
     toolName: "validate_okr",
     toolDescription: "Audit an OKR and return rule-by-rule findings.",
-    systemPrompt: `You are an expert OKR Coach auditing an OKR (Doerr + OKR-PI). Evaluate against rules O1-O3, KR1-KR4, KR10. Return per-rule pass/hint, overall score 0-100, status, summary, rewritten_objective, rewritten_key_results.${SHARED_SUFFIX}`,
+    systemPrompt: `You are an expert OKR Coach auditing an OKR (Doerr + OKR-PI). Evaluate against rules OBJ-QUALITATIVE, OBJ-AMBITIOUS, OBJ-NO-NUMBERS, KR-MEASURABLE, KR-BASELINE-TARGET, KR-OUTCOME, KR-TIMEBOUND, KR-LEADING. Return per-rule pass/hint, overall score 0-100, status, summary, rewritten_objective, rewritten_key_results.${SHARED_SUFFIX}`,
     parameters: {
       type: "object",
       properties: {

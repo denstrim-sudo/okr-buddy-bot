@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Trash2, Sparkles, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, Sparkles, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { buildForest, type OkrTreeNode } from "@/lib/okrHierarchy";
@@ -10,6 +10,7 @@ interface Props {
   items: SavedOkr[];
   onRemove?: (id: string) => void;
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+  onSendToAudit?: (okr: SavedOkr) => void;
 }
 
 const horizonShortLabel = (h?: OkrHorizon): string => {
@@ -37,11 +38,13 @@ const TreeNode = ({
   depth,
   onRemove,
   onSendToSolutions,
+  onSendToAudit,
 }: {
   node: OkrTreeNode;
   depth: number;
   onRemove?: (id: string) => void;
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+  onSendToAudit?: (okr: SavedOkr) => void;
 }) => {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
@@ -86,6 +89,17 @@ const TreeNode = ({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            {onSendToAudit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSendToAudit(node.okr)}
+                className="h-7 border-navy/30 text-navy hover:bg-navy/10"
+                aria-label="Передать OKR в аудит"
+              >
+                <ShieldCheck className="mr-1 h-3 w-3" /> В аудит
+              </Button>
+            )}
             {onSendToSolutions && (
               <Button
                 variant="outline"
@@ -121,6 +135,7 @@ const TreeNode = ({
               depth={depth + 1}
               onRemove={onRemove}
               onSendToSolutions={onSendToSolutions}
+              onSendToAudit={onSendToAudit}
             />
           ))}
         </ul>
@@ -129,7 +144,7 @@ const TreeNode = ({
   );
 };
 
-export const OkrTree = ({ items, onRemove, onSendToSolutions }: Props) => {
+export const OkrTree = ({ items, onRemove, onSendToSolutions, onSendToAudit }: Props) => {
   const forest = useMemo(() => buildForest(items), [items]);
   if (!items.length) return null;
   return (
@@ -141,6 +156,7 @@ export const OkrTree = ({ items, onRemove, onSendToSolutions }: Props) => {
           depth={0}
           onRemove={onRemove}
           onSendToSolutions={onSendToSolutions}
+          onSendToAudit={onSendToAudit}
         />
       ))}
     </ul>

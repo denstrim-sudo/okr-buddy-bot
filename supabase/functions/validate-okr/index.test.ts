@@ -188,7 +188,7 @@ Deno.test("applyScoreRecompute: пустые/отсутствующие rules �
 
 
 Deno.test({
-  name: "validate-okr [AI]: returns rules + rewrites with same KR count",
+  name: "validate-okr [AI]: mode=audit returns rules БЕЗ rewrites",
   ignore: !RUN_AI,
   async fn() {
     const { status, data } = await callHandler(handler, {
@@ -201,9 +201,32 @@ Deno.test({
     assertEquals(status, 200);
     assert(typeof data.score === "number");
     assert(Array.isArray(data.rules) && data.rules.length >= 5);
-    assertEquals(data.rewritten_key_results.length, 2);
+    assertEquals(data.rewritten_objective, undefined);
+    assertEquals(data.rewritten_key_results, undefined);
   },
 });
+
+Deno.test({
+  name: "validate-okr [AI]: mode=fix возвращает только rewritten_*",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      mode: "fix",
+      objective: "Удвоить выручку к 2026 году",
+      key_results: ["Поднять активацию", "Провести 10 интервью"],
+      failed_rules: [
+        { id: "OBJ-NO-NUMBERS", label: "Без цифр в Objective", hint: "Уберите 2026" },
+        { id: "KR-BASELINE-TARGET", label: "Baseline и target", hint: "Добавьте FROM→TO" },
+      ],
+    });
+    assertEquals(status, 200);
+    assert(typeof data.rewritten_objective === "string" && data.rewritten_objective.length > 0);
+    assertEquals(Array.isArray(data.rewritten_key_results), true);
+    assertEquals(data.rewritten_key_results.length, 2);
+    assertEquals(data.rules, undefined);
+  },
+});
+
 
 // --- isAuditSuspicious: чистая логика ---
 
@@ -592,5 +615,128 @@ Deno.test("buildSystemPrompt: старые id правил (O1..O3, KR1..KR4, KR
     const p = buildSystemPrompt(h);
     assertEquals(oldO.test(p), false, `old O-id найден в промпте для ${h}`);
     assertEquals(oldKR.test(p), false, `old KR-id найден в промпте для ${h}`);
+  }
+});
+
+// =====================================================================
+// Part Б: auditor/editor split — раздельные схемы и режимы
+// =====================================================================
+
+import { buildAuditorParameters, buildEditorParameters, buildEditorPrompt } from "./index.ts";
+
+Deno.test("buildAuditorParameters НЕ содержит rewritten_* в properties", () => {
+  for (const h of ["strategic_3y", "block_12m", "quarter_3m"]) {
+    const p = buildAuditorParameters(h);
+    const keys = Object.keys(p.properties);
+    assertEquals(keys.includes("rewritten_objective"), false, `horizon=${h}: rewritten_objective должен отсутствовать`);
+    assertEquals(keys.includes("rewritten_key_results"), false, `horizon=${h}: rewritten_key_results должен отсутствовать`);
+    // Но rules с reasoning/pass/severity/evidence — на месте
+    const itemProps = p.properties.rules.items.properties;
+    assert(itemProps.reasoning, "rules.items.reasoning должен присутствовать");
+    assert(itemProps.pass, "rules.items.pass должен присутствовать");
+    assert(itemProps.severity, "rules.items.severity должен присутствовать");
+    assert(itemProps.evidence, "rules.items.evidence должен присутствовать");
+  }
+});
+
+Deno.test("buildEditorParameters содержит ТОЛЬКО rewritten_*", () => {
+  const p = buildEditorParameters();
+  const keys = Object.keys(p.properties).sort();
+  assertEquals(keys, ["rewritten_key_results", "rewritten_objective"]);
+  assertEquals(p.required.sort(), ["rewritten_key_results", "rewritten_objective"]);
+});
+
+Deno.test("buildEditorPrompt содержит инструкцию 'закрой ВСЕ проваленные правила разом' и список проваленных правил", () => {
+  const p = buildEditorPrompt(
+    "Стать лидером",
+    ["KR один", "KR два"],
+    [
+      { id: "OBJ-NO-NUMBERS", label: "Без цифр", hint: "Уберите 2026" },
+      { id: "KR-BASELINE-TARGET", label: "Baseline и target", hint: "Добавьте FROM→TO" },
+    ],
+    "block_12m",
+  );
+  assert(/закрой\s+ВСЕ\s+проваленн/i.test(p), "промпт должен требовать закрыть все проваленные правила разом");
+  assert(/не\s+создавая\s+новых/i.test(p), "промпт должен запрещать создавать новые нарушения");
+  assert(p.includes("OBJ-NO-NUMBERS"));
+  assert(p.includes("KR-BASELINE-TARGET"));
+});
+
+Deno.test("buildEditorPrompt для block_12m включает getFewShotBlock (эталон годового горизонта)", () => {
+  const p = buildEditorPrompt("obj", ["kr"], [], "block_12m");
+  assert(/годовой горизонт/i.test(p), "промпт редактора должен включать годовые эталоны");
+});
+
+Deno.test("buildEditorPrompt для quarter_3m включает квартальный эталон (спринт)", () => {
+  const p = buildEditorPrompt("obj", ["kr"], [], "quarter_3m");
+  assert(/спринт/i.test(p), "промпт редактора для квартала должен содержать эталон со спринтом");
+});
+
+// --- handler: mode=audit не заполняет rewritten_*, делает 1 вызов ---
+Deno.test("handler: mode=audit — ровно 1 вызов, rewritten_* пустые/отсутствуют", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  // cleanReport содержит rewritten_*, но handler в audit-mode должен их убрать
+  const getHistory = queueAiResponses([cleanReport]);
+  try {
+    const { status, data } = await callHandler(handler, baseBody);
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 1, "audit mode должен делать ровно 1 вызов");
+    assertEquals(data.rewritten_objective, undefined);
+    assertEquals(data.rewritten_key_results, undefined);
+    assertEquals(data.rewritten_objective_warning, undefined);
+    assert(Array.isArray(data.rules) && data.rules.length > 0);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+// --- handler: mode=fix — вызывает редактора, возвращает rewritten_*, применяет sanitize ---
+Deno.test("handler: mode=fix — возвращает rewritten_*, БЕЗ rules; sanitize пропускает чистый ответ", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const editorClean = {
+    rewritten_objective: "Стать опорой роста для команды",
+    rewritten_key_results: ["KR один чистый", "KR два чистый"],
+  };
+  const getHistory = queueAiResponses([editorClean]);
+  try {
+    const { status, data } = await callHandler(handler, {
+      ...baseBody,
+      mode: "fix",
+      failed_rules: [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "h" }],
+    });
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 1, "fix mode делает 1 вызов редактора при чистом ответе");
+    assertEquals(data.rewritten_objective, "Стать опорой роста для команды");
+    assertEquals(data.rewritten_key_results.length, 2);
+    assertEquals(data.rules, undefined);
+    assertEquals(data.score, undefined);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: mode=fix — грязный rewritten_objective → sanitize делает ровно один redo", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const dirty = {
+    rewritten_objective: "Удвоить выручку к 2026 году",
+    rewritten_key_results: ["KR1", "KR2"],
+  };
+  const clean = {
+    rewritten_objective: "Стать опорой роста",
+    rewritten_key_results: ["KR1", "KR2"],
+  };
+  const getHistory = queueAiResponses([dirty, clean]);
+  try {
+    const { status, data } = await callHandler(handler, {
+      ...baseBody,
+      mode: "fix",
+      failed_rules: [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "h" }],
+    });
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 2, "sanitize должен сделать 1 redo → всего 2 вызова");
+    assertEquals(data.rewritten_objective, "Стать опорой роста");
+    assertEquals(data.rewritten_objective_warning, undefined);
+  } finally {
+    _restoreFetch();
   }
 });

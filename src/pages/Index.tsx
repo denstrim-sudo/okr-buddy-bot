@@ -25,7 +25,12 @@ const Index = () => {
 
   const krTexts = useMemo(() => plan?.key_results?.map((k) => k.text) ?? [], [plan]);
 
-  const buildDraft = (p: GeneratedPlan, obj: string, horizon?: import("@/types/okr").OkrHorizon): ValidationDraft => ({
+  const buildDraft = (
+    p: GeneratedPlan,
+    obj: string,
+    horizon?: import("@/types/okr").OkrHorizon,
+    sourceOkrId?: string,
+  ): ValidationDraft => ({
     objective: p.objective_refined || obj,
     key_results: p.key_results.map((k) => k.text),
     key_results_full: p.key_results.map((k) => ({
@@ -36,11 +41,13 @@ const Index = () => {
       kr_type: k.kr_type,
     })),
     horizon,
+    sourceOkrId,
   });
 
   const handleGenerated = useCallback((p: GeneratedPlan, obj: string, horizon?: import("@/types/okr").OkrHorizon) => {
     setPlan(p);
     setObjective(p.objective_refined || obj);
+    // Из генератора — sourceOkrId=undefined (это свежий черновик, не сохранённый ранее OKR)
     setValidatorDraft(buildDraft(p, obj, horizon));
   }, []);
 
@@ -50,6 +57,13 @@ const Index = () => {
     setValidatorDraft(buildDraft(p, obj));
     requestAnimationFrame(() => {
       document.getElementById("solution-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  const handleSendToAudit = useCallback((okr: import("@/hooks/useSavedOkrs").SavedOkr) => {
+    setValidatorDraft(buildDraft(okr.plan, okr.objective, okr.plan.horizon, okr.id));
+    requestAnimationFrame(() => {
+      document.querySelector('[data-testid="okr-validator"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, []);
 
@@ -91,7 +105,7 @@ const Index = () => {
           </section>
 
           <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>
-            <SavedOkrsList onSendToSolutions={handleSendToSolutions} />
+            <SavedOkrsList onSendToSolutions={handleSendToSolutions} onSendToAudit={handleSendToAudit} />
           </section>
 
           <div className="animate-fade-in" style={{ animationDelay: "180ms" }}>

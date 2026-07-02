@@ -119,3 +119,18 @@ describe("buildForest", () => {
     expect(pNode.children.map((c) => c.okr.id)).toEqual(["c1", "c2"]);
   });
 });
+
+describe("buildForest after replace()", () => {
+  it("замена родителя (тот же id, обновлённый plan) сохраняет поддерево — дети видны в children", () => {
+    const parentBefore = mk("p", "block_12m", "2025-01-01T00:00:00.000Z", undefined, ["KR-orig"]);
+    const child = mk("c", "quarter_3m", "2025-01-02T00:00:00.000Z", { parentOkrId: "p", parentKrIndex: 0 });
+    // Симулируем replace(p): тот же id, тот же savedAt, обновлённый plan
+    const parentAfter: SavedOkr = { ...parentBefore, objective: "P-fixed", plan: { ...parentBefore.plan, objective_refined: "P-fixed" } };
+    const forest = buildForest([parentAfter, child]);
+    expect(forest).toHaveLength(1);
+    expect(forest[0].okr.id).toBe("p");
+    expect(forest[0].okr.objective).toBe("P-fixed");
+    expect(forest[0].children).toHaveLength(1);
+    expect(forest[0].children[0].okr.id).toBe("c");
+  });
+});

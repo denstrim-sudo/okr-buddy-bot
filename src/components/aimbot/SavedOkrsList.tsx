@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles, List, Network, Download, Upload } from "lucide-react";
-import { useSavedOkrs } from "@/hooks/useSavedOkrs";
+import { Trash2, BookmarkCheck, Target, TrendingUp, Sparkles, List, Network, Download, Upload, ShieldCheck } from "lucide-react";
+import { useSavedOkrs, type SavedOkr } from "@/hooks/useSavedOkrs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { GeneratedPlan } from "@/types/okr";
@@ -10,6 +10,7 @@ import { OkrTree } from "./OkrTree";
 
 interface Props {
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+  onSendToAudit?: (okr: SavedOkr) => void;
 }
 
 type ViewMode = "list" | "tree";
@@ -27,7 +28,7 @@ const formatDate = (iso: string) => {
   }
 };
 
-export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
+export const SavedOkrsList = ({ onSendToSolutions, onSendToAudit }: Props) => {
   const { items, remove, clear, exportJson, importJson } = useSavedOkrs();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,7 +185,7 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
           </p>
         </div>
       ) : viewMode === "tree" ? (
-        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} />
+        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} onSendToAudit={onSendToAudit} />
       ) : (
       <ul className="space-y-3">
 
@@ -213,6 +214,17 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
                 <p className="mt-1.5 text-sm font-semibold text-foreground">{item.objective}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {onSendToAudit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSendToAudit(item)}
+                    className="h-8 border-navy/30 text-navy hover:bg-navy/10"
+                    aria-label="Передать OKR в аудит"
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" /> В аудит
+                  </Button>
+                )}
                 {handleSendToSolutions && (
                   <Button
                     variant="outline"

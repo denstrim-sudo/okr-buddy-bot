@@ -202,3 +202,96 @@ describe("OkrValidator (Module 2)", () => {
     expect(screen.queryByTestId("audit-unreliable-warning")).not.toBeInTheDocument();
   });
 });
+
+describe("OkrValidator: fix-button + save/replace", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("кнопка 'Предложить исправления' видна при наличии pass=false правил", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const btn = await screen.findByTestId("request-fix-button");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent(/Предложить исправления/i);
+  });
+
+  it("кнопка 'Предложить исправления' скрыта, если все правила pass=true", async () => {
+    const allPass = {
+      ...validReport,
+      rules: validReport.rules.map((r) => ({ ...r, pass: true })),
+    };
+    invokeMock.mockResolvedValueOnce({ data: allPass, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    expect(screen.queryByTestId("request-fix-button")).not.toBeInTheDocument();
+  });
+
+  it("клик по 'Предложить исправления' вызывает invoke с mode='fix' и failed_rules", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        rewritten_objective: "Стать лидером рынка",
+        rewritten_key_results: ["Обновлённый KR1"],
+      },
+      error: null,
+    });
+    renderWithProviders(<OkrValidator draft={{ objective: "Старый Objective", key_results: ["KR один"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const btn = await screen.findByTestId("request-fix-button");
+    await userEvent.click(btn);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+    expect(invokeMock.mock.calls[1][0]).toBe("validate-okr");
+    expect(invokeMock.mock.calls[1][1].body.mode).toBe("fix");
+    expect(Array.isArray(invokeMock.mock.calls[1][1].body.failed_rules)).toBe(true);
+    const failedIds = invokeMock.mock.calls[1][1].body.failed_rules.map((r: any) => r.id);
+    expect(failedIds).toContain("OBJ-NO-NUMBERS");
+    // После фикса — блок с rewritten появляется
+    await screen.findByText(/Стать лидером рынка/);
+  });
+
+  it("аудит вызывает validate-okr с mode='audit'", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.mode).toBe("audit");
+  });
+
+  it("если sourceOkrId задан → показывается кнопка 'Сохранить исправленную версию'", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    // Предварительно кладём запись в localStorage
+    const item = {
+      id: "okr_src_1",
+      objective: "Original",
+      plan: { objective_refined: "Original", score: 50, key_results: [{ text: "KR1", baseline: "", target: "", metric: "", kr_type: "leading", solutions: [] }] },
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem("aimbot.savedOkrs.v1", JSON.stringify([item]));
+    renderWithProviders(
+      <OkrValidator draft={{ objective: "Original", key_results: ["KR1"], sourceOkrId: "okr_src_1" }} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const btn = await screen.findByTestId("save-replace-button");
+    expect(btn).toBeInTheDocument();
+    expect(screen.queryByTestId("save-as-new-button")).not.toBeInTheDocument();
+    await userEvent.click(btn);
+    // проверяем что запись обновилась
+    const after = JSON.parse(localStorage.getItem("aimbot.savedOkrs.v1")!);
+    expect(after).toHaveLength(1);
+    expect(after[0].id).toBe("okr_src_1");
+    expect(after[0].updatedAt).toBeTruthy();
+  });
+
+  it("если sourceOkrId НЕ задан → показывается кнопка 'Сохранить как новый'", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Ручной", key_results: ["KR1"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByTestId("save-as-new-button");
+    expect(screen.queryByTestId("save-replace-button")).not.toBeInTheDocument();
+  });
+});

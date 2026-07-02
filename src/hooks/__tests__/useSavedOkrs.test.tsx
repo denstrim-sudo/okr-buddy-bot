@@ -238,3 +238,98 @@ describe("detectCycle", () => {
     expect(detectCycle(items, "A", "A")).toBe(true);
   });
 });
+
+describe("replace", () => {
+  const makePlan = (horizon?: OkrHorizon): GeneratedPlan => ({
+    objective_refined: "Obj",
+    score: 80,
+    key_results: [
+      { text: "KR1", baseline: "0", target: "1", metric: "%", kr_type: "leading", solutions: [] },
+    ],
+    ...(horizon ? { horizon } : {}),
+  });
+
+  beforeEach(() => localStorage.clear());
+
+  it("replace обновляет запись НА МЕСТЕ: тот же id, сохраняются parentOkrId/parentKrIndex", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    let parent!: SavedOkr, child!: SavedOkr;
+    act(() => { parent = result.current.save("P", makePlan("block_12m")).item; });
+    act(() => {
+      child = result.current.save("C", makePlan("quarter_3m"), {
+        parentOkrId: parent.id,
+        parentKrIndex: 0,
+      }).item;
+    });
+    const nextPlan = { ...makePlan("quarter_3m"), score: 92 };
+    let res!: { ok: boolean; item?: SavedOkr };
+    act(() => { res = result.current.replace(child.id, "C-fixed", nextPlan); });
+    expect(res.ok).toBe(true);
+    const after = result.current.items.find((i) => i.id === child.id)!;
+    expect(after.id).toBe(child.id);
+    expect(after.objective).toBe("C-fixed");
+    expect(after.plan.score).toBe(92);
+    expect(after.parentOkrId).toBe(parent.id);
+    expect(after.parentKrIndex).toBe(0);
+    // savedAt сохраняется исходным
+    expect(after.savedAt).toBe(child.savedAt);
+    // updatedAt проставлен
+    expect(after.updatedAt).toBeTruthy();
+  });
+
+  it("replace сохраняет детей: после замены родителя дети продолжают ссылаться на его id", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    let a!: SavedOkr, b!: SavedOkr, c!: SavedOkr;
+    act(() => { a = result.current.save("A", makePlan("strategic_3y")).item; });
+    act(() => {
+      b = result.current.save("B", makePlan("block_12m"), { parentOkrId: a.id, parentKrIndex: 0 }).item;
+    });
+    act(() => {
+      c = result.current.save("C", makePlan("quarter_3m"), { parentOkrId: b.id, parentKrIndex: 0 }).item;
+    });
+    // Заменяем B — дети (C) не должны осиротеть
+    act(() => { result.current.replace(b.id, "B-fixed", makePlan("block_12m")); });
+    const cAfter = result.current.items.find((i) => i.id === c.id)!;
+    expect(cAfter.parentOkrId).toBe(b.id);
+    const children = result.current.getChildren(b.id);
+    expect(children.map((x) => x.id)).toEqual([c.id]);
+  });
+
+  it("replace несуществующего id возвращает { ok:false } и не меняет items", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    act(() => { result.current.save("A", makePlan()); });
+    const before = result.current.items;
+    let res!: { ok: boolean };
+    act(() => { res = result.current.replace("nope_no_such_id", "x", makePlan()); });
+    expect(res.ok).toBe(false);
+    expect(result.current.items).toBe(before);
+  });
+
+  it("replace обновляет plan/objective, но НЕ трогает savedAt (updatedAt отдельным полем)", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    let item!: SavedOkr;
+    act(() => { item = result.current.save("X", makePlan("block_12m")).item; });
+    const origSaved = item.savedAt;
+    act(() => { result.current.replace(item.id, "X2", { ...makePlan("quarter_3m"), score: 55 }); });
+    const after = result.current.items.find((i) => i.id === item.id)!;
+    expect(after.savedAt).toBe(origSaved);
+    expect(after.updatedAt).toBeTruthy();
+    expect(after.updatedAt).not.toBe(origSaved);
+    expect(after.plan.horizon).toBe("quarter_3m");
+    expect(after.objective).toBe("X2");
+  });
+
+  it("replace возвращает ok:false и не роняет hook, если localStorage бросает", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    let item!: SavedOkr;
+    act(() => { item = result.current.save("X", makePlan()).item; });
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceeded");
+    });
+    let res!: { ok: boolean };
+    act(() => { res = result.current.replace(item.id, "X2", makePlan()); });
+    expect(res.ok).toBe(false);
+    expect(result.current.persistError).toBe(true);
+    spy.mockRestore();
+  });
+});

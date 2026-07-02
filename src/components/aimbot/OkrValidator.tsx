@@ -187,7 +187,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           </div>
           {horizon === "quarter_3m" && (
             <p className="text-[11px] text-muted-foreground">
-              Применяю квартальный набор правил: KR10 (leading) повышен до critical, плюс Q-Focus (2–4 KR), Q-Theme (одна тема), Q-Reach (достижимость за 90 дней).
+              Применяю квартальный набор правил: KR-LEADING повышен до critical, плюс Q-FOCUS (2–4 KR), Q-THEME (одна тема), Q-REACH (достижимость за 90 дней).
             </p>
           )}
         </div>

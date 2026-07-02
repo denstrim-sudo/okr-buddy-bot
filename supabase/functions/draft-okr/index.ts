@@ -137,7 +137,7 @@ export function capKeyResults<T extends { key_results?: any; horizon_fit?: any }
 
 /**
  * Серверный пересчёт score_hint из self_audit.{critical_fails,important_fails}.
- * Собираем псевдо-rules[] по known ids для горизонта (KR10 для quarter_3m → critical),
+ * Собираем псевдо-rules[] по known ids для горизонта (KR-LEADING для quarter_3m → critical),
  * считаем recomputeScore и подменяем score_hint при расхождении >10.
  */
 export function applyScoreHintRecompute<T extends {

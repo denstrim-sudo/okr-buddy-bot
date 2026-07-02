@@ -91,7 +91,7 @@ export function isGrounded(
   return haystack.includes(ev);
 }
 
-const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило O3. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
+const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило OBJ-NO-NUMBERS. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
 
 /**
  * Гарантирует, что rewritten_objective не содержит цифр.

@@ -192,7 +192,7 @@ export const handler = async (req: Request) => {
       extra_context,
       "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
     );
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит O3). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит OBJ-NO-NUMBERS). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
 
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;

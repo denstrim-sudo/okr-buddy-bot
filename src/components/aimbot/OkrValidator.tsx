@@ -37,7 +37,7 @@ const DEFAULT_DRAFT: ValidationDraft = {
  */
 export const renderWithPlaceholders = (text: string): React.ReactNode => {
   const parts: React.ReactNode[] = [];
-  const re = /\b([XY])(%?)\b/g;
+  const re = /\b([XY])(%?)(?![A-Za-zА-Яа-я0-9])/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let key = 0;

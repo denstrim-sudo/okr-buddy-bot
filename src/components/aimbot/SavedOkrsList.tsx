@@ -185,7 +185,7 @@ export const SavedOkrsList = ({ onSendToSolutions, onSendToAudit }: Props) => {
           </p>
         </div>
       ) : viewMode === "tree" ? (
-        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} />
+        <OkrTree items={items} onRemove={handleRemove} onSendToSolutions={handleSendToSolutions} onSendToAudit={onSendToAudit} />
       ) : (
       <ul className="space-y-3">
 

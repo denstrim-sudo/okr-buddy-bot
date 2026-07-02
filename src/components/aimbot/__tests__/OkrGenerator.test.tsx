@@ -222,7 +222,7 @@ describe("OkrGenerator (Module 1)", () => {
     await screen.findByRole("button", { name: /Сохранить/i });
     expect(screen.getByText(/Будет сохранён как дочерний к:/i)).toBeInTheDocument();
     expect(screen.getByText(/Родитель X/)).toBeInTheDocument();
-    expect(screen.getByText(/KR1/)).toBeInTheDocument();
+    expect(screen.getByText(/Будет сохранён как дочерний к:/i).textContent).toMatch(/KR1/);
   });
 
   it("без parentLink индикатор связи не показывается", async () => {

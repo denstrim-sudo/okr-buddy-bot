@@ -102,7 +102,7 @@ describe("SavedOkrsList empty state & export/import", () => {
     const { container } = render(<SavedOkrsList />);
     expect(container.firstChild).not.toBeNull();
     expect(screen.getByText(/Здесь появятся сохранённые OKR/i)).toBeInTheDocument();
-    expect(screen.getByText(/Сохранённые OKR/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Сохранённые OKR/i })).toBeInTheDocument();
     // Переключатель Список/Дерево скрыт
     expect(screen.queryByRole("button", { name: /Список/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Дерево/i })).toBeNull();

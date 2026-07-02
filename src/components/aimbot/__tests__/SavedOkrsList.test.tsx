@@ -128,7 +128,7 @@ describe("SavedOkrsList empty state & export/import", () => {
     expect(revokeUrl).toHaveBeenCalled();
   });
 
-  it("Импорт: выбор файла вызывает importJson и добавляет OKR", async () => {
+  it("Импорт: выбор файла вызывает importJson и добавляет OKR в localStorage", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(false); // merge
     render(<SavedOkrsList />);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -137,14 +137,16 @@ describe("SavedOkrsList empty state & export/import", () => {
       items: [
         {
           id: "imp_1",
-          objective: "Imported",
+          objective: "ImportedOkrObj",
           savedAt: "2025-01-01T00:00:00.000Z",
-          plan: { objective_refined: "Imported", score: 0, horizon: "block_12m", key_results: [] },
+          plan: { objective_refined: "ImportedOkrObj", score: 0, horizon: "block_12m", key_results: [] },
         },
       ],
     });
     const file = new File([payload], "backup.json", { type: "application/json" });
     await userEvent.upload(fileInput, file);
-    await screen.findByText(/Imported/);
+    await screen.findByText("ImportedOkrObj");
+    const stored = JSON.parse(localStorage.getItem("aimbot.savedOkrs.v1") || "[]");
+    expect(stored.some((i: any) => i.id === "imp_1")).toBe(true);
   });
 });

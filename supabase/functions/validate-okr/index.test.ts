@@ -37,7 +37,7 @@ Deno.test("buildSystemPrompt('strategic_3y') НЕ содержит кварта�
 });
 
 Deno.test({
-  name: "validate-okr [AI]: quarter_3m + no leading KR → KR10 critical fail",
+  name: "validate-okr [AI]: quarter_3m + no leading KR → KR-LEADING critical fail",
   ignore: !RUN_AI,
   async fn() {
     const { status, data } = await callHandler(handler, {
@@ -49,10 +49,10 @@ Deno.test({
       horizon: "quarter_3m",
     });
     assertEquals(status, 200);
-    const kr10 = (data.rules || []).find((r: any) => r.id === "KR10");
-    assert(kr10, "KR10 must be present in rules");
-    assertEquals(kr10.pass, false);
-    assertEquals(kr10.severity, "critical");
+    const rule = (data.rules || []).find((r: any) => r.id === "KR-LEADING");
+    assert(rule, "KR-LEADING must be present in rules");
+    assertEquals(rule.pass, false);
+    assertEquals(rule.severity, "critical");
   },
 });
 

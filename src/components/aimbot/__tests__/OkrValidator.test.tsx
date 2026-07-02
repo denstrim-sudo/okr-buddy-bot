@@ -295,3 +295,80 @@ describe("OkrValidator: fix-button + save/replace", () => {
     expect(screen.queryByTestId("save-replace-button")).not.toBeInTheDocument();
   });
 });
+
+// =====================================================================
+// Coach-mode редактора (mode=fix): editor_note + подсветка X/Y
+// =====================================================================
+import { render } from "@testing-library/react";
+import { renderWithPlaceholders } from "@/components/aimbot/OkrValidator";
+
+describe("OkrValidator: coach-mode rendering (mode=fix)", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("editor_note из ответа fix рендерится под предложениями редактора", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        rewritten_objective: "Стать опорой роста для команды",
+        rewritten_key_results: ["Поднять активацию с X% до Y%"],
+        editor_note: "Заменил глагол на исход; baseline/target возьми из отчёта Amplitude.",
+      },
+      error: null,
+    });
+    renderWithProviders(<OkrValidator draft={{ objective: "Старый", key_results: ["Активация"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const btn = await screen.findByTestId("request-fix-button");
+    await userEvent.click(btn);
+    const note = await screen.findByTestId("editor-note");
+    expect(note).toHaveTextContent(/baseline\/target возьми из отчёта Amplitude/i);
+    expect(note).toHaveTextContent(/Коуч:/);
+  });
+
+  it("плейсхолдеры X/Y в rewritten подсвечены визуальным маркером", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        rewritten_objective: "Стать опорой роста",
+        rewritten_key_results: ["Поднять активацию с X% до Y%"],
+        editor_note: "note",
+      },
+      error: null,
+    });
+    renderWithProviders(<OkrValidator draft={{ objective: "Old", key_results: ["Активация"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    const btn = await screen.findByTestId("request-fix-button");
+    await userEvent.click(btn);
+    await screen.findByText(/Поднять активацию/);
+    const placeholders = screen.getAllByTestId("placeholder-xy");
+    expect(placeholders.length).toBeGreaterThanOrEqual(2);
+    expect(placeholders.map((el) => el.textContent)).toEqual(
+      expect.arrayContaining(["X%", "Y%"]),
+    );
+  });
+});
+
+describe("renderWithPlaceholders (unit)", () => {
+  it("оборачивает X и Y (в т.ч. с %) в mark с data-testid=placeholder-xy", () => {
+    const { container } = render(<div>{renderWithPlaceholders("с X% до Y% за квартал")}</div>);
+    const marks = container.querySelectorAll('[data-testid="placeholder-xy"]');
+    expect(marks.length).toBe(2);
+    expect(marks[0].textContent).toBe("X%");
+    expect(marks[1].textContent).toBe("Y%");
+  });
+
+  it("не трогает обычный текст без X/Y-плейсхолдеров", () => {
+    const { container } = render(<div>{renderWithPlaceholders("Просто текст без маркеров")}</div>);
+    expect(container.querySelectorAll('[data-testid="placeholder-xy"]').length).toBe(0);
+    expect(container.textContent).toBe("Просто текст без маркеров");
+  });
+
+  it("не подсвечивает X/Y внутри слов (только целые слова)", () => {
+    const { container } = render(<div>{renderWithPlaceholders("XML и YAML не должны триггериться")}</div>);
+    expect(container.querySelectorAll('[data-testid="placeholder-xy"]').length).toBe(0);
+  });
+});
+

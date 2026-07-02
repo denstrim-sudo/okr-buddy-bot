@@ -38,11 +38,13 @@ const TreeNode = ({
   depth,
   onRemove,
   onSendToSolutions,
+  onSendToAudit,
 }: {
   node: OkrTreeNode;
   depth: number;
   onRemove?: (id: string) => void;
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+  onSendToAudit?: (okr: SavedOkr) => void;
 }) => {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;

@@ -105,7 +105,7 @@ const Index = () => {
           </section>
 
           <section className="animate-fade-in" style={{ animationDelay: "150ms" }}>
-            <SavedOkrsList onSendToSolutions={handleSendToSolutions} />
+            <SavedOkrsList onSendToSolutions={handleSendToSolutions} onSendToAudit={handleSendToAudit} />
           </section>
 
           <div className="animate-fade-in" style={{ animationDelay: "180ms" }}>

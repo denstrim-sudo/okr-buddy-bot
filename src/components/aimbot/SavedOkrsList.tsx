@@ -62,10 +62,17 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
     }
   };
 
+  const readFileAsText = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error ?? new Error("read error"));
+      reader.readAsText(file);
+    });
+
   const handleImportFile = async (file: File) => {
     try {
-      // File.text() не поддерживается в jsdom-тестах — идём через Response.
-      const text = await new Response(file).text();
+      const text = await readFileAsText(file);
       const mode: "replace" | "merge" = confirm(
         "OK — заменить все текущие OKR содержимым файла.\nОтмена — добавить к текущим (merge).",
       )

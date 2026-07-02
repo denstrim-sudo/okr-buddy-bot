@@ -68,6 +68,7 @@ describe("OkrGenerator (Module 1)", () => {
     invokeMock.mockReset();
     savedState.items = [];
     savedState.save.mockReset();
+    savedState.save.mockImplementation(() => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true }));
     localStorage.clear();
     sessionStorage.clear();
   });

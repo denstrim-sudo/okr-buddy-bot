@@ -858,11 +858,4 @@ Deno.test("handler mode=fix: sanitizeRewrittenObjective по-прежнему п
   }
 });
 
-    assertEquals(status, 200);
-    assertEquals(getHistory().length, 2, "sanitize должен сделать 1 redo → всего 2 вызова");
-    assertEquals(data.rewritten_objective, "Стать опорой роста");
-    assertEquals(data.rewritten_objective_warning, undefined);
-  } finally {
-    _restoreFetch();
-  }
-});
+

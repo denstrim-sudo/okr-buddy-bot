@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Trash2, Sparkles, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, Sparkles, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { buildForest, type OkrTreeNode } from "@/lib/okrHierarchy";
@@ -10,6 +10,7 @@ interface Props {
   items: SavedOkr[];
   onRemove?: (id: string) => void;
   onSendToSolutions?: (plan: GeneratedPlan, objective: string) => void;
+  onSendToAudit?: (okr: SavedOkr) => void;
 }
 
 const horizonShortLabel = (h?: OkrHorizon): string => {

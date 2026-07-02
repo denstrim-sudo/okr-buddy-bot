@@ -639,11 +639,16 @@ Deno.test("buildAuditorParameters НЕ содержит rewritten_* в propertie
   }
 });
 
-Deno.test("buildEditorParameters содержит ТОЛЬКО rewritten_*", () => {
+Deno.test("buildEditorParameters содержит rewritten_* и опциональный editor_note", () => {
   const p = buildEditorParameters();
   const keys = Object.keys(p.properties).sort();
-  assertEquals(keys, ["rewritten_key_results", "rewritten_objective"]);
+  assertEquals(keys, ["editor_note", "rewritten_key_results", "rewritten_objective"]);
+  // required — только rewritten_*, editor_note опционален
   assertEquals(p.required.sort(), ["rewritten_key_results", "rewritten_objective"]);
+  // editor_note — строка, русскоязычное краткое пояснение коуча
+  assertEquals(p.properties.editor_note.type, "string");
+  assert(/X\/Y|плейсхолдер/i.test(p.properties.editor_note.description ?? ""),
+    "editor_note.description должен упоминать плейсхолдеры X/Y");
 });
 
 Deno.test("buildEditorPrompt содержит инструкцию 'закрой ВСЕ проваленные правила разом' и список проваленных правил", () => {

@@ -89,6 +89,17 @@ const TreeNode = ({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            {onSendToAudit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSendToAudit(node.okr)}
+                className="h-7 border-navy/30 text-navy hover:bg-navy/10"
+                aria-label="Передать OKR в аудит"
+              >
+                <ShieldCheck className="mr-1 h-3 w-3" /> В аудит
+              </Button>
+            )}
             {onSendToSolutions && (
               <Button
                 variant="outline"

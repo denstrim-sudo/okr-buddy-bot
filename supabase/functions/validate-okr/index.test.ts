@@ -269,12 +269,12 @@ function queueAiResponses(payloads: unknown[]): () => FetchCall[] {
 }
 
 const cleanRules = [
-  { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "O3", label: "L", pass: false, hint: "h", severity: "critical", why: "w" },
-  { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR2", label: "L", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR3", label: "L", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR10", label: "L", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "O3", label: "L", reasoning: "", pass: false, hint: "h", severity: "critical", why: "w" },
+  { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR2", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR3", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
 ];
 const cleanReport = {
   score: 78,
@@ -420,13 +420,13 @@ Deno.test("buildParameters: rules.items.properties.id.enum === knownRuleIdsFor(h
 // --- handler: серверный расчёт grounded ---
 
 const rulesWithEvidence = [
-  { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   // evidence реально встречается во втором KR
-  { id: "KR3", label: "L", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
+  { id: "KR3", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
   // evidence выдумана
-  { id: "KR2", label: "L", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
-  { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
-  { id: "KR10", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "KR2", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
+  { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
 ];
 const reportWithEvidence = {
   score: 78,
@@ -486,11 +486,11 @@ Deno.test("handler: pass=true правила получают grounded=true ав
 Deno.test("handler: KR10 c severity='critical' от модели для block_12m → серверно исправлен на 'important'", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const rulesModelWrongSeverity = [
-    { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
     // Модель прислала critical, но для block_12m по severityFor должно быть important
-    { id: "KR10", label: "L", pass: true, hint: "", severity: "critical", why: "", evidence: "" },
-    { id: "O3", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
-    { id: "KR1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "critical", why: "", evidence: "" },
+    { id: "O3", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   ];
   queueAiResponses([{ ...reportWithEvidence, rules: rulesModelWrongSeverity }]);
   try {
@@ -508,8 +508,8 @@ Deno.test("handler: KR10 c severity='critical' от модели для block_12
 Deno.test("handler: KR10 для quarter_3m серверно ставится 'critical' независимо от модели", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const rules = [
-    { id: "KR10", label: "L", pass: false, hint: "h", severity: "improve", why: "w", evidence: "" },
-    { id: "O1", label: "L", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR10", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "" },
+    { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   ];
   queueAiResponses([{ ...reportWithEvidence, rules }]);
   try {

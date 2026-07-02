@@ -22,6 +22,11 @@ export type ImportResult =
 
 const KEY = "aimbot.savedOkrs.v1";
 
+// Монотонный счётчик — чтобы savedAt был строго возрастающим даже при
+// нескольких save() внутри одного мс (иначе сортировка нестабильна).
+let saveSeq = 0;
+const nextSavedAt = () => new Date(Date.now() + saveSeq++).toISOString();
+
 const load = (): SavedOkr[] => {
   if (typeof window === "undefined") return [];
   try {

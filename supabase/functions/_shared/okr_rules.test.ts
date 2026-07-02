@@ -1,5 +1,5 @@
 import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER } from "./okr_rules.ts";
+import { OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER, getFewShotBlock } from "./okr_rules.ts";
 import { containsDigits } from "./textGuards.ts";
 
 // --- O2 wording (snapshot guard against the old "ограничен по времени" formulation

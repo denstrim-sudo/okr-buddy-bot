@@ -569,6 +569,17 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">AI-предложения по улучшению</p>
           </div>
 
+          {report?.editor_note && (
+            <p
+              data-testid="editor-note"
+              className="rounded-md border border-primary/20 bg-background/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground"
+            >
+              <span className="font-semibold text-primary">Коуч: </span>
+              {report.editor_note}
+            </p>
+          )}
+
+
           {report?.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
             <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>

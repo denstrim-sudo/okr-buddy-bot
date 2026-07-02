@@ -115,12 +115,13 @@ Deno.test("OKR_RULES_BLOCK_QUARTER использует Q-FOCUS/Q-THEME/Q-REACH 
 });
 
 Deno.test("BASE_RULES содержит явную сноску про разведение id-правил и номеров KR пользователя", () => {
-  // Сноска живёт в файле okr_rules.ts как комментарий над BASE_RULES; проверяем
-  // читая исходник, чтобы гарантировать её присутствие.
-  const src = Deno.readTextFileSync(new URL("./okr_rules.ts", import.meta.url));
   assert(
-    /НЕ номера ключевых результатов пользователя/i.test(src),
-    "okr_rules.ts должен содержать сноску про разведение id-правил и номеров KR пользователя",
+    /НЕ номера ключевых результатов пользователя/i.test(OKR_RULES_BLOCK),
+    "OKR_RULES_BLOCK должен содержать сноску про разведение id-правил и номеров KR пользователя",
+  );
+  assert(
+    /НЕ номера ключевых результатов пользователя/i.test(OKR_RULES_BLOCK_QUARTER),
+    "OKR_RULES_BLOCK_QUARTER должен содержать ту же сноску",
   );
 });
 

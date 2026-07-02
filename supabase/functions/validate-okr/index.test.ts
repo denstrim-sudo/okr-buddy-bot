@@ -556,3 +556,32 @@ Deno.test({
     assertEquals(returnedIds, [...expected].sort());
   },
 });
+
+// --- chain-of-thought: reasoning идёт ДО pass в схеме ---
+
+Deno.test("buildParameters: rules.items.properties.reasoning стоит РАНЬШЕ pass", () => {
+  const props = buildParameters(undefined).properties.rules.items.properties;
+  const keys = Object.keys(props);
+  const iReasoning = keys.indexOf("reasoning");
+  const iPass = keys.indexOf("pass");
+  assert(iReasoning >= 0, "reasoning должно быть в properties");
+  assert(iPass >= 0, "pass должно быть в properties");
+  assert(iReasoning < iPass, `reasoning (${iReasoning}) должно идти РАНЬШЕ pass (${iPass})`);
+});
+
+Deno.test("buildParameters: reasoning входит в required", () => {
+  const required = buildParameters(undefined).properties.rules.items.required as string[];
+  assert(required.includes("reasoning"), `required=${JSON.stringify(required)}`);
+});
+
+Deno.test("buildSystemPrompt содержит блок ЭТАЛОНЫ и инструкцию про reasoning ДО pass", () => {
+  const p = buildSystemPrompt("block_12m");
+  assert(p.includes("ЭТАЛОНЫ"), "промпт должен содержать блок ЭТАЛОНЫ");
+  assert(/reasoning.*ДО\s+pass/i.test(p) || /Заполняется\s+ДО\s+pass/i.test(p),
+    "промпт должен требовать reasoning ДО pass");
+});
+
+Deno.test("buildSystemPrompt('quarter_3m') содержит квартальный эталон (спринт)", () => {
+  const p = buildSystemPrompt("quarter_3m");
+  assert(/спринт/i.test(p), "квартальный промпт должен содержать эталон со спринтом");
+});

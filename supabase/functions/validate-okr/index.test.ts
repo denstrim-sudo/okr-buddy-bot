@@ -17,22 +17,22 @@ Deno.test("validate-okr: requires at least one KR", async () => {
 // --- buildSystemPrompt: правила переключаются по горизонту ---
 Deno.test("buildSystemPrompt('quarter_3m') содержит маркеры квартальных правил", () => {
   const p = buildSystemPrompt("quarter_3m");
-  assert(p.includes("Q-Focus"));
-  assert(p.includes("Q-Theme"));
-  assert(p.includes("Q-Reach"));
+  assert(p.includes("Q-FOCUS"));
+  assert(p.includes("Q-THEME"));
+  assert(p.includes("Q-REACH"));
   assert(p.includes("применяй КВАРТАЛЬНЫЙ набор правил"));
 });
 
 Deno.test("buildSystemPrompt('block_12m') НЕ содержит квартальных маркеров", () => {
   const p = buildSystemPrompt("block_12m");
-  assert(!p.includes("Q-Focus"));
-  assert(!p.includes("Q-Theme"));
-  assert(!p.includes("Q-Reach"));
+  assert(!p.includes("Q-FOCUS"));
+  assert(!p.includes("Q-THEME"));
+  assert(!p.includes("Q-REACH"));
 });
 
 Deno.test("buildSystemPrompt('strategic_3y') НЕ содержит квартальных маркеров", () => {
   const p = buildSystemPrompt("strategic_3y");
-  assert(!p.includes("Q-Focus"));
+  assert(!p.includes("Q-FOCUS"));
   assert(!p.includes("применяй КВАРТАЛЬНЫЙ"));
 });
 

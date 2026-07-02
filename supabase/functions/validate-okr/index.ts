@@ -28,7 +28,7 @@ For EACH rule you MUST return:
 
 ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
 
-ВАЖНО про O2 + O3: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило O3. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
+ВАЖНО про OBJ-AMBITIOUS + OBJ-NO-NUMBERS: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило OBJ-NO-NUMBERS. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
 
 Return STRICT JSON only via the provided tool.
 

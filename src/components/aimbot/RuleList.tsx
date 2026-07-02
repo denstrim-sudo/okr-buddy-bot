@@ -16,11 +16,13 @@ const severityMeta = (s: RuleSeverity) => {
   return { label: "Улучшение", cls: "bg-muted text-muted-foreground", Icon: Sparkles, dot: "bg-muted-foreground/60" };
 };
 
-const renderRule = (r: ValidationRule, isSm: boolean) => {
+const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
+  const [showReasoning, setShowReasoning] = useState(false);
   const sev: RuleSeverity | undefined = r.pass ? undefined : (r.severity ?? "important");
   const meta = sev ? severityMeta(sev) : null;
+  const hasReasoning = !isSm && !!r.reasoning && r.reasoning.trim().length > 0;
   return (
-    <li key={r.id} className={cn("flex items-start", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
+    <li className={cn("flex items-start", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
       {r.pass ? (
         <CheckCircle2 className={cn("mt-0.5 shrink-0 text-success", isSm ? "h-3.5 w-3.5" : "h-4 w-4")} />
       ) : isSm && meta ? (
@@ -60,10 +62,34 @@ const renderRule = (r: ValidationRule, isSm: boolean) => {
             <span><span className="font-medium not-italic">Почему важно:</span> {r.why}</span>
           </p>
         )}
+        {hasReasoning && (
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => setShowReasoning((v) => !v)}
+              data-testid={`rule-reasoning-toggle-${r.id}`}
+              className="text-[10px] font-medium text-muted-foreground/70 hover:text-foreground"
+            >
+              {showReasoning ? "Скрыть рассуждение" : "Показать рассуждение"}
+            </button>
+            {showReasoning && (
+              <p
+                data-testid={`rule-reasoning-${r.id}`}
+                className="mt-1 rounded border border-border/50 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground"
+              >
+                {r.reasoning}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
 };
+
+const renderRule = (r: ValidationRule, isSm: boolean) => (
+  <RuleItem key={r.id} r={r} isSm={isSm} />
+);
 
 export const RuleList = ({ rules, size = "md" }: Props) => {
   const isSm = size === "sm";

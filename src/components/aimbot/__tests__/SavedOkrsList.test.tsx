@@ -144,7 +144,7 @@ describe("SavedOkrsList empty state & export/import", () => {
       ],
     });
     const file = new File([payload], "backup.json", { type: "application/json" });
-    await userEvent.upload(fileInput, file);
+    fireEvent.change(fileInput, { target: { files: [file] } });
     await screen.findByText("ImportedOkrObj");
     const stored = JSON.parse(localStorage.getItem("aimbot.savedOkrs.v1") || "[]");
     expect(stored.some((i: any) => i.id === "imp_1")).toBe(true);

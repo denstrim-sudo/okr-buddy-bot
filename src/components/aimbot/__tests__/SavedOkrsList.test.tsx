@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import type { SavedOkr } from "@/hooks/useSavedOkrs";
 

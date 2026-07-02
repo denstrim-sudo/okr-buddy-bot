@@ -120,10 +120,8 @@ describe("SavedOkrsList empty state & export/import", () => {
     ]);
     const createUrl = vi.fn(() => "blob:test");
     const revokeUrl = vi.fn();
-    // @ts-expect-error jsdom
-    URL.createObjectURL = createUrl;
-    // @ts-expect-error jsdom
-    URL.revokeObjectURL = revokeUrl;
+    (URL as any).createObjectURL = createUrl;
+    (URL as any).revokeObjectURL = revokeUrl;
     render(<SavedOkrsList />);
     await user.click(screen.getByRole("button", { name: /Экспорт/i }));
     expect(createUrl).toHaveBeenCalled();

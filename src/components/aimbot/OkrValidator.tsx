@@ -620,7 +620,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   {oldKr && <p className="text-muted-foreground line-through">{oldKr}</p>}
                   <div className="flex items-start gap-1.5">
                     <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <p className="font-medium text-foreground">{newKr}</p>
+                    <p className="font-medium text-foreground">{renderWithPlaceholders(newKr)}</p>
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">

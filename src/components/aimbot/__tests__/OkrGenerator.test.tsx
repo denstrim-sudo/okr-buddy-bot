@@ -13,7 +13,7 @@ vi.mock("sonner", () => ({
 
 const savedState = vi.hoisted(() => ({
   items: [] as any[],
-  save: vi.fn(),
+  save: vi.fn(() => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true })),
 }));
 vi.mock("@/hooks/useSavedOkrs", () => ({
   useSavedOkrs: () => ({
@@ -24,6 +24,9 @@ vi.mock("@/hooks/useSavedOkrs", () => ({
     getChildren: () => [],
     getRoots: () => savedState.items,
     removeWithDescendants: vi.fn(),
+    persistError: false,
+    exportJson: () => "{}",
+    importJson: () => ({ ok: true, count: 0 }),
   }),
 }));
 

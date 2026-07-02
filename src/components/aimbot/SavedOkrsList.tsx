@@ -64,7 +64,8 @@ export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
 
   const handleImportFile = async (file: File) => {
     try {
-      const text = await file.text();
+      // File.text() не поддерживается в jsdom-тестах — идём через Response.
+      const text = await new Response(file).text();
       const mode: "replace" | "merge" = confirm(
         "OK — заменить все текущие OKR содержимым файла.\nОтмена — добавить к текущим (merge).",
       )

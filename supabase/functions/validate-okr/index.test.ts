@@ -134,17 +134,16 @@ Deno.test("sanitize: если redo бросает — initial помечаетс
 // --- applyScoreRecompute: чистая логика серверного пересчёта ---
 
 Deno.test("applyScoreRecompute: расхождение >10 → подменяет score, ставит флаг", () => {
-  // 1 critical fail из 7 правил, остальные pass → recomputed=60 (потолок). Модель отдала 85.
   const data: any = {
     score: 85,
     rules: [
-      { id: "O3", pass: false, severity: "critical" },
-      { id: "KR1", pass: true, severity: "critical" },
-      { id: "KR2", pass: true, severity: "critical" },
-      { id: "KR3", pass: true, severity: "critical" },
-      { id: "O1", pass: true, severity: "important" },
-      { id: "KR4", pass: true, severity: "important" },
-      { id: "KR10", pass: true, severity: "important" },
+      { id: "OBJ-NO-NUMBERS", pass: false, severity: "critical" },
+      { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+      { id: "KR-BASELINE-TARGET", pass: true, severity: "critical" },
+      { id: "KR-OUTCOME", pass: true, severity: "critical" },
+      { id: "OBJ-QUALITATIVE", pass: true, severity: "important" },
+      { id: "KR-TIMEBOUND", pass: true, severity: "important" },
+      { id: "KR-LEADING", pass: true, severity: "important" },
     ],
   };
   applyScoreRecompute(data);
@@ -161,20 +160,18 @@ Deno.test("applyScoreRecompute: расхождение ≤10 → не трога
       { id: "C", pass: false, severity: "improve" },
     ],
   };
-  // recomputed = round(100 * 5/6) = 83. |85-83| = 2 ≤ 10.
   applyScoreRecompute(data);
   assertEquals(data.score, 85);
   assertEquals(data.score_recomputed, undefined);
 });
 
-Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR10 для quarter_3m = critical)", () => {
-  // KR10 без severity, pass=false, horizon=quarter_3m → должен сработать потолок 60.
+Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR-LEADING для quarter_3m = critical)", () => {
   const data: any = {
     score: 90,
     rules: [
-      { id: "KR10", pass: false }, // нет severity, но id → critical для quarter
-      { id: "O1", pass: true },
-      { id: "KR1", pass: true },
+      { id: "KR-LEADING", pass: false }, // нет severity, но id → critical для quarter
+      { id: "OBJ-QUALITATIVE", pass: true },
+      { id: "KR-MEASURABLE", pass: true },
     ],
   };
   applyScoreRecompute(data, "quarter_3m");

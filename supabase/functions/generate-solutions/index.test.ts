@@ -44,3 +44,11 @@ Deno.test("generate-solutions: SYSTEM_PROMPT содержит анти-тавт�
   assert(/потому что.*(механизм|переформулировк)/i.test(SYSTEM_PROMPT),
     "должен быть тест на 'потому что = механизм ≠ переформулировка следствия'");
 });
+
+// --- grep-guard: старые id правил не встречаются в SYSTEM_PROMPT ---
+Deno.test("generate-solutions SYSTEM_PROMPT: старые id правил (O1..O3, KR1..KR4, KR10) отсутствуют", () => {
+  const oldO = /\bO[0-9]\b/;
+  const oldKR = /\bKR(1|2|3|4|10)\b/;
+  assertEquals(oldO.test(SYSTEM_PROMPT), false, "old O-id найден в SYSTEM_PROMPT");
+  assertEquals(oldKR.test(SYSTEM_PROMPT), false, "old KR-id найден в SYSTEM_PROMPT");
+});

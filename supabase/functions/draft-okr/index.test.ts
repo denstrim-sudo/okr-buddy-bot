@@ -120,3 +120,15 @@ Deno.test({
     assert(data.horizon_fit.overall_score >= 0 && data.horizon_fit.overall_score <= 100);
   },
 });
+
+// --- grep-guard: старые id правил не встречаются в промпте ---
+Deno.test("draft-okr buildSystemPrompt: старые id правил отсутствуют для всех горизонтов", () => {
+  const horizons = ["strategic_3y", "block_12m", "quarter_3m"];
+  const oldO = /\bO[0-9]\b/;
+  const oldKR = /\bKR(1|2|3|4|10)\b/;
+  for (const h of horizons) {
+    const p = buildSystemPrompt(h);
+    assertEquals(oldO.test(p), false, `old O-id найден в промпте для ${h}`);
+    assertEquals(oldKR.test(p), false, `old KR-id найден в промпте для ${h}`);
+  }
+});

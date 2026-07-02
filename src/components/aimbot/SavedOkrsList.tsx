@@ -28,7 +28,7 @@ const formatDate = (iso: string) => {
   }
 };
 
-export const SavedOkrsList = ({ onSendToSolutions }: Props) => {
+export const SavedOkrsList = ({ onSendToSolutions, onSendToAudit }: Props) => {
   const { items, remove, clear, exportJson, importJson } = useSavedOkrs();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -736,6 +736,16 @@ Deno.test("handler: mode=fix — грязный rewritten_objective → sanitize
       ...baseBody,
       mode: "fix",
       failed_rules: [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "h" }],
+    });
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 2, "sanitize должен сделать 1 redo → всего 2 вызова");
+    assertEquals(data.rewritten_objective, "Стать опорой роста");
+    assertEquals(data.rewritten_objective_warning, undefined);
+  } finally {
+    _restoreFetch();
+  }
+});
+
 
 // =====================================================================
 // Coach-mode редактора (mode=fix): минимальное вмешательство, сохранение

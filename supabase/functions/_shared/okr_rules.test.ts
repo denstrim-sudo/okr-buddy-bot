@@ -1,5 +1,5 @@
 import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER } from "./okr_rules.ts";
+import { OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER, getFewShotBlock } from "./okr_rules.ts";
 import { containsDigits } from "./textGuards.ts";
 
 // --- O2 wording (snapshot guard against the old "ограничен по времени" formulation
@@ -72,4 +72,32 @@ Deno.test("containsDigits: распознаёт год в тексте Objective
 
 Deno.test("containsDigits: чистый текст без цифр → false", () => {
   assert(containsDigits("Стать предсказуемой опорой роста для команды") === false);
+});
+
+// --- few-shot эталоны по горизонтам ---
+
+Deno.test("getFewShotBlock('quarter_3m'): KR3 замер спринт/месяц, KR10 leading на спринте", () => {
+  const b = getFewShotBlock("quarter_3m");
+  assert(/KR3/.test(b) && /помесячно|спринт/i.test(b), `KR3 quarter должен содержать спринт/месячный замер: ${b}`);
+  assert(/KR10/.test(b) && /спринт/i.test(b), `KR10 quarter leading должен упоминать спринт: ${b}`);
+});
+
+Deno.test("getFewShotBlock('block_12m'): KR3 содержит квартальный замер", () => {
+  const b = getFewShotBlock("block_12m");
+  assert(/KR3/.test(b) && /поквартально|квартал/i.test(b), `KR3 12m должен содержать квартальный замер: ${b}`);
+});
+
+Deno.test("getFewShotBlock('strategic_3y'): KR3 содержит годовой/полугодовой замер", () => {
+  const b = getFewShotBlock("strategic_3y");
+  assert(/KR3/.test(b) && /полугодие|год/i.test(b), `KR3 3y должен содержать годовой/полугодовой замер: ${b}`);
+});
+
+Deno.test("getFewShotBlock: симметрия — в каждом блоке ≥2 ПЛОХО и ≥2 ОТЛИЧНО (KR3 + KR10)", () => {
+  for (const h of ["quarter_3m", "block_12m", "strategic_3y"]) {
+    const b = getFewShotBlock(h);
+    const bad = (b.match(/ПЛОХО/g) ?? []).length;
+    const good = (b.match(/ОТЛИЧНО/g) ?? []).length;
+    assert(bad >= 2, `${h}: ожидали ≥2 маркера ПЛОХО, получили ${bad}`);
+    assert(good >= 2, `${h}: ожидали ≥2 маркера ОТЛИЧНО, получили ${good}`);
+  }
 });

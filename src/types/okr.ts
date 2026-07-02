@@ -98,6 +98,9 @@ export interface ValidationRule {
   hint: string;
   severity?: RuleSeverity;
   why?: string;
+  /** Chain-of-thought рассуждение модели ДО вердикта. Не показываем пользователю
+   *  по умолчанию (внутренняя кухня), но сохраняем в данных. */
+  reasoning?: string;
   /** Дословная цитата из текста OKR, на которой основан pass=false. Для pass=true — пустая строка. */
   evidence?: string;
   /** Серверный сигнал: подтверждена ли evidence реальным фрагментом текста OKR.

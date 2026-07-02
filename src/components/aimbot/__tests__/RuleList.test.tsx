@@ -33,3 +33,29 @@ describe("RuleList — индикатор grounded", () => {
     expect(screen.queryByTestId("rule-ungrounded-P1")).not.toBeInTheDocument();
   });
 });
+
+import userEvent from "@testing-library/user-event";
+
+describe("RuleList — reasoning (chain-of-thought)", () => {
+  it("скрыт по умолчанию, показывает toggle-кнопку", () => {
+    renderWithProviders(
+      <RuleList rules={[baseRule({ id: "R1", reasoning: "Это activity, а не outcome — глагол 'провести'" })]} />,
+    );
+    expect(screen.queryByTestId("rule-reasoning-R1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("rule-reasoning-toggle-R1")).toBeInTheDocument();
+  });
+
+  it("раскрывается по клику", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <RuleList rules={[baseRule({ id: "R2", reasoning: "Развёрнутое рассуждение модели" })]} />,
+    );
+    await user.click(screen.getByTestId("rule-reasoning-toggle-R2"));
+    expect(screen.getByTestId("rule-reasoning-R2")).toHaveTextContent("Развёрнутое рассуждение");
+  });
+
+  it("не рендерит toggle, если reasoning отсутствует", () => {
+    renderWithProviders(<RuleList rules={[baseRule({ id: "R3" })]} />);
+    expect(screen.queryByTestId("rule-reasoning-toggle-R3")).not.toBeInTheDocument();
+  });
+});

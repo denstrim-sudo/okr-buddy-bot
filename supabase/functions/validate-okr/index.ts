@@ -1,5 +1,5 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
-import { getRulesBlock } from "../_shared/okr_rules.ts";
+import { getRulesBlock, getFewShotBlock } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
@@ -12,7 +12,12 @@ Given an Objective and a list of Key Results, evaluate them against these RULES 
 
 ${getRulesBlock(horizon)}
 
+ЭТАЛОНЫ (сравнивай формулировки с этими образцами, а не с абстрактным определением):
+
+${getFewShotBlock(horizon)}
+
 For EACH rule you MUST return:
+- "reasoning": СНАЧАЛА рассуждение (2-4 предложения на русском): к какому типу относится KR (outcome/activity, leading/lagging), сверка с ЭТАЛОНОМ выше (какой образец ближе — плохой или отличный и почему), и ТОЛЬКО потом вывод. Заполняется ДО pass. Не выноси вердикт до рассуждения.
 - "severity": уровень важности замечания
   - "critical" — без исправления OKR методологически некорректен
   - "important" — снижает качество и управляемость, но OKR работоспособен
@@ -21,11 +26,13 @@ For EACH rule you MUST return:
 - "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно. Для pass=true можно оставить пустым.
 - "evidence": для pass=false — СКОПИРУЙ дословно фрагмент текста Objective или конкретного KR (≤80 символов), который стал причиной провала. Не перефразируй, не обобщай — буквальная подстрока. Если не можешь найти такую дословную фразу в тексте — значит, основания для fail нет, ставь pass=true вместо этого. Для pass=true — пустая строка.
 
+ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
+
 ВАЖНО про O2 + O3: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило O3. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
 
 Return STRICT JSON only via the provided tool.
 
-IMPORTANT: All text fields (label, hint, why, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
+IMPORTANT: All text fields (label, hint, why, reasoning, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
 
 export function buildParameters(horizon?: string) {
   const ids = knownRuleIdsFor(horizon);
@@ -41,16 +48,20 @@ export function buildParameters(horizon?: string) {
         maxItems: ids.length,
         items: {
           type: "object",
+          // ВАЖНО: порядок properties влияет на порядок генерации у tool-calling
+          // моделей. reasoning ДОЛЖНО идти раньше pass — сначала рассуждение,
+          // потом вердикт (chain-of-thought до вердикта).
           properties: {
             id: { type: "string", enum: ids },
             label: { type: "string" },
+            reasoning: { type: "string", description: "Сначала рассуждение: к какому типу относится KR (outcome/activity, leading/lagging), сверка с эталоном, и ТОЛЬКО потом вывод. Заполняется ДО pass." },
             pass: { type: "boolean" },
             hint: { type: "string" },
             severity: { type: "string", enum: ["critical", "important", "improve"] },
             why: { type: "string" },
             evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
           },
-          required: ["id", "label", "pass", "hint", "severity", "why", "evidence"],
+          required: ["id", "label", "reasoning", "pass", "hint", "severity", "why", "evidence"],
           additionalProperties: false,
         },
       },

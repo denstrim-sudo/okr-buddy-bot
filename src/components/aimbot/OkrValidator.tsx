@@ -242,7 +242,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   );
 
   return (
-    <Card className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
+    <Card data-testid="okr-validator" className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy text-navy-foreground shadow-sm">

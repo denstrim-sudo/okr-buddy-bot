@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ShieldCheck, Loader2, Plus, Trash2, Wand2, Check, X, ArrowRight, Sparkles, BookmarkPlus, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

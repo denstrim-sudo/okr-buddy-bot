@@ -587,7 +587,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                 <p className="text-muted-foreground line-through">{objective}</p>
                 <div className="flex items-start gap-1.5">
                   <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                  <p className="font-medium text-foreground">{report.rewritten_objective}</p>
+                  <p className="font-medium text-foreground">{renderWithPlaceholders(report.rewritten_objective)}</p>
                 </div>
               </div>
               {report.rewritten_objective_warning && (

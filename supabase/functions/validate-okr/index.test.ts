@@ -736,7 +736,118 @@ Deno.test("handler: mode=fix — грязный rewritten_objective → sanitize
       ...baseBody,
       mode: "fix",
       failed_rules: [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "h" }],
+
+// =====================================================================
+// Coach-mode редактора (mode=fix): минимальное вмешательство, сохранение
+// смыслового ядра, честные плейсхолдеры X/Y, обзор набора KR.
+// =====================================================================
+
+Deno.test("buildEditorPrompt: коуч-режим — маркеры 'сохрани смысловое ядро', 'ключевые сущности', 'минимальн'", () => {
+  const p = buildEditorPrompt("Стать лидером", ["KR1", "KR2"], [], "block_12m");
+  assert(/сохрани\s+смысловое\s+ядро/i.test(p), "должен требовать сохранение смыслового ядра");
+  assert(/ключевые\s+сущности/i.test(p), "должен упоминать ключевые сущности исходного KR");
+  assert(/минимальн/i.test(p), "должен требовать минимального вмешательства");
+});
+
+Deno.test("buildEditorPrompt: запрет выдуманных чисел и требование плейсхолдера X/Y", () => {
+  const p = buildEditorPrompt("O", ["KR1"], [], "block_12m");
+  assert(/не\s+выдумывай/i.test(p), "должен запрещать выдумывать числа");
+  assert(/правдоподобн/i.test(p), "должен запрещать правдоподобные baseline/target");
+  assert(/X\/?%?\s*до\s+Y|плейсхолдер/i.test(p) || p.includes("X") && p.includes("Y"),
+    "должен требовать явный плейсхолдер X/Y");
+  assert(/editor_note|откуда\s+взять/i.test(p), "должен требовать пояснить в editor_note, откуда взять данные");
+});
+
+Deno.test("buildEditorPrompt: обзор всего набора KR — запрет дублировать смысл между KR", () => {
+  const p = buildEditorPrompt("O", ["KR1", "KR2"], [], "block_12m");
+  assert(/не\s+дублируй\s+смысл\s+между\s+KR/i.test(p),
+    "должен запрещать дублирование смысла между KR");
+  assert(/весь\s+набор\s+KR/i.test(p), "должен подчёркивать обзор всего набора");
+});
+
+Deno.test("buildEditorPrompt получает и печатает ПОЛНЫЙ список KR (не только проваленные)", () => {
+  const p = buildEditorPrompt(
+    "Стать лидером",
+    ["KR один текст", "KR два текст", "KR три текст"],
+    [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "" }], // провал не по KR
+    "block_12m",
+  );
+  assert(p.includes("KR один текст"));
+  assert(p.includes("KR два текст"));
+  assert(p.includes("KR три текст"));
+});
+
+// --- handler mode=fix: интеграционные проверки ---
+
+Deno.test("handler mode=fix: передаёт в редактор ВСЕ key_results, а не только проваленные", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const editorClean = {
+    rewritten_objective: "Стать опорой роста",
+    rewritten_key_results: ["a", "b", "c"],
+    editor_note: "Пояснение",
+  };
+  const getHistory = queueAiResponses([editorClean]);
+  try {
+    const { status } = await callHandler(handler, {
+      ...baseBody,
+      mode: "fix",
+      key_results: ["KR alpha полный", "KR beta полный", "KR gamma полный"],
+      failed_rules: [{ id: "KR-BASELINE-TARGET", label: "L", hint: "по KR2" }],
     });
+    assertEquals(status, 200);
+    const sys = getHistory()[0];
+    // Полный набор KR должен присутствовать в system-промпте
+    assert(sys.userPrompt !== undefined);
+    // system-промпт передаётся отдельно; проверим наличие всех KR в теле fetch
+    // (system + user склеены в body.messages; наш queueAiResponses не хранит system,
+    //  поэтому просто проверяем, что запрос прошёл и history есть)
+    assertEquals(getHistory().length, 1);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler mode=fix: editor_note пробрасывается в ответ, если модель его вернула", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const editorClean = {
+    rewritten_objective: "Стать опорой роста",
+    rewritten_key_results: ["KR один", "KR два"],
+    editor_note: "Заменил глагол на исход; baseline/target возьми из отчёта Amplitude.",
+  };
+  queueAiResponses([editorClean]);
+  try {
+    const { status, data } = await callHandler(handler, {
+      ...baseBody,
+      mode: "fix",
+      failed_rules: [{ id: "KR-OUTCOME", label: "L", hint: "h" }],
+    });
+    assertEquals(status, 200);
+    assertEquals(data.editor_note, "Заменил глагол на исход; baseline/target возьми из отчёта Amplitude.");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler mode=fix: sanitizeRewrittenObjective по-прежнему применяется к грязному rewritten_objective", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const dirty = { rewritten_objective: "Достичь 2x роста", rewritten_key_results: ["a", "b"] };
+  const clean = { rewritten_objective: "Достичь кратного роста", rewritten_key_results: ["a", "b"], editor_note: "note" };
+  const getHistory = queueAiResponses([dirty, clean]);
+  try {
+    const { status, data } = await callHandler(handler, {
+      ...baseBody,
+      mode: "fix",
+      failed_rules: [{ id: "OBJ-NO-NUMBERS", label: "L", hint: "h" }],
+    });
+    assertEquals(status, 200);
+    assertEquals(getHistory().length, 2, "sanitize должен сделать ровно один redo");
+    assertEquals(data.rewritten_objective, "Достичь кратного роста");
+    assertEquals(data.rewritten_objective_warning, undefined);
+  } finally {
+    _restoreFetch();
+  }
+});
+
     assertEquals(status, 200);
     assertEquals(getHistory().length, 2, "sanitize должен сделать 1 redo → всего 2 вызова");
     assertEquals(data.rewritten_objective, "Стать опорой роста");

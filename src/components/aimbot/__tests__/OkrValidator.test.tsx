@@ -17,12 +17,12 @@ const validReport = {
   status: "pass" as const,
   summary: "Хороший OKR",
   rules: [
-    { id: "O1", label: "Качественный Objective", pass: true, hint: "" },
-    { id: "O3", label: "Без цифр в Objective", pass: false, hint: "Уберите проценты", severity: "critical" as const, why: "Цифры подменяют качественную цель." },
-    { id: "KR1", label: "KR измеримы", pass: true, hint: "" },
-    { id: "KR2", label: "Baseline и target", pass: false, hint: "Добавьте baseline для KR2", severity: "important" as const, why: "Без baseline нельзя посчитать прогресс." },
-    { id: "KR3", label: "Outcomes, не tasks", pass: true, hint: "" },
-    { id: "KR10", label: "Есть leading", pass: false, hint: "Добавьте предсказательный KR", severity: "improve" as const, why: "Leading даёт ранний сигнал." },
+    { id: "OBJ-QUALITATIVE", label: "Качественный Objective", pass: true, hint: "" },
+    { id: "OBJ-NO-NUMBERS", label: "Без цифр в Objective", pass: false, hint: "Уберите проценты", severity: "critical" as const, why: "Цифры подменяют качественную цель." },
+    { id: "KR-MEASURABLE", label: "KR измеримы", pass: true, hint: "" },
+    { id: "KR-BASELINE-TARGET", label: "Baseline и target", pass: false, hint: "Добавьте baseline ко второму KR", severity: "important" as const, why: "Без baseline нельзя посчитать прогресс." },
+    { id: "KR-OUTCOME", label: "Outcomes, не tasks", pass: true, hint: "" },
+    { id: "KR-LEADING", label: "Есть leading", pass: false, hint: "Добавьте предсказательный KR", severity: "improve" as const, why: "Leading даёт ранний сигнал." },
   ],
   rewritten_objective: "",
   rewritten_key_results: ["", ""],
@@ -137,9 +137,9 @@ describe("OkrValidator (Module 2)", () => {
     await userEvent.click(quarter);
     expect(quarter.className).toMatch(/border-primary/);
     expect(screen.getByText(/квартальный набор правил/i)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Focus/)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Theme/)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Reach/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-FOCUS/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-THEME/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-REACH/)).toBeInTheDocument();
   });
 
   it("draft с horizon='quarter_3m' автоматически активирует квартальную кнопку", () => {

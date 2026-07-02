@@ -17,27 +17,27 @@ Deno.test("validate-okr: requires at least one KR", async () => {
 // --- buildSystemPrompt: правила переключаются по горизонту ---
 Deno.test("buildSystemPrompt('quarter_3m') содержит маркеры квартальных правил", () => {
   const p = buildSystemPrompt("quarter_3m");
-  assert(p.includes("Q-Focus"));
-  assert(p.includes("Q-Theme"));
-  assert(p.includes("Q-Reach"));
+  assert(p.includes("Q-FOCUS"));
+  assert(p.includes("Q-THEME"));
+  assert(p.includes("Q-REACH"));
   assert(p.includes("применяй КВАРТАЛЬНЫЙ набор правил"));
 });
 
 Deno.test("buildSystemPrompt('block_12m') НЕ содержит квартальных маркеров", () => {
   const p = buildSystemPrompt("block_12m");
-  assert(!p.includes("Q-Focus"));
-  assert(!p.includes("Q-Theme"));
-  assert(!p.includes("Q-Reach"));
+  assert(!p.includes("Q-FOCUS"));
+  assert(!p.includes("Q-THEME"));
+  assert(!p.includes("Q-REACH"));
 });
 
 Deno.test("buildSystemPrompt('strategic_3y') НЕ содержит квартальных маркеров", () => {
   const p = buildSystemPrompt("strategic_3y");
-  assert(!p.includes("Q-Focus"));
+  assert(!p.includes("Q-FOCUS"));
   assert(!p.includes("применяй КВАРТАЛЬНЫЙ"));
 });
 
 Deno.test({
-  name: "validate-okr [AI]: quarter_3m + no leading KR → KR10 critical fail",
+  name: "validate-okr [AI]: quarter_3m + no leading KR → KR-LEADING critical fail",
   ignore: !RUN_AI,
   async fn() {
     const { status, data } = await callHandler(handler, {
@@ -49,10 +49,10 @@ Deno.test({
       horizon: "quarter_3m",
     });
     assertEquals(status, 200);
-    const kr10 = (data.rules || []).find((r: any) => r.id === "KR10");
-    assert(kr10, "KR10 must be present in rules");
-    assertEquals(kr10.pass, false);
-    assertEquals(kr10.severity, "critical");
+    const rule = (data.rules || []).find((r: any) => r.id === "KR-LEADING");
+    assert(rule, "KR-LEADING must be present in rules");
+    assertEquals(rule.pass, false);
+    assertEquals(rule.severity, "critical");
   },
 });
 
@@ -134,17 +134,16 @@ Deno.test("sanitize: если redo бросает — initial помечаетс
 // --- applyScoreRecompute: чистая логика серверного пересчёта ---
 
 Deno.test("applyScoreRecompute: расхождение >10 → подменяет score, ставит флаг", () => {
-  // 1 critical fail из 7 правил, остальные pass → recomputed=60 (потолок). Модель отдала 85.
   const data: any = {
     score: 85,
     rules: [
-      { id: "O3", pass: false, severity: "critical" },
-      { id: "KR1", pass: true, severity: "critical" },
-      { id: "KR2", pass: true, severity: "critical" },
-      { id: "KR3", pass: true, severity: "critical" },
-      { id: "O1", pass: true, severity: "important" },
-      { id: "KR4", pass: true, severity: "important" },
-      { id: "KR10", pass: true, severity: "important" },
+      { id: "OBJ-NO-NUMBERS", pass: false, severity: "critical" },
+      { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+      { id: "KR-BASELINE-TARGET", pass: true, severity: "critical" },
+      { id: "KR-OUTCOME", pass: true, severity: "critical" },
+      { id: "OBJ-QUALITATIVE", pass: true, severity: "important" },
+      { id: "KR-TIMEBOUND", pass: true, severity: "important" },
+      { id: "KR-LEADING", pass: true, severity: "important" },
     ],
   };
   applyScoreRecompute(data);
@@ -161,20 +160,18 @@ Deno.test("applyScoreRecompute: расхождение ≤10 → не трога
       { id: "C", pass: false, severity: "improve" },
     ],
   };
-  // recomputed = round(100 * 5/6) = 83. |85-83| = 2 ≤ 10.
   applyScoreRecompute(data);
   assertEquals(data.score, 85);
   assertEquals(data.score_recomputed, undefined);
 });
 
-Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR10 для quarter_3m = critical)", () => {
-  // KR10 без severity, pass=false, horizon=quarter_3m → должен сработать потолок 60.
+Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR-LEADING для quarter_3m = critical)", () => {
   const data: any = {
     score: 90,
     rules: [
-      { id: "KR10", pass: false }, // нет severity, но id → critical для quarter
-      { id: "O1", pass: true },
-      { id: "KR1", pass: true },
+      { id: "KR-LEADING", pass: false }, // нет severity, но id → critical для quarter
+      { id: "OBJ-QUALITATIVE", pass: true },
+      { id: "KR-MEASURABLE", pass: true },
     ],
   };
   applyScoreRecompute(data, "quarter_3m");
@@ -269,12 +266,12 @@ function queueAiResponses(payloads: unknown[]): () => FetchCall[] {
 }
 
 const cleanRules = [
-  { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "O3", label: "L", reasoning: "", pass: false, hint: "h", severity: "critical", why: "w" },
-  { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR2", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR3", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
-  { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "OBJ-NO-NUMBERS", label: "L", reasoning: "", pass: false, hint: "h", severity: "critical", why: "w" },
+  { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-BASELINE-TARGET", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-OUTCOME", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
+  { id: "KR-LEADING", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "" },
 ];
 const cleanReport = {
   score: 78,
@@ -420,13 +417,13 @@ Deno.test("buildParameters: rules.items.properties.id.enum === knownRuleIdsFor(h
 // --- handler: серверный расчёт grounded ---
 
 const rulesWithEvidence = [
-  { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   // evidence реально встречается во втором KR
-  { id: "KR3", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
+  { id: "KR-OUTCOME", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
   // evidence выдумана
-  { id: "KR2", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
-  { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
-  { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "KR-BASELINE-TARGET", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
+  { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+  { id: "KR-LEADING", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
 ];
 const reportWithEvidence = {
   score: 78,
@@ -443,9 +440,9 @@ Deno.test("handler: добавляет grounded=true для pass=false с реа
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    const r = data.rules.find((x: any) => x.id === "KR3");
+    const r = data.rules.find((x: any) => x.id === "KR-OUTCOME");
     assertEquals(r.grounded, true);
-    // pass сохранён; severity — канонический (KR3 → critical)
+    // pass сохранён; severity — канонический (KR-OUTCOME → critical)
     assertEquals(r.pass, false);
     assertEquals(r.severity, "critical");
   } finally {
@@ -459,10 +456,10 @@ Deno.test("handler: добавляет grounded=false для pass=false с вы�
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    const r = data.rules.find((x: any) => x.id === "KR2");
+    const r = data.rules.find((x: any) => x.id === "KR-BASELINE-TARGET");
     assertEquals(r.grounded, false);
     assertEquals(r.pass, false, "pass не должен переопределяться");
-    // severity — канонический (KR2 → critical), даже если модель прислала другое
+    // severity — канонический (KR-BASELINE-TARGET → critical), даже если модель прислала другое
     assertEquals(r.severity, "critical");
   } finally {
     _restoreFetch();
@@ -474,7 +471,7 @@ Deno.test("handler: pass=true правила получают grounded=true ав
   queueAiResponses([reportWithEvidence]);
   try {
     const { data } = await callHandler(handler, baseBody);
-    const r = data.rules.find((x: any) => x.id === "O1");
+    const r = data.rules.find((x: any) => x.id === "OBJ-QUALITATIVE");
     assertEquals(r.grounded, true);
   } finally {
     _restoreFetch();
@@ -483,39 +480,39 @@ Deno.test("handler: pass=true правила получают grounded=true ав
 
 // --- handler: серверное переопределение severity по канонической таблице ---
 
-Deno.test("handler: KR10 c severity='critical' от модели для block_12m → серверно исправлен на 'important'", async () => {
+Deno.test("handler: KR-LEADING c severity='critical' от модели для block_12m → серверно исправлен на 'important'", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const rulesModelWrongSeverity = [
-    { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
     // Модель прислала critical, но для block_12m по severityFor должно быть important
-    { id: "KR10", label: "L", reasoning: "", pass: true, hint: "", severity: "critical", why: "", evidence: "" },
-    { id: "O3", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
-    { id: "KR1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR-LEADING", label: "L", reasoning: "", pass: true, hint: "", severity: "critical", why: "", evidence: "" },
+    { id: "OBJ-NO-NUMBERS", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   ];
   queueAiResponses([{ ...reportWithEvidence, rules: rulesModelWrongSeverity }]);
   try {
     const { data } = await callHandler(handler, { ...baseBody, horizon: "block_12m" });
-    const kr10 = data.rules.find((x: any) => x.id === "KR10");
-    assertEquals(kr10.severity, "important", "severity KR10 должна быть серверно исправлена на important");
-    // O3 canonical = critical → должен быть переопределён из improve в critical
-    const o3 = data.rules.find((x: any) => x.id === "O3");
-    assertEquals(o3.severity, "critical");
+    const kr = data.rules.find((x: any) => x.id === "KR-LEADING");
+    assertEquals(kr.severity, "important", "severity KR-LEADING должна быть серверно исправлена на important");
+    // OBJ-NO-NUMBERS canonical = critical → должен быть переопределён из improve в critical
+    const noNums = data.rules.find((x: any) => x.id === "OBJ-NO-NUMBERS");
+    assertEquals(noNums.severity, "critical");
   } finally {
     _restoreFetch();
   }
 });
 
-Deno.test("handler: KR10 для quarter_3m серверно ставится 'critical' независимо от модели", async () => {
+Deno.test("handler: KR-LEADING для quarter_3m серверно ставится 'critical' независимо от модели", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const rules = [
-    { id: "KR10", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "" },
-    { id: "O1", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
+    { id: "KR-LEADING", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "" },
+    { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   ];
   queueAiResponses([{ ...reportWithEvidence, rules }]);
   try {
     const { data } = await callHandler(handler, { ...baseBody, horizon: "quarter_3m" });
-    const kr10 = data.rules.find((x: any) => x.id === "KR10");
-    assertEquals(kr10.severity, "critical");
+    const kr = data.rules.find((x: any) => x.id === "KR-LEADING");
+    assertEquals(kr.severity, "critical");
   } finally {
     _restoreFetch();
   }

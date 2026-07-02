@@ -8,7 +8,7 @@ ${getRulesBlock(horizon)}
 
 После составления черновика ОБЯЗАТЕЛЬНО прогони его мысленно по этим же правилам и заполни:
 - "score_hint" — по формуле выше (с учётом потолка ≤60 при критических фейлах).
-- "self_audit.critical_fails" — массив ID правил severity=critical, которые НЕ прошли (например ["O3","KR2"]). Пустой, если всё ок.
+- "self_audit.critical_fails" — массив ID правил severity=critical, которые НЕ прошли (например ["OBJ-NO-NUMBERS","KR-BASELINE-TARGET"]). Пустой, если всё ок.
 - "self_audit.important_fails" — массив ID правил severity=important, которые НЕ прошли.
 Эти поля должны быть согласованы с score_hint: если в critical_fails что-то есть — score_hint ≤ 60.
 
@@ -137,7 +137,7 @@ export function capKeyResults<T extends { key_results?: any; horizon_fit?: any }
 
 /**
  * Серверный пересчёт score_hint из self_audit.{critical_fails,important_fails}.
- * Собираем псевдо-rules[] по known ids для горизонта (KR10 для quarter_3m → critical),
+ * Собираем псевдо-rules[] по known ids для горизонта (KR-LEADING для quarter_3m → critical),
  * считаем recomputeScore и подменяем score_hint при расхождении >10.
  */
 export function applyScoreHintRecompute<T extends {

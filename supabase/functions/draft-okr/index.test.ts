@@ -37,10 +37,10 @@ Deno.test("capKeyResults: не трогает, если KR <= лимита", () 
 
 // --- applyScoreHintRecompute: пересчёт score_hint из self_audit ---
 
-Deno.test("applyScoreHintRecompute: critical_fails=['O3'] на block_12m → потолок 60, флаг", () => {
+Deno.test("applyScoreHintRecompute: critical_fails=['OBJ-NO-NUMBERS'] на block_12m → потолок 60, флаг", () => {
   const data: any = {
     score_hint: 85,
-    self_audit: { critical_fails: ["O3"], important_fails: [] },
+    self_audit: { critical_fails: ["OBJ-NO-NUMBERS"], important_fails: [] },
   };
   applyScoreHintRecompute(data, "block_12m");
   assertEquals(data.score_hint, 60);
@@ -48,7 +48,6 @@ Deno.test("applyScoreHintRecompute: critical_fails=['O3'] на block_12m → п�
 });
 
 Deno.test("applyScoreHintRecompute: все правила прошли, разница 8 ≤ 10 → не трогает", () => {
-  // recomputed по полному набору known ids без фейлов = 100. modelScore=92 → diff=8 ≤ 10.
   const data: any = {
     score_hint: 92,
     self_audit: { critical_fails: [], important_fails: [] },
@@ -58,11 +57,11 @@ Deno.test("applyScoreHintRecompute: все правила прошли, разн
   assertEquals(data.score_hint_recomputed, undefined);
 });
 
-Deno.test("applyScoreHintRecompute: quarter_3m + critical_fails=['KR10'] → потолок 60 (override)", () => {
-  // KR10 на quarter_3m — critical. Модель отдала 88 → подменяем на ≤60.
+Deno.test("applyScoreHintRecompute: quarter_3m + critical_fails=['KR-LEADING'] → потолок 60 (override)", () => {
+  // KR-LEADING на quarter_3m — critical. Модель отдала 88 → подменяем на ≤60.
   const data: any = {
     score_hint: 88,
-    self_audit: { critical_fails: ["KR10"], important_fails: [] },
+    self_audit: { critical_fails: ["KR-LEADING"], important_fails: [] },
   };
   applyScoreHintRecompute(data, "quarter_3m");
   assert(data.score_hint <= 60, `expected ≤60, got ${data.score_hint}`);

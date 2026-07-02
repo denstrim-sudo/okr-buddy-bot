@@ -6,7 +6,7 @@ import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type Sc
 
 export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
 
-HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR10→critical и доп. правилами Q-Focus, Q-Theme, Q-Reach)." : ""}
+HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR-LEADING→critical и доп. правилами Q-FOCUS, Q-THEME, Q-REACH)." : ""}
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 

@@ -13,7 +13,7 @@ vi.mock("sonner", () => ({
 
 const savedState = vi.hoisted(() => ({
   items: [] as any[],
-  save: vi.fn(() => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true })),
+  save: vi.fn((..._args: any[]) => ({ item: { id: "x", objective: "x", plan: {}, savedAt: "" }, ok: true })) as any,
 }));
 vi.mock("@/hooks/useSavedOkrs", () => ({
   useSavedOkrs: () => ({

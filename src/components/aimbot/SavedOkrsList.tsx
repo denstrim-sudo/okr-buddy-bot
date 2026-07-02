@@ -214,6 +214,17 @@ export const SavedOkrsList = ({ onSendToSolutions, onSendToAudit }: Props) => {
                 <p className="mt-1.5 text-sm font-semibold text-foreground">{item.objective}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {onSendToAudit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSendToAudit(item)}
+                    className="h-8 border-navy/30 text-navy hover:bg-navy/10"
+                    aria-label="Передать OKR в аудит"
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" /> В аудит
+                  </Button>
+                )}
                 {handleSendToSolutions && (
                   <Button
                     variant="outline"

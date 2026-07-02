@@ -86,7 +86,7 @@ export function useSavedOkrs() {
         id: `okr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         objective: objective.trim() || plan.objective_refined || "Без названия",
         plan,
-        savedAt: new Date().toISOString(),
+        savedAt: nextSavedAt(),
         ...(link ? { parentOkrId: link.parentOkrId, parentKrIndex: link.parentKrIndex } : {}),
       };
       const ok = commit([item, ...itemsRef.current]);

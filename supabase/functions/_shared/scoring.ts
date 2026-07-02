@@ -64,33 +64,46 @@ export function scoreDiscrepancy(modelScore: number, recomputed: number): boolea
 /**
  * Канонический id → severity для правил из okr_rules.ts.
  * Источник правды — BASE_RULES и QUARTER-SPECIFIC overrides в okr_rules.ts.
+ *
+ * ВАЖНО: идентификаторы правил (OBJ-*, KR-*, Q-*) — это ИМЕНА ПРАВИЛ,
+ * НЕ номера ключевых результатов пользователя. Пространства имён разведены
+ * специально, чтобы модель не путала "KR-OUTCOME" (правило) со вторым KR.
  */
 export const SEVERITY_BY_RULE_ID: Record<string, RuleSeverity> = {
-  O1: "important",
-  O2: "important",
-  O3: "critical",
-  KR1: "critical",
-  KR2: "critical",
-  KR3: "critical",
-  KR4: "important",
-  KR10: "important",
+  "OBJ-QUALITATIVE": "important",
+  "OBJ-AMBITIOUS": "important",
+  "OBJ-NO-NUMBERS": "critical",
+  "KR-MEASURABLE": "critical",
+  "KR-BASELINE-TARGET": "critical",
+  "KR-OUTCOME": "critical",
+  "KR-TIMEBOUND": "important",
+  "KR-LEADING": "important",
   // quarter-only:
-  "Q-Focus": "important",
-  "Q-Theme": "improve",
-  "Q-Reach": "important",
+  "Q-FOCUS": "important",
+  "Q-THEME": "improve",
+  "Q-REACH": "important",
 };
 
 /**
  * Резолвит severity по id правила c учётом horizon-override.
- * Для quarter_3m KR10 повышается до critical (см. OKR_RULES_BLOCK_QUARTER).
+ * Для quarter_3m KR-LEADING повышается до critical (см. OKR_RULES_BLOCK_QUARTER).
  */
 export function severityFor(ruleId: string, horizon?: string): RuleSeverity {
-  if (horizon === "quarter_3m" && ruleId === "KR10") return "critical";
+  if (horizon === "quarter_3m" && ruleId === "KR-LEADING") return "critical";
   return SEVERITY_BY_RULE_ID[ruleId] ?? "improve";
 }
 
 /** Полный список known rule ids для горизонта — нужен draft-okr, чтобы из self_audit собрать псевдо-rules. */
 export function knownRuleIdsFor(horizon?: string): string[] {
-  const base = ["O1", "O2", "O3", "KR1", "KR2", "KR3", "KR4", "KR10"];
-  return horizon === "quarter_3m" ? [...base, "Q-Focus", "Q-Theme", "Q-Reach"] : base;
+  const base = [
+    "OBJ-QUALITATIVE",
+    "OBJ-AMBITIOUS",
+    "OBJ-NO-NUMBERS",
+    "KR-MEASURABLE",
+    "KR-BASELINE-TARGET",
+    "KR-OUTCOME",
+    "KR-TIMEBOUND",
+    "KR-LEADING",
+  ];
+  return horizon === "quarter_3m" ? [...base, "Q-FOCUS", "Q-THEME", "Q-REACH"] : base;
 }

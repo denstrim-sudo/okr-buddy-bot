@@ -139,6 +139,9 @@ export interface ValidationDraft {
   key_results: string[];
   key_results_full?: ValidationKR[];
   horizon?: OkrHorizon;
+  /** id сохранённой записи, из которой пришёл OKR. Если задан, при сохранении
+   *  исправлений будет replace() по этому id (сохранение связей). */
+  sourceOkrId?: string;
 }
 
 export interface SolutionReport {

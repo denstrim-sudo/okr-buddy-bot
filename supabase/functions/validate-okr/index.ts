@@ -28,13 +28,85 @@ For EACH rule you MUST return:
 
 ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
 
-ВАЖНО про OBJ-AMBITIOUS + OBJ-NO-NUMBERS: горизонт OKR уже зафиксирован отдельным полем "horizon" (передан выше). НЕ требуй и НЕ вписывай в rewritten_objective дат, годов, кварталов, процентов или любых других цифр — это нарушит правило OBJ-NO-NUMBERS. Цифры допустимы ТОЛЬКО внутри Key Results (baseline/target).
+ТЫ — АУДИТОР. Твоя работа — только вердикты по правилам. НЕ переписывай OKR: переписыванием занимается отдельный проход (РЕДАКТОР).
 
 Return STRICT JSON only via the provided tool.
 
-IMPORTANT: All text fields (label, hint, why, reasoning, summary, suggestion, rewritten_*) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
+IMPORTANT: All text fields (label, hint, why, reasoning, summary, suggestion) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
 
-export function buildParameters(horizon?: string) {
+/**
+ * Схема РЕДАКТОРА. Второй проход: на входе — OKR + результаты аудита,
+ * на выходе ТОЛЬКО переписанные формулировки. НИКАКИХ rules/score/summary.
+ */
+export function buildEditorParameters() {
+  return {
+    type: "object",
+    properties: {
+      rewritten_objective: { type: "string", description: "Переписанный Objective без цифр (цифры в Objective нарушают правило OBJ-NO-NUMBERS)." },
+      rewritten_key_results: {
+        type: "array",
+        items: { type: "string" },
+        description: "Переписанные Key Results в том же порядке и количестве, как в исходном OKR. Если конкретный KR не требует изменений — верни его исходную формулировку.",
+      },
+    },
+    required: ["rewritten_objective", "rewritten_key_results"],
+    additionalProperties: false,
+  };
+}
+
+/**
+ * Промпт РЕДАКТОРА: закрыть ВСЕ проваленные правила разом, не создавая новых.
+ * Использует те же эталоны, что и аудитор, — чтобы переписанные формулировки
+ * соответствовали образцу.
+ */
+export function buildEditorPrompt(
+  objective: string,
+  keyResults: string[],
+  failedRules: Array<{ id: string; label?: string; hint?: string; why?: string }>,
+  horizon: string,
+): string {
+  const failedBlock = failedRules.length
+    ? failedRules
+        .map((r, i) => {
+          const label = r.label ? ` (${r.label})` : "";
+          const hint = r.hint ? `  hint: ${r.hint}` : "";
+          const why = r.why ? `  why: ${r.why}` : "";
+          return `${i + 1}. ${r.id}${label}${hint ? "\n" + hint : ""}${why ? "\n" + why : ""}`;
+        })
+        .join("\n")
+    : "(нет провалов — верни исходные формулировки в rewritten_*)";
+  const krList = keyResults.map((t, i) => `KR${i + 1}: ${t}`).join("\n");
+  return `Ты — РЕДАКТОР OKR. Тебе передан результат работы АУДИТОРА: OKR + список ПРОВАЛЕННЫХ правил. Твоя задача — переписать формулировки так, чтобы закрыть ВСЕ проваленные правила РАЗОМ, НЕ СОЗДАВАЯ новых нарушений.
+
+ГОРИЗОНТ: ${horizon}
+
+ЭТАЛОНЫ (используй как образец качества переписывания):
+
+${getFewShotBlock(horizon)}
+
+ИСХОДНЫЙ OBJECTIVE: ${objective}
+
+ИСХОДНЫЕ KEY RESULTS:
+${krList}
+
+ПРОВАЛЕННЫЕ ПРАВИЛА (закрой ВСЕ проваленные правила разом, не создавая новых):
+${failedBlock}
+
+ЖЁСТКИЕ ОГРАНИЧЕНИЯ:
+- rewritten_objective НЕ должен содержать цифр (это нарушит OBJ-NO-NUMBERS).
+- rewritten_key_results ДОЛЖНЫ идти в том же порядке и количестве, что и исходные KR.
+- Если конкретный KR уже хорош — верни его исходную формулировку без изменений.
+- Не смешивай имя правила (OBJ-*, KR-*) с номером KR: имена правил — это ярлыки аудита, а не позиции KR.
+- Все rewritten_* — на русском.
+
+Return STRICT JSON only via the provided tool.`;
+}
+
+/**
+ * Схема АУДИТОРА. Только вердикты по правилам, БЕЗ rewritten_*. Переписыванием
+ * занимается отдельный проход РЕДАКТОРА (mode=fix).
+ */
+export function buildAuditorParameters(horizon?: string) {
   const ids = knownRuleIdsFor(horizon);
   return {
     type: "object",
@@ -65,13 +137,17 @@ export function buildParameters(horizon?: string) {
           additionalProperties: false,
         },
       },
-      rewritten_objective: { type: "string" },
-      rewritten_key_results: { type: "array", items: { type: "string" } },
     },
-    required: ["score", "status", "summary", "rules", "rewritten_objective", "rewritten_key_results"],
+    required: ["score", "status", "summary", "rules"],
     additionalProperties: false,
   };
 }
+
+/**
+ * Совместимость: старое имя buildParameters = buildAuditorParameters.
+ * Используется в тестах и внешнем коде, где может встречаться прямой вызов.
+ */
+export const buildParameters = buildAuditorParameters;
 
 /**
  * Проверяет, обоснован ли вердикт fail дословной цитатой из текста OKR.
@@ -156,12 +232,79 @@ export function isAuditSuspicious(data: any): boolean {
   return data.rules.every((r: any) => r?.pass === false);
 }
 
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
+async function runFixMode(req: Request, body: any): Promise<Response> {
+  const { objective, key_results, failed_rules, horizon, extra_context, model } = body;
+  if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
+    return errorJson("Objective is required (min 3 chars)", 400);
+  }
+  if (!Array.isArray(key_results) || key_results.length === 0) {
+    return errorJson("At least one Key Result is required", 400);
+  }
+  const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
+  const krTexts = (key_results as string[]).map((t) => String(t));
+  const failed = Array.isArray(failed_rules) ? failed_rules : [];
+
+  const systemPrompt = buildEditorPrompt(String(objective), krTexts, failed, h);
+  const extraBlock = buildExtraBlock(
+    extra_context,
+    "ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ (учти при переписывании):",
+  );
+  const userPrompt = `Перепиши OKR по правилам выше.${extraBlock}`;
+  const modelArg = typeof model === "string" && model ? model : undefined;
+  const params = buildEditorParameters();
+
+  const first = await callAITool({
+    systemPrompt,
+    userPrompt,
+    toolName: "rewrite_okr",
+    toolDescription: "Переписать OKR так, чтобы закрыть проваленные правила.",
+    parameters: params,
+    model: modelArg,
+  });
+  if (first.status !== 200) return first;
+  const firstData = await first.json();
+
+  const finalData = await sanitizeRewrittenObjective(firstData, async () => {
+    const retryPrompt = `${userPrompt}\n\nВАЖНО: ${SANITIZE_HINT}`;
+    const r = await callAITool({
+      systemPrompt,
+      userPrompt: retryPrompt,
+      toolName: "rewrite_okr",
+      toolDescription: "Переписать OKR так, чтобы закрыть проваленные правила.",
+      parameters: params,
+      model: modelArg,
+    });
+    if (r.status !== 200) return firstData;
+    return await r.json();
+  });
+
+  const modelUsed = typeof (finalData as any).__model_used === "string"
+    ? (finalData as any).__model_used
+    : undefined;
+  delete (finalData as any).__model_used;
+  if (modelUsed) (finalData as any).model_used = modelUsed;
+
+  return json(finalData);
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    const { objective, key_results, key_results_full, horizon, extra_context, model } = await req.json();
+    const body = await req.json();
+    const mode = body?.mode === "fix" ? "fix" : "audit";
+
+    if (mode === "fix") {
+      return await runFixMode(req, body);
+    }
+
+    // === mode = "audit" (дефолт) ===
+    const { objective, key_results, key_results_full, horizon, extra_context, model } = body;
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -192,17 +335,17 @@ export const handler = async (req: Request) => {
       extra_context,
       "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
     );
-    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary, rewritten Objective + KRs. В rewritten_objective НЕ должно быть цифр (это нарушит OBJ-NO-NUMBERS). В переписанных KR сохраняй существующие baseline/target/metric, если они уже корректны.`;
+    const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary. Переписывание OKR НЕ входит в твою задачу — этим займётся отдельный проход РЕДАКТОРА.`;
 
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
-    const params = buildParameters(h);
+    const params = buildAuditorParameters(h);
     const first = await callAITool({
       systemPrompt,
       userPrompt,
-      toolName: "validate_okr",
-      toolDescription: "Audit an OKR and return rule-by-rule findings.",
+      toolName: "audit_okr",
+      toolDescription: "Audit an OKR and return rule-by-rule findings (no rewrites).",
       parameters: params,
       model: modelArg,
     });
@@ -215,8 +358,8 @@ export const handler = async (req: Request) => {
       const retry = await callAITool({
         systemPrompt,
         userPrompt: retryPrompt,
-        toolName: "validate_okr",
-        toolDescription: "Audit an OKR and return rule-by-rule findings.",
+        toolName: "audit_okr",
+        toolDescription: "Audit an OKR and return rule-by-rule findings (no rewrites).",
         parameters: params,
         // model не передаём → форсируем DEFAULT_MODEL
       });
@@ -232,34 +375,27 @@ export const handler = async (req: Request) => {
       }
     }
 
-    const finalData = await sanitizeRewrittenObjective(firstData, async () => {
-      const retryPrompt = `${userPrompt}\n\nВАЖНО: ${SANITIZE_HINT}`;
-      const r = await callAITool({
-        systemPrompt,
-        userPrompt: retryPrompt,
-        toolName: "validate_okr",
-        toolDescription: "Audit an OKR and return rule-by-rule findings.",
-        parameters: params,
-        model: modelArg,
-      });
-      if (r.status !== 200) {
-        return firstData;
-      }
-      return await r.json();
-    });
+    const finalData: any = firstData;
+
+    // В режиме аудита rewritten_* не запрашиваются — на всякий случай
+    // выкидываем, если модель их всё-таки прислала (при жёсткой JSON-схеме
+    // это невозможно, но mocks в тестах могут вернуть).
+    delete finalData.rewritten_objective;
+    delete finalData.rewritten_key_results;
+    delete finalData.rewritten_objective_warning;
 
     // Извлекаем служебное __model_used и нормализуем в публичное поле model_used.
-    const modelUsed = typeof (finalData as any).__model_used === "string"
-      ? (finalData as any).__model_used
+    const modelUsed = typeof finalData.__model_used === "string"
+      ? finalData.__model_used
       : undefined;
-    delete (finalData as any).__model_used;
-    if (modelUsed) (finalData as any).model_used = modelUsed;
+    delete finalData.__model_used;
+    if (modelUsed) finalData.model_used = modelUsed;
 
     // Серверная переопределение severity: канонический источник истины —
     // severityFor(id, horizon), а не то, что вернула модель. Делаем ДО
     // applyScoreRecompute, чтобы пересчёт шёл по каноническим весам.
-    if (Array.isArray((finalData as any).rules)) {
-      (finalData as any).rules = (finalData as any).rules.map((r: any) => ({
+    if (Array.isArray(finalData.rules)) {
+      finalData.rules = finalData.rules.map((r: any) => ({
         ...r,
         severity: severityFor(r?.id, h),
       }));
@@ -278,8 +414,8 @@ export const handler = async (req: Request) => {
       if (k?.metric) parts.push(String(k.metric));
       return parts.join(" ");
     });
-    if (Array.isArray((finalData as any).rules)) {
-      (finalData as any).rules = (finalData as any).rules.map((r: any) => ({
+    if (Array.isArray(finalData.rules)) {
+      finalData.rules = finalData.rules.map((r: any) => ({
         ...r,
         grounded: isGrounded(r, objectiveText, krHaystack),
       }));

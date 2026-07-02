@@ -6,6 +6,9 @@ export interface SavedOkr {
   objective: string;
   plan: GeneratedPlan;
   savedAt: string;
+  /** Обновляется при replace(). savedAt сохраняется исходным, чтобы не ломать
+   *  порядок в дереве / сортировки. */
+  updatedAt?: string;
   parentOkrId?: string;
   parentKrIndex?: number;
 }
@@ -91,6 +94,34 @@ export function useSavedOkrs() {
       };
       const ok = commit([item, ...itemsRef.current]);
       return { item, ok };
+    },
+    [commit],
+  );
+
+  const replace = useCallback(
+    (
+      id: string,
+      objective: string,
+      plan: GeneratedPlan,
+    ): { ok: boolean; item?: SavedOkr } => {
+      const current = itemsRef.current;
+      const idx = current.findIndex((x) => x.id === id);
+      if (idx === -1) return { ok: false };
+      const prev = current[idx];
+      const updated: SavedOkr = {
+        ...prev,
+        objective: objective.trim() || plan.objective_refined || prev.objective,
+        plan,
+        updatedAt: new Date().toISOString(),
+        // id / savedAt / parentOkrId / parentKrIndex — СОХРАНЯЕМ исходные, чтобы:
+        // (1) дети продолжали ссылаться на этот id,
+        // (2) связь с родителем не терялась,
+        // (3) порядок в дереве не прыгал.
+      };
+      const next = current.slice();
+      next[idx] = updated;
+      const ok = commit(next);
+      return { ok, ...(ok ? { item: updated } : {}) };
     },
     [commit],
   );
@@ -197,6 +228,7 @@ export function useSavedOkrs() {
     items,
     persistError,
     save,
+    replace,
     remove,
     clear,
     getChildren,

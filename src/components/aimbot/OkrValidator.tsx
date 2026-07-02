@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, Loader2, Plus, Trash2, Wand2, Check, X, ArrowRight, Sparkles } from "lucide-react";
+import { ShieldCheck, Loader2, Plus, Trash2, Wand2, Check, X, ArrowRight, Sparkles, BookmarkPlus, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { OkrHorizon, ValidationDraft, ValidationKR, ValidationReport } from "@/types/okr";
+import type { GeneratedPlan, OkrHorizon, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
+import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { RuleList, scoreBadgeClass } from "./RuleList";
+import { ParentKrPicker } from "./ParentKrPicker";
 
 const HORIZON_LABELS: Record<OkrHorizon, string> = {
   strategic_3y: "Стратегия · 3 года",
@@ -34,9 +36,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
   const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
   const [loading, setLoading] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
+  const [sourceOkrId, setSourceOkrId] = useState<string | undefined>(undefined);
+  const [saveParentLink, setSaveParentLink] = useState<{ parentOkrId: string; parentKrIndex: number } | null>(null);
   const { buildContext } = useDocs();
   const { model } = useAiModel();
+  const { items: savedItems, save: saveOkr, replace: replaceOkr } = useSavedOkrs();
 
   useEffect(() => {
     if (!draft) return;
@@ -45,11 +51,12 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setKrsFull(draft.key_results_full ?? null);
     if (draft.horizon) setHorizon(draft.horizon);
     setReport(null);
+    setSourceOkrId(draft.sourceOkrId);
+    setSaveParentLink(null);
   }, [draft]);
 
   const updateKr = (i: number, v: string) => {
     setKrs((p) => p.map((x, idx) => (idx === i ? v : x)));
-    // если пользователь отредактировал текст KR — отвязываем расширенные данные для этой строки
     setKrsFull((p) => (p ? p.map((x, idx) => (idx === i ? { ...x, text: v } : x)) : p));
   };
   const addKr = () => {
@@ -68,7 +75,6 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     if (obj.trim().length < 3) return toast.error("Введите Objective (мин. 3 символа)");
     if (cleaned.length === 0) return toast.error("Добавьте хотя бы один Key Result");
 
-    // Собираем расширенные KR (с baseline/target/metric) — только для тех строк, что не менялись
     const fullCleaned: ValidationKR[] | undefined = krsFull
       ? sourceKrs
           .map((text, i) => {
@@ -85,7 +91,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
+        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -102,15 +108,43 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     }
   };
 
-  const applyRewrite = () => {
-    if (!report) return;
-    const newObjective = report.rewritten_objective || objective;
-    const newKrs = report.rewritten_key_results?.length ? report.rewritten_key_results : krs;
-    setObjective(newObjective);
-    setKrs(newKrs);
-    setReport(null);
-    toast.success("Применена AI-версия. Запускаю повторный аудит...");
-    validate(newObjective, newKrs);
+  const failedRules: ValidationRule[] = report?.rules?.filter((r) => !r.pass) ?? [];
+
+  const requestFix = async () => {
+    if (!report || failedRules.length === 0) return;
+    const cleaned = krs.map((k) => k.trim()).filter(Boolean);
+    if (cleaned.length === 0) return toast.error("Добавьте хотя бы один Key Result");
+    setFixing(true);
+    try {
+      const extra_context = buildContext(["methodology", "okr_context"]);
+      const { data, error } = await supabase.functions.invoke("validate-okr", {
+        body: {
+          mode: "fix",
+          objective: objective.trim(),
+          key_results: cleaned,
+          horizon,
+          failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why })),
+          extra_context,
+          model,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      notifyModelFallback(data);
+      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; model_used?: string };
+      setReport((p) => p ? {
+        ...p,
+        rewritten_objective: d.rewritten_objective ?? "",
+        rewritten_key_results: d.rewritten_key_results ?? [],
+        rewritten_objective_warning: d.rewritten_objective_warning,
+      } : p);
+      toast.success("AI-предложения по улучшению готовы");
+    } catch (e: any) {
+      const msg = e?.message || "Не удалось получить исправления";
+      toast.error(msg);
+    } finally {
+      setFixing(false);
+    }
   };
 
   const acceptObjective = () => {
@@ -142,11 +176,70 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     );
   };
 
-  const applyAndRevalidate = applyRewrite;
+  const applyAllAndRevalidate = () => {
+    if (!report) return;
+    const newObjective = report.rewritten_objective || objective;
+    const newKrs = report.rewritten_key_results?.map((k, i) => (k && k.trim() ? k : (krs[i] ?? ""))) ?? krs;
+    setObjective(newObjective);
+    setKrs(newKrs);
+    setReport(null);
+    toast.success("Все предложения приняты. Запускаю повторный аудит...");
+    validate(newObjective, newKrs);
+  };
+
+  const buildPlanFromCurrent = (): GeneratedPlan => ({
+    objective_refined: objective.trim(),
+    score: report?.score ?? 0,
+    horizon,
+    key_results: krs.map((text, i) => {
+      const f = krsFull?.[i];
+      return {
+        text: text.trim(),
+        baseline: f?.baseline ?? "",
+        target: f?.target ?? "",
+        metric: f?.metric ?? "",
+        kr_type: f?.kr_type ?? "leading",
+        solutions: [],
+      };
+    }).filter((k) => k.text.length > 0),
+  });
+
+  const saveReplaceExisting = () => {
+    if (!sourceOkrId) return;
+    const plan = buildPlanFromCurrent();
+    const res = replaceOkr(sourceOkrId, objective.trim(), plan);
+    if (res.ok) {
+      toast.success("Исправленная версия сохранена (связи с родителем и детьми сохранены)");
+    } else {
+      toast.error("Не удалось сохранить — запись не найдена или хранилище недоступно");
+    }
+  };
+
+  const saveAsNew = () => {
+    const plan = buildPlanFromCurrent();
+    if (plan.key_results.length === 0) {
+      toast.error("Добавьте хотя бы один Key Result перед сохранением");
+      return;
+    }
+    const res = saveParentLink
+      ? saveOkr(objective.trim(), plan, saveParentLink)
+      : saveOkr(objective.trim(), plan);
+    if (res.ok) {
+      toast.success("OKR сохранён как новый");
+      setSourceOkrId(res.item.id);
+    } else {
+      toast.error("Не удалось сохранить — хранилище недоступно");
+    }
+  };
 
   const score = report?.score;
   const statusLabel =
     report?.status === "pass" ? "Соответствует" : report?.status === "warn" ? "Требует доработки" : report?.status === "fail" ? "Не соответствует" : null;
+
+  const hasRewrites = report && (
+    (report.rewritten_objective && report.rewritten_objective.trim()) ||
+    report.rewritten_key_results?.some((x) => x && x.trim())
+  );
 
   return (
     <Card className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
@@ -333,6 +426,28 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         </div>
       )}
 
+      {/* Кнопка "Предложить исправления" — только если есть провалы и мы ещё не запросили fix */}
+      {report && failedRules.length > 0 && !hasRewrites && (
+        <Button
+          type="button"
+          onClick={requestFix}
+          disabled={fixing}
+          variant="outline"
+          className="w-full border-primary/40 text-primary hover:bg-accent"
+          data-testid="request-fix-button"
+        >
+          {fixing ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Редактор пишет исправления...
+            </>
+          ) : (
+            <>
+              <Wand2 className="mr-2 h-4 w-4" /> Предложить исправления ({failedRules.length})
+            </>
+          )}
+        </Button>
+      )}
+
       {report && onSendToSolutions && (() => {
         const ready = report.score >= 70;
         const cleanedKrs = krs.map((k) => k.trim()).filter(Boolean);
@@ -371,14 +486,60 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         );
       })()}
 
-      {report && (report.rewritten_objective || report.rewritten_key_results?.some((x) => x && x.trim())) && (
+      {/* Сохранение в дерево */}
+      {report && (
+        <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сохранение в дерево</p>
+          {sourceOkrId ? (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                OKR открыт из сохранённой записи. Замена сохранит id, связь с родителем и всех детей.
+              </p>
+              <Button
+                type="button"
+                onClick={saveReplaceExisting}
+                variant="outline"
+                size="sm"
+                className="w-full border-success/40 text-success hover:bg-success-soft/50"
+                data-testid="save-replace-button"
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Сохранить исправленную версию
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                OKR введён вручную. Можно сохранить как новую запись (опционально — под родительским KR).
+              </p>
+              <ParentKrPicker
+                items={savedItems}
+                horizon={horizon}
+                value={saveParentLink}
+                onChange={setSaveParentLink}
+              />
+              <Button
+                type="button"
+                onClick={saveAsNew}
+                variant="outline"
+                size="sm"
+                className="w-full"
+                data-testid="save-as-new-button"
+              >
+                <BookmarkPlus className="mr-2 h-3.5 w-3.5" /> Сохранить как новый
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {hasRewrites && (
         <div className="space-y-3 rounded-xl border border-primary/20 bg-accent/30 p-4">
           <div className="flex items-center gap-2">
             <Wand2 className="h-4 w-4 text-primary" />
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">AI-предложения по улучшению</p>
           </div>
 
-          {report.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
+          {report?.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
             <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
               <div className="space-y-1 text-sm">
@@ -408,7 +569,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             </div>
           )}
 
-          {report.rewritten_key_results?.map((newKr, i) => {
+          {report?.rewritten_key_results?.map((newKr, i) => {
             const oldKr = krs[i] ?? "";
             if (!newKr || !newKr.trim() || newKr.trim() === oldKr.trim()) return null;
             return (
@@ -434,7 +595,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           })}
 
           <Button
-            onClick={applyAndRevalidate}
+            onClick={applyAllAndRevalidate}
             disabled={loading}
             variant="outline"
             size="sm"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ShieldCheck, Loader2, Plus, Trash2, Wand2, Check, X, ArrowRight, Sparkles, BookmarkPlus, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,35 @@ interface Props {
 const DEFAULT_DRAFT: ValidationDraft = {
   objective: "Увеличить количество активных пользователей",
   key_results: ["Поднять удержание пользователей на 15%", "Провести 10 интервью с клиентами"],
+};
+
+/**
+ * Рендерит текст, подсвечивая плейсхолдеры X/Y (в т.ч. X% / Y%) как визуальные
+ * маркеры «сюда нужно вписать реальное число». Используется в rewritten-блоках
+ * коуча-редактора.
+ */
+export const renderWithPlaceholders = (text: string): React.ReactNode => {
+  const parts: React.ReactNode[] = [];
+  const re = /\b([XY])(%?)(?![A-Za-zА-Яа-я0-9])/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <mark
+        key={`ph-${key++}`}
+        data-testid="placeholder-xy"
+        className="mx-0.5 inline-flex items-center rounded bg-warning-soft px-1 py-0 text-[0.95em] font-semibold text-warning"
+        title="Плейсхолдер: подставь реальное значение (см. пояснение коуча)"
+      >
+        {m[1]}{m[2]}
+      </mark>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length ? parts : text;
 };
 
 export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
@@ -131,12 +160,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       notifyModelFallback(data);
-      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; model_used?: string };
+      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
       setReport((p) => p ? {
         ...p,
         rewritten_objective: d.rewritten_objective ?? "",
         rewritten_key_results: d.rewritten_key_results ?? [],
         rewritten_objective_warning: d.rewritten_objective_warning,
+        editor_note: d.editor_note,
       } : p);
       toast.success("AI-предложения по улучшению готовы");
     } catch (e: any) {
@@ -539,6 +569,17 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">AI-предложения по улучшению</p>
           </div>
 
+          {report?.editor_note && (
+            <p
+              data-testid="editor-note"
+              className="rounded-md border border-primary/20 bg-background/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground"
+            >
+              <span className="font-semibold text-primary">Коуч: </span>
+              {report.editor_note}
+            </p>
+          )}
+
+
           {report?.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
             <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
@@ -546,7 +587,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                 <p className="text-muted-foreground line-through">{objective}</p>
                 <div className="flex items-start gap-1.5">
                   <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                  <p className="font-medium text-foreground">{report.rewritten_objective}</p>
+                  <p className="font-medium text-foreground">{renderWithPlaceholders(report.rewritten_objective)}</p>
                 </div>
               </div>
               {report.rewritten_objective_warning && (
@@ -579,7 +620,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   {oldKr && <p className="text-muted-foreground line-through">{oldKr}</p>}
                   <div className="flex items-start gap-1.5">
                     <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <p className="font-medium text-foreground">{newKr}</p>
+                    <p className="font-medium text-foreground">{renderWithPlaceholders(newKr)}</p>
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">

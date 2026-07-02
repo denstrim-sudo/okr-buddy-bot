@@ -124,6 +124,8 @@ export interface ValidationReport {
   audit_unreliable?: boolean;
   /** Модель, которая реально ответила (после возможного fallback на DEFAULT_MODEL). */
   model_used?: string;
+  /** Пояснение коуча-редактора (mode=fix): что изменено, что сохранено, откуда взять данные для X/Y. */
+  editor_note?: string;
 }
 
 export interface ValidationKR {

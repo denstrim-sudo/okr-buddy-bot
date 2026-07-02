@@ -137,9 +137,9 @@ describe("OkrValidator (Module 2)", () => {
     await userEvent.click(quarter);
     expect(quarter.className).toMatch(/border-primary/);
     expect(screen.getByText(/квартальный набор правил/i)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Focus/)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Theme/)).toBeInTheDocument();
-    expect(screen.getByText(/Q-Reach/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-FOCUS/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-THEME/)).toBeInTheDocument();
+    expect(screen.getByText(/Q-REACH/)).toBeInTheDocument();
   });
 
   it("draft с horizon='quarter_3m' автоматически активирует квартальную кнопку", () => {

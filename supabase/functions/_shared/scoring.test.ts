@@ -1,30 +1,28 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { recomputeScore, scoreDiscrepancy, severityFor, type ScoringRule } from "./scoring.ts";
+import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, SEVERITY_BY_RULE_ID, type ScoringRule } from "./scoring.ts";
 
 Deno.test("recomputeScore: 100 при всех правилах pass=true", () => {
   const rules: ScoringRule[] = [
-    { id: "O1", pass: true, severity: "important" },
-    { id: "O3", pass: true, severity: "critical" },
-    { id: "KR1", pass: true, severity: "critical" },
-    { id: "KR2", pass: true, severity: "critical" },
-    { id: "KR3", pass: true, severity: "critical" },
-    { id: "KR4", pass: true, severity: "important" },
-    { id: "KR10", pass: true, severity: "important" },
+    { id: "OBJ-QUALITATIVE", pass: true, severity: "important" },
+    { id: "OBJ-NO-NUMBERS", pass: true, severity: "critical" },
+    { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+    { id: "KR-BASELINE-TARGET", pass: true, severity: "critical" },
+    { id: "KR-OUTCOME", pass: true, severity: "critical" },
+    { id: "KR-TIMEBOUND", pass: true, severity: "important" },
+    { id: "KR-LEADING", pass: true, severity: "important" },
   ];
   assertEquals(recomputeScore(rules), 100);
 });
 
 Deno.test("recomputeScore: потолок 60 при ≥1 critical fail, даже если взвешенная сумма выше", () => {
-  // 1 critical fail (вес 3) из 7 правил; остальные 6 — pass с большим суммарным весом.
-  // Total = 3+3+3+3+2+2+2 = 18; passed = 18-3 = 15 → raw = round(100*15/18) = 83 > 60.
   const rules: ScoringRule[] = [
-    { id: "O3", pass: false, severity: "critical" }, // единственный fail
-    { id: "KR1", pass: true, severity: "critical" },
-    { id: "KR2", pass: true, severity: "critical" },
-    { id: "KR3", pass: true, severity: "critical" },
-    { id: "O1", pass: true, severity: "important" },
-    { id: "KR4", pass: true, severity: "important" },
-    { id: "KR10", pass: true, severity: "important" },
+    { id: "OBJ-NO-NUMBERS", pass: false, severity: "critical" },
+    { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+    { id: "KR-BASELINE-TARGET", pass: true, severity: "critical" },
+    { id: "KR-OUTCOME", pass: true, severity: "critical" },
+    { id: "OBJ-QUALITATIVE", pass: true, severity: "important" },
+    { id: "KR-TIMEBOUND", pass: true, severity: "important" },
+    { id: "KR-LEADING", pass: true, severity: "important" },
   ];
   const s = recomputeScore(rules);
   assert(s <= 60, `expected <=60, got ${s}`);
@@ -32,18 +30,16 @@ Deno.test("recomputeScore: потолок 60 при ≥1 critical fail, даже
 });
 
 Deno.test("recomputeScore: корректно считает по весам critical=3/important=2/improve=1", () => {
-  // Без critical fail. Total = 3+2+1+2 = 8; passed = 3+1 = 4. round(100*4/8)=50.
   const rules: ScoringRule[] = [
-    { id: "A", pass: true, severity: "critical" },   // +3 passed, +3 total
-    { id: "B", pass: false, severity: "important" }, // +0 passed, +2 total
-    { id: "C", pass: true, severity: "improve" },    // +1 passed, +1 total
-    { id: "D", pass: false, severity: "important" }, // +0 passed, +2 total
+    { id: "A", pass: true, severity: "critical" },
+    { id: "B", pass: false, severity: "important" },
+    { id: "C", pass: true, severity: "improve" },
+    { id: "D", pass: false, severity: "important" },
   ];
   assertEquals(recomputeScore(rules), 50);
 });
 
 Deno.test("recomputeScore: improve-fail НЕ триггерит потолок 60", () => {
-  // Только improve-fail (вес 1), без critical fails. Total = 3+2+1 = 6; passed = 3+2 = 5 → 83.
   const rules: ScoringRule[] = [
     { id: "A", pass: true, severity: "critical" },
     { id: "B", pass: true, severity: "important" },
@@ -76,17 +72,60 @@ Deno.test("scoreDiscrepancy: модель занизила (60 vs 71) → true",
   assertEquals(scoreDiscrepancy(60, 71), true);
 });
 
-// --- severityFor: KR10 override для quarter_3m ---
+// --- knownRuleIdsFor: семантические id, старые мертвы ---
 
-Deno.test("severityFor: KR10 для block_12m → important", () => {
-  assertEquals(severityFor("KR10", "block_12m"), "important");
+Deno.test("knownRuleIdsFor('block_12m') возвращает ровно 8 новых семантических id", () => {
+  assertEquals(knownRuleIdsFor("block_12m"), [
+    "OBJ-QUALITATIVE",
+    "OBJ-AMBITIOUS",
+    "OBJ-NO-NUMBERS",
+    "KR-MEASURABLE",
+    "KR-BASELINE-TARGET",
+    "KR-OUTCOME",
+    "KR-TIMEBOUND",
+    "KR-LEADING",
+  ]);
 });
 
-Deno.test("severityFor: KR10 для quarter_3m → critical (override)", () => {
-  assertEquals(severityFor("KR10", "quarter_3m"), "critical");
+Deno.test("knownRuleIdsFor('quarter_3m') добавляет Q-FOCUS/Q-THEME/Q-REACH", () => {
+  const ids = knownRuleIdsFor("quarter_3m");
+  assertEquals(ids.length, 11);
+  for (const q of ["Q-FOCUS", "Q-THEME", "Q-REACH"]) {
+    assert(ids.includes(q), `${q} должен присутствовать в quarter ids`);
+  }
+});
+
+Deno.test("knownRuleIdsFor не содержит старых id (O1/O2/O3/KR1/KR2/KR3/KR4/KR10)", () => {
+  const all = [...knownRuleIdsFor("block_12m"), ...knownRuleIdsFor("quarter_3m")];
+  for (const dead of ["O1", "O2", "O3", "KR1", "KR2", "KR3", "KR4", "KR10", "Q-Focus", "Q-Theme", "Q-Reach"]) {
+    assert(!all.includes(dead), `старый id ${dead} не должен возвращаться`);
+  }
+});
+
+// --- severityFor ---
+
+Deno.test("severityFor: KR-LEADING для block_12m → important", () => {
+  assertEquals(severityFor("KR-LEADING", "block_12m"), "important");
+});
+
+Deno.test("severityFor: KR-LEADING для quarter_3m → critical (override)", () => {
+  assertEquals(severityFor("KR-LEADING", "quarter_3m"), "critical");
+});
+
+Deno.test("severityFor: OBJ-NO-NUMBERS всегда critical", () => {
+  assertEquals(severityFor("OBJ-NO-NUMBERS"), "critical");
+  assertEquals(severityFor("OBJ-NO-NUMBERS", "block_12m"), "critical");
+  assertEquals(severityFor("OBJ-NO-NUMBERS", "quarter_3m"), "critical");
+});
+
+Deno.test("severityFor: старые id мертвы — 'KR3' резолвится в improve (дефолт), НЕ critical", () => {
+  assertEquals(severityFor("KR3"), "improve");
+  assertEquals(severityFor("KR10", "quarter_3m"), "improve");
+  assertEquals(severityFor("O3"), "improve");
+  assert(!("KR3" in SEVERITY_BY_RULE_ID), "KR3 не должен присутствовать в SEVERITY_BY_RULE_ID");
+  assert(!("KR10" in SEVERITY_BY_RULE_ID), "KR10 не должен присутствовать в SEVERITY_BY_RULE_ID");
 });
 
 Deno.test("severityFor: неизвестный id → improve", () => {
   assertEquals(severityFor("XYZ"), "improve");
 });
-

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Sidebar } from "@/components/aimbot/Sidebar";
 import { OkrGenerator } from "@/components/aimbot/OkrGenerator";
 import { OkrValidator } from "@/components/aimbot/OkrValidator";
@@ -9,12 +10,36 @@ import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
+import { useSavedOkrs } from "@/hooks/useSavedOkrs";
+import { STORAGE_KEY as SOLUTION_STUDIO_KEY } from "@/hooks/useSolutionStudio";
+import { useDocs } from "@/contexts/DocsContext";
 import type { GeneratedPlan, ValidationDraft } from "@/types/okr";
+
+const DEFAULT_OBJECTIVE = "Стать самым любимым онбордингом";
 
 const Index = () => {
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
-  const [objective, setObjective] = useState("Стать самым любимым онбордингом");
+  const [objective, setObjective] = useState(DEFAULT_OBJECTIVE);
   const [validatorDraft, setValidatorDraft] = useState<ValidationDraft | null>(null);
+  const [studioKey, setStudioKey] = useState(0);
+  const { clear: clearSavedOkrs } = useSavedOkrs();
+  const { clear: clearDocs } = useDocs();
+
+  const handleResetAll = useCallback(() => {
+    clearSavedOkrs();
+    clearDocs();
+    try {
+      localStorage.removeItem(SOLUTION_STUDIO_KEY);
+    } catch {
+      /* ignore */
+    }
+    setPlan(null);
+    setObjective(DEFAULT_OBJECTIVE);
+    setValidatorDraft(null);
+    setStudioKey((k) => k + 1);
+    toast.success("Все данные сброшены");
+  }, [clearSavedOkrs, clearDocs]);
+
 
   const allSolutions = useMemo(() => {
     if (!plan) return fallbackSolutions;

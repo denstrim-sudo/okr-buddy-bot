@@ -114,7 +114,7 @@ const Index = () => {
     <div className="flex min-h-screen bg-gradient-surface">
       <Sidebar />
       <main className="flex-1 overflow-x-hidden">
-        <AppHeader />
+        <AppHeader onResetAll={handleResetAll} />
         <div className="space-y-6 p-4 sm:space-y-8 sm:p-6">
           <div className="animate-fade-in">
             <StatsGrid plan={plan} solutionsCount={allSolutions.length} />
@@ -139,6 +139,7 @@ const Index = () => {
 
           <div id="solution-studio" className="mt-2 animate-fade-in scroll-mt-6 sm:mt-8" style={{ animationDelay: "240ms" }}>
             <SolutionStudio
+              key={studioKey}
               defaultObjective={objective}
               defaultKeyResult={plan?.key_results?.[0]?.text || ""}
               keyResults={krTexts}

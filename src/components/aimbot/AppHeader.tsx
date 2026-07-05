@@ -5,8 +5,13 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { Logo } from "./Logo";
 import { Sidebar } from "./Sidebar";
 import { ModelSelector } from "./ModelSelector";
+import { ResetAllButton } from "./ResetAllButton";
 
-export const AppHeader = () => {
+interface AppHeaderProps {
+  onResetAll?: () => void;
+}
+
+export const AppHeader = ({ onResetAll }: AppHeaderProps = {}) => {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
@@ -51,6 +56,7 @@ export const AppHeader = () => {
           <Bell className="h-4 w-4" aria-hidden="true" />
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
         </button>
+        {onResetAll && <ResetAllButton onConfirm={onResetAll} />}
         <Button className="h-9 bg-gradient-primary text-primary-foreground shadow-md transition-transform hover:scale-[1.02]">
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           <span className="hidden sm:inline">Новый OKR</span>

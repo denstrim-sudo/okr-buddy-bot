@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Sidebar } from "@/components/aimbot/Sidebar";
 import { OkrGenerator } from "@/components/aimbot/OkrGenerator";
 import { OkrValidator } from "@/components/aimbot/OkrValidator";
@@ -9,12 +10,36 @@ import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
+import { useSavedOkrs } from "@/hooks/useSavedOkrs";
+import { STORAGE_KEY as SOLUTION_STUDIO_KEY } from "@/hooks/useSolutionStudio";
+import { useDocs } from "@/contexts/DocsContext";
 import type { GeneratedPlan, ValidationDraft } from "@/types/okr";
+
+const DEFAULT_OBJECTIVE = "Стать самым любимым онбордингом";
 
 const Index = () => {
   const [plan, setPlan] = useState<GeneratedPlan | null>(null);
-  const [objective, setObjective] = useState("Стать самым любимым онбордингом");
+  const [objective, setObjective] = useState(DEFAULT_OBJECTIVE);
   const [validatorDraft, setValidatorDraft] = useState<ValidationDraft | null>(null);
+  const [studioKey, setStudioKey] = useState(0);
+  const { clear: clearSavedOkrs } = useSavedOkrs();
+  const { clear: clearDocs } = useDocs();
+
+  const handleResetAll = useCallback(() => {
+    clearSavedOkrs();
+    clearDocs();
+    try {
+      localStorage.removeItem(SOLUTION_STUDIO_KEY);
+    } catch {
+      /* ignore */
+    }
+    setPlan(null);
+    setObjective(DEFAULT_OBJECTIVE);
+    setValidatorDraft(null);
+    setStudioKey((k) => k + 1);
+    toast.success("Все данные сброшены");
+  }, [clearSavedOkrs, clearDocs]);
+
 
   const allSolutions = useMemo(() => {
     if (!plan) return fallbackSolutions;
@@ -89,7 +114,7 @@ const Index = () => {
     <div className="flex min-h-screen bg-gradient-surface">
       <Sidebar />
       <main className="flex-1 overflow-x-hidden">
-        <AppHeader />
+        <AppHeader onResetAll={handleResetAll} />
         <div className="space-y-6 p-4 sm:space-y-8 sm:p-6">
           <div className="animate-fade-in">
             <StatsGrid plan={plan} solutionsCount={allSolutions.length} />
@@ -114,6 +139,7 @@ const Index = () => {
 
           <div id="solution-studio" className="mt-2 animate-fade-in scroll-mt-6 sm:mt-8" style={{ animationDelay: "240ms" }}>
             <SolutionStudio
+              key={studioKey}
               defaultObjective={objective}
               defaultKeyResult={plan?.key_results?.[0]?.text || ""}
               keyResults={krTexts}

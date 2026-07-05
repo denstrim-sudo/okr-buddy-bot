@@ -56,6 +56,7 @@ export const AppHeader = ({ onResetAll }: AppHeaderProps = {}) => {
           <Bell className="h-4 w-4" aria-hidden="true" />
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
         </button>
+        {onResetAll && <ResetAllButton onConfirm={onResetAll} />}
         <Button className="h-9 bg-gradient-primary text-primary-foreground shadow-md transition-transform hover:scale-[1.02]">
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           <span className="hidden sm:inline">Новый OKR</span>

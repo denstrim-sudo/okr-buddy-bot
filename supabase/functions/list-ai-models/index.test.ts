@@ -77,27 +77,43 @@ Deno.test("list-ai-models: апстрим падает, кэша нет → FALL
   }
 });
 
-Deno.test("list-ai-models: апстрим падает, но кэш есть → отдаёт кэш с degraded:true, cached:true", async () => {
+Deno.test("list-ai-models: апстрим падает, кэш свежий (в пределах STALE_TTL) → отдаёт кэш с stale:true", async () => {
   __resetCacheForTests();
   Deno.env.set("AIAI_API_KEY", "test-key");
-  // первый запрос наполняет кэш
   stubModelsResponse(["gpt-4o", "claude-haiku-4.5"]);
   await handler(makeReq()).then((r) => r.text());
-  // следующий — апстрим падает
-  globalThis.fetch = (() => Promise.reject(new Error("network down"))) as typeof fetch;
-  // форсируем "истечение" кэша по времени, чтобы дойти до fetchLiveIds:
-  // напрямую не можем, но второй вызов сразу попадёт в cached-ветку (within TTL).
-  // Поэтому для этой ветки имитируем истечение TTL через сдвиг Date.now.
+  // Сдвигаем время за пределы FRESH TTL, но внутри STALE TTL.
   const realNow = Date.now;
   Date.now = () => realNow() + 11 * 60 * 1000;
+  globalThis.fetch = (() => Promise.reject(new Error("network down"))) as typeof fetch;
   try {
     const res = await handler(makeReq());
-    Date.now = realNow;
-    assertEquals(res.status, 200);
     const data = await res.json();
+    assertEquals(res.status, 200);
     assert(Array.isArray(data.models) && data.models.length > 0);
     assertEquals(data.degraded, true);
     assertEquals(data.cached, true);
+    assertEquals(data.stale, true);
+  } finally {
+    Date.now = realNow;
+    restore();
+  }
+});
+
+Deno.test("list-ai-models: кэш просрочен по STALE_TTL и апстрим падает → FALLBACK_LIST", async () => {
+  __resetCacheForTests();
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  stubModelsResponse(["gpt-4o", "claude-haiku-4.5"]);
+  await handler(makeReq()).then((r) => r.text());
+  const realNow = Date.now;
+  Date.now = () => realNow() + 25 * 60 * 60 * 1000; // > STALE_TTL_MS
+  globalThis.fetch = (() => Promise.reject(new Error("network down"))) as typeof fetch;
+  try {
+    const res = await handler(makeReq());
+    const data = await res.json();
+    assertEquals(data.models, FALLBACK_LIST);
+    assertEquals(data.degraded, true);
+    assertEquals(data.stale, undefined);
   } finally {
     Date.now = realNow;
     restore();
@@ -119,3 +135,4 @@ Deno.test("list-ai-models: в пределах CACHE_TTL_MS второй выз�
     restore();
   }
 });
+

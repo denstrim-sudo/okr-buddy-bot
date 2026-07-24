@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchModelCatalog, resolveInitialModel, notifyModelFallback, FALLBACK_CATALOG, DEFAULT_MODEL } from "@/contexts/ModelContext";
+import {
+  fetchModelCatalog,
+  resolveInitialModel,
+  notifyModelFallback,
+  readCatalogLkg,
+  writeCatalogLkg,
+  CATALOG_LKG_KEY,
+  CATALOG_LKG_TTL_MS,
+  FALLBACK_CATALOG,
+  DEFAULT_MODEL,
+} from "@/contexts/ModelContext";
+
 
 vi.mock("sonner", () => ({
   toast: { info: vi.fn(), warning: vi.fn(), success: vi.fn(), error: vi.fn() },

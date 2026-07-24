@@ -66,7 +66,49 @@ describe("fetchModelCatalog", () => {
     expect(res.models).toEqual(fullModels);
     expect(res.degraded).toBe(false);
   });
+
+  it("делает до 3 попыток, если все degraded — возвращает последний degraded", async () => {
+    const invoke = vi.fn().mockResolvedValue({ data: null, error: new Error("down") });
+    const res = await fetchModelCatalog(invoke, { retryDelayMs: 0, maxAttempts: 3 });
+    expect(invoke).toHaveBeenCalledTimes(3);
+    expect(res.degraded).toBe(true);
+  });
+
+  it("прокидывает stale:true из ответа", async () => {
+    const models = [{ id: "gpt-4o", label: "GPT-4o", hint: "" }];
+    const invoke = vi.fn().mockResolvedValue({ data: { models, degraded: true, stale: true }, error: null });
+    const res = await fetchModelCatalog(invoke, { retry: false });
+    expect(res.stale).toBe(true);
+    expect(res.degraded).toBe(true);
+  });
 });
+
+describe("catalog LKG (localStorage)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("readCatalogLkg возвращает null, если ничего не сохранено", () => {
+    expect(readCatalogLkg()).toBeNull();
+  });
+
+  it("writeCatalogLkg + readCatalogLkg round-trip", () => {
+    const models = [{ id: "gpt-4o", label: "GPT-4o", hint: "" }];
+    writeCatalogLkg(models);
+    expect(readCatalogLkg()).toEqual(models);
+  });
+
+  it("readCatalogLkg возвращает null для устаревшей записи (> TTL)", () => {
+    const models = [{ id: "gpt-4o", label: "GPT-4o", hint: "" }];
+    const oldAt = Date.now() - CATALOG_LKG_TTL_MS - 1000;
+    localStorage.setItem(CATALOG_LKG_KEY, JSON.stringify({ at: oldAt, models }));
+    expect(readCatalogLkg()).toBeNull();
+  });
+
+  it("readCatalogLkg возвращает null для битого JSON", () => {
+    localStorage.setItem(CATALOG_LKG_KEY, "{not json");
+    expect(readCatalogLkg()).toBeNull();
+  });
+});
+
 
 describe("resolveInitialModel", () => {
   const catalog = [

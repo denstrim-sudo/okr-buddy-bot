@@ -39,6 +39,7 @@ export const FALLBACK_LIST = [
 
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 export const CACHE_TTL_MS = 10 * 60 * 1000;
+export const STALE_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface CacheEntry {
   at: number;
@@ -93,9 +94,9 @@ export const handler = async (req: Request): Promise<Response> => {
 
   const liveIds = await fetchLiveIds();
   if (!liveIds || liveIds.size === 0) {
-    // upstream down — serve last good cache or safe minimum.
-    if (cache) {
-      return json({ models: cache.models, degraded: true, cached: true });
+    // upstream down — serve last-known-good cache while it's within STALE_TTL.
+    if (cache && now - cache.at < STALE_TTL_MS) {
+      return json({ models: cache.models, degraded: true, cached: true, stale: true });
     }
     return json({ models: FALLBACK_LIST, degraded: true });
   }
@@ -105,5 +106,6 @@ export const handler = async (req: Request): Promise<Response> => {
   cache = { at: now, models, degraded: !filtered.length };
   return json({ models, degraded: !filtered.length });
 };
+
 
 Deno.serve(handler);

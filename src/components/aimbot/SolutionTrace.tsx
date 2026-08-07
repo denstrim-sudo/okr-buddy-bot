@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +46,7 @@ const STATUS_TONE: Record<TraceChain["status"], string> = {
 
 export const SolutionTrace = () => {
   const { items } = useSavedOkrs();
-  const { metrics, getMetric } = useMetricsCatalog();
+  const { metrics, getMetric, addMetric } = useMetricsCatalog();
   const pyramid = usePyramid();
   const { buildContext } = useDocs();
   const { model } = useAiModel();
@@ -55,6 +56,7 @@ export const SolutionTrace = () => {
   const [loading, setLoading] = useState(false);
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [summary, setSummary] = useState("");
+  const [newName, setNewName] = useState<string | null>(null);
 
   const solutions = useMemo(() => {
     let studio: unknown = null;
@@ -70,9 +72,23 @@ export const SolutionTrace = () => {
   const solution = solutions.find((s) => s.id === selectedId) ?? null;
 
   const linked = solution ? pyramid.getSolutionMetrics(solution.id) : [];
-  const suggestedId = solution ? pyramid.suggestedMetricForSolution(solution) : null;
-  const suggested = suggestedId ? metrics.find((m) => m.id === suggestedId) : undefined;
+  const suggestion = solution ? pyramid.suggestedMetricForSolution(solution, metrics) : null;
+  const suggested =
+    suggestion?.kind === "existing" ? metrics.find((m) => m.id === suggestion.metricId) : undefined;
   const showSuggestion = Boolean(suggested && !linked.includes(suggested.id));
+  const newSuggestion = suggestion?.kind === "new" ? suggestion : null;
+
+  const createSuggested = () => {
+    if (!solution || !newSuggestion) return;
+    const name = (newName ?? newSuggestion.name).trim();
+    if (!name) {
+      toast.error("Укажите название метрики");
+      return;
+    }
+    const { metric } = addMetric(name, undefined, newSuggestion.fullName);
+    pyramid.linkSolutionToMetric(solution.id, metric.id);
+    setNewName(null);
+  };
 
   const chains = useMemo(
     () => (solution ? traceSolution(solution, pyramid.state, items, metrics) : []),
@@ -83,6 +99,7 @@ export const SolutionTrace = () => {
     setSelectedId(id);
     setRecs(null);
     setSummary("");
+    setNewName(null);
   };
 
   const analyze = async () => {
@@ -165,6 +182,37 @@ export const SolutionTrace = () => {
 
       {solution && (
         <div className="mt-4 space-y-3">
+          {newSuggestion && (
+            <div
+              data-testid="trace-new-metric"
+              className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span>Опережающая метрика Решения ещё не заведена в справочнике</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor="trace-new-metric-name">
+                  Название метрики
+                </label>
+                <Input
+                  id="trace-new-metric-name"
+                  value={newName ?? newSuggestion.name}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="h-7 max-w-xs text-[11px]"
+                />
+                <Button size="sm" className="h-7 px-2 text-[11px]" onClick={createSuggested}>
+                  Завести метрику: {(newName ?? newSuggestion.name).slice(0, 40)}
+                </Button>
+              </div>
+              {newSuggestion.fullName && (
+                <p className="text-[11px] text-muted-foreground">
+                  полностью: {newSuggestion.fullName}
+                </p>
+              )}
+            </div>
+          )}
+
           {showSuggestion && suggested && (
             <div
               data-testid="trace-suggested-metric"
@@ -172,7 +220,8 @@ export const SolutionTrace = () => {
             >
               <Gauge className="h-3.5 w-3.5 text-primary" />
               <span>
-                Метрика KR, под которым родилось Решение: <strong>{suggested.name}</strong>
+                Предлагаемая метрика:{" "}
+                <strong title={suggested.description ?? suggested.name}>{suggested.name}</strong>
               </span>
               <Button
                 size="sm"
@@ -188,7 +237,13 @@ export const SolutionTrace = () => {
             {linked.map((id) => {
               const m = getMetric(id);
               return (
-                <Badge key={id} variant="secondary" className="gap-1 text-[10px]">
+                <Badge
+                  key={id}
+                  data-testid={`metric-chip-${id}`}
+                  title={m?.description ?? m?.name ?? id}
+                  variant="secondary"
+                  className="gap-1 text-[10px]"
+                >
                   <Gauge className="h-3 w-3" />
                   {m?.name ?? id}
                   <button
@@ -326,6 +381,7 @@ export const SolutionTrace = () => {
                 size="sm"
                 variant="outline"
                 className="h-7 px-2 text-[11px]"
+                title={m.description ?? m.name}
                 onClick={() => {
                   pyramid.linkSolutionToMetric(solution!.id, m.id);
                   setPickerOpen(false);

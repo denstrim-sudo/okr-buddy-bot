@@ -120,7 +120,7 @@ async function openaiToolCall(args: CallArgs, retryHint = "", timeoutMs = PRIMAR
         tools: [tool],
         tool_choice: { type: "function", function: { name: args.toolName } },
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
     console.error("AIAI.BY fetch failed", args.model, e);

@@ -205,3 +205,60 @@ describe("solutionsForPyramid", () => {
     expect(state.solutionMetrics.find((l) => l.solutionId === "kr-0:0")).toBeTruthy();
   });
 });
+
+import { shortenMetricName } from "@/lib/pyramid";
+
+describe("shortenMetricName", () => {
+  it("сокращает длинное имя до ≤40 символов, сохраняя суть", () => {
+    const full =
+      "Конверсия в отказ от проведения операции на этапе прохождения контекстного опроса безопасности";
+    const short = shortenMetricName(full);
+    expect(short.length).toBeLessThanOrEqual(40);
+    expect(short).toMatch(/Конверсия/);
+    expect(short).toMatch(/безопасност/i);
+  });
+
+  it("короткое имя возвращается как есть", () => {
+    expect(shortenMetricName("  Время   ответа ")).toBe("Время ответа");
+  });
+});
+
+describe("suggestedMetricForSolution · приоритет опережающей метрики", () => {
+  const state = { ...emptyPyramid(), krMetrics: { "dir:2": "m1" } };
+  const cat = [
+    { id: "m1", name: "Доля автономных заказов", createdAt: "" },
+    { id: "m2", name: "Время ответа", createdAt: "" },
+  ];
+
+  it("опережающая метрика совпадает со справочником → existing", () => {
+    const r = suggestedMetricForSolution(
+      { id: "s", title: "t", leadingMetric: "  время   ОТВЕТА ", originOkrId: "dir", originKrIndex: 2 },
+      cat,
+      state,
+    );
+    expect(r).toEqual({ kind: "existing", metricId: "m2" });
+  });
+
+  it("опережающей метрики нет в справочнике → new с сокращённым именем и fullName", () => {
+    const full =
+      "Конверсия в отказ от проведения операции на этапе прохождения контекстного опроса безопасности";
+    const r = suggestedMetricForSolution({ id: "s", title: "t", leadingMetric: full }, cat, state);
+    expect(r?.kind).toBe("new");
+    if (r?.kind === "new") {
+      expect(r.name.length).toBeLessThanOrEqual(40);
+      expect(r.fullName).toBe(full);
+    }
+  });
+
+  it("короткая новая метрика — без fullName", () => {
+    const r = suggestedMetricForSolution({ id: "s", title: "t", leadingMetric: "Отток" }, cat, state);
+    expect(r).toEqual({ kind: "new", name: "Отток" });
+  });
+
+  it("поле пустое → падение на метрику KR-происхождения", () => {
+    expect(
+      suggestedMetricForSolution({ id: "s", title: "t", originOkrId: "dir", originKrIndex: 2 }, cat, state),
+    ).toEqual({ kind: "existing", metricId: "m1" });
+    expect(suggestedMetricForSolution({ id: "s", title: "t" }, cat, state)).toBeNull();
+  });
+});

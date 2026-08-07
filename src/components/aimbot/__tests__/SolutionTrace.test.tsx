@@ -226,3 +226,105 @@ describe("SolutionTrace · только Решения «в проекте»", (
     expect(state.solutionMetrics).toHaveLength(2);
   });
 });
+
+describe("SolutionTrace · автоподстановка опережающей метрики Решения", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    invokeMock.mockReset();
+  });
+
+  const LONG =
+    "Конверсия в отказ от проведения операции на этапе прохождения контекстного опроса безопасности";
+
+  const seedLeading = (leading: string) => {
+    seedAll({
+      pyramid: {
+        levels: { dir: "direction", bank: "bank" },
+        krMetrics: { "dir:0": "m1" },
+        contributions: [],
+        solutionMetrics: [],
+      },
+    });
+    const st = JSON.parse(localStorage.getItem("aimbot.solutionStudio.v2")!);
+    st.slices["kr-0"].solutions[0].leading_metric = leading;
+    localStorage.setItem("aimbot.solutionStudio.v2", JSON.stringify(st));
+  };
+
+  it("метрики нет в справочнике → предложение «Завести метрику: <короткое имя>» с полным текстом под ним", async () => {
+    seedLeading(LONG);
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    const block = await screen.findByTestId("trace-new-metric");
+    const btn = within(block).getByRole("button", { name: /завести метрику/i });
+    expect(btn.textContent!.length).toBeLessThanOrEqual(60);
+    expect(btn).not.toHaveTextContent(LONG);
+    expect(block).toHaveTextContent(`полностью: ${LONG}`);
+  });
+
+  it("клик создаёт метрику с коротким name и полным description и сразу связывает её", async () => {
+    seedLeading(LONG);
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    const block = await screen.findByTestId("trace-new-metric");
+    await userEvent.click(within(block).getByRole("button", { name: /завести метрику/i }));
+    await waitFor(() => {
+      const cat = JSON.parse(localStorage.getItem("aimbot.metrics.v1")!);
+      const created = cat.find((m: { description?: string }) => m.description === LONG);
+      expect(created).toBeTruthy();
+      expect(created.name.length).toBeLessThanOrEqual(40);
+      const state = JSON.parse(localStorage.getItem("aimbot.pyramid.v1")!);
+      expect(state.solutionMetrics.some((l: { metricId: string }) => l.metricId === created.id)).toBe(true);
+    });
+  });
+
+  it("пользователь может отредактировать предложенное название перед созданием", async () => {
+    seedLeading(LONG);
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    const block = await screen.findByTestId("trace-new-metric");
+    const input = within(block).getByLabelText(/название метрики/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, "Отказ на опросе");
+    await userEvent.click(within(block).getByRole("button", { name: /завести метрику/i }));
+    await waitFor(() => {
+      const cat = JSON.parse(localStorage.getItem("aimbot.metrics.v1")!);
+      expect(cat.some((m: { name: string }) => m.name === "Отказ на опросе")).toBe(true);
+    });
+  });
+
+  it("метрика уже есть в справочнике → предлагается она, без кнопки заведения", async () => {
+    seedLeading("  время   ОТВЕТА ");
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    const s = await screen.findByTestId("trace-suggested-metric");
+    expect(s).toHaveTextContent("Время ответа");
+    expect(screen.queryByTestId("trace-new-metric")).not.toBeInTheDocument();
+  });
+
+  it("автоподстановка не блокирует ручной выбор другой метрики", async () => {
+    seedLeading(LONG);
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    await screen.findByTestId("trace-new-metric");
+    await userEvent.click(screen.getByRole("button", { name: /добавить метрику/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "NPS" }));
+    expect(await screen.findByTestId("trace-chain-m2")).toBeInTheDocument();
+  });
+
+  it("чип метрики показывает короткое имя, полное — в title", async () => {
+    seedAll({
+      pyramid: {
+        levels: { dir: "direction", bank: "bank" },
+        krMetrics: { "dir:0": "m1" },
+        contributions: [],
+        solutionMetrics: [{ solutionId: "kr-0:0", metricId: "m1" }],
+      },
+      metrics: [{ id: "m1", name: "Конверсия в отказ", description: LONG, createdAt: "" }],
+    });
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    const chip = await screen.findByTestId("metric-chip-m1");
+    expect(chip).toHaveTextContent("Конверсия в отказ");
+    expect(chip).toHaveAttribute("title", LONG);
+  });
+});

@@ -1,7 +1,7 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
 import { getRulesBlock, getFewShotBlock } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
-import { containsDigits } from "../_shared/textGuards.ts";
+import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
 import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
 
 export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
@@ -200,23 +200,8 @@ export function buildAuditorParameters(horizon?: string, opts: { lite?: boolean 
 export const buildParameters = buildAuditorParameters;
 
 
-/**
- * Проверяет, обоснован ли вердикт fail дословной цитатой из текста OKR.
- * pass=true → всегда true (обоснование не требуется).
- * pass=false → evidence должна быть непустой подстрокой объединённого текста
- * objective + krTexts (без учёта регистра/повторяющихся пробелов).
- */
-export function isGrounded(
-  rule: { pass: boolean; evidence?: string },
-  objective: string,
-  krTexts: string[],
-): boolean {
-  if (rule.pass) return true;
-  const ev = (rule.evidence ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  if (ev.length < 3) return false;
-  const haystack = [objective, ...krTexts].join(" \n ").toLowerCase().replace(/\s+/g, " ");
-  return haystack.includes(ev);
-}
+/** Ре-экспорт для обратной совместимости: канонический источник — _shared/textGuards.ts. */
+export { isGrounded };
 
 const SANITIZE_HINT = "Твой предыдущий rewritten_objective содержал цифры, что нарушает правило OBJ-NO-NUMBERS. Перепиши rewritten_objective и rewritten_key_results без единой цифры в Objective, сохранив смысл. Цифры в Key Results (target/baseline) — оставь как есть, они разрешены.";
 

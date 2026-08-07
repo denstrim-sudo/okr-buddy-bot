@@ -176,3 +176,73 @@ describe("usePyramid: дубли связей", () => {
     expect(result.current.state.contributions).toHaveLength(2);
   });
 });
+
+describe("usePyramid: связи Решение→метрика", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("linkSolutionToMetric связывает Решение с метрикой, many-to-many", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkSolutionToMetric("s1", "m1");
+      result.current.linkSolutionToMetric("s1", "m2");
+    });
+    expect(result.current.getSolutionMetrics("s1")).toEqual(["m1", "m2"]);
+  });
+
+  it("unlinkSolutionFromMetric удаляет одну связь, не задевая остальные", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkSolutionToMetric("s1", "m1");
+      result.current.linkSolutionToMetric("s1", "m2");
+      result.current.linkSolutionToMetric("s2", "m1");
+    });
+    act(() => {
+      result.current.unlinkSolutionFromMetric("s1", "m1");
+    });
+    expect(result.current.getSolutionMetrics("s1")).toEqual(["m2"]);
+    expect(result.current.getSolutionMetrics("s2")).toEqual(["m1"]);
+  });
+
+  it("linkSolutionToMetric не создаёт дубль на ту же пару", () => {
+    const { result } = renderHook(() => usePyramid());
+    let res!: { ok: boolean; duplicate?: boolean };
+    act(() => {
+      result.current.linkSolutionToMetric("s1", "m1");
+    });
+    act(() => {
+      res = result.current.linkSolutionToMetric("s1", "m1");
+    });
+    expect(res.duplicate).toBe(true);
+    expect(result.current.state.solutionMetrics).toHaveLength(1);
+  });
+
+  it("suggestedMetricForSolution возвращает метрику KR-происхождения или null", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkKrToMetric("dir", 1, "m9");
+    });
+    expect(
+      result.current.suggestedMetricForSolution({ id: "s1", title: "T", originOkrId: "dir", originKrIndex: 1 }),
+    ).toBe("m9");
+    expect(
+      result.current.suggestedMetricForSolution({ id: "s2", title: "T", originOkrId: "dir", originKrIndex: 0 }),
+    ).toBeNull();
+    expect(result.current.suggestedMetricForSolution({ id: "s3", title: "T" })).toBeNull();
+  });
+
+  it("связи Решений входят в exportPyramid/importPyramid", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkSolutionToMetric("s1", "m1");
+    });
+    const dump = result.current.exportPyramid();
+    act(() => {
+      result.current.clear();
+    });
+    expect(result.current.getSolutionMetrics("s1")).toEqual([]);
+    act(() => {
+      result.current.importPyramid(dump);
+    });
+    expect(result.current.getSolutionMetrics("s1")).toEqual(["m1"]);
+  });
+});

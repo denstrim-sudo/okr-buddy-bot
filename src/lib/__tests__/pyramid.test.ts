@@ -80,7 +80,7 @@ describe("describeContribution", () => {
   });
 });
 
-import { traceSolution, suggestedMetricForSolution } from "@/lib/pyramid";
+import { traceSolution, suggestedMetricForSolution, isKrStep } from "@/lib/pyramid";
 import type { PyramidState } from "@/lib/pyramid";
 
 const metrics = [
@@ -124,9 +124,9 @@ describe("traceSolution", () => {
     });
     const [c] = traceSolution(sol, state, items, metrics);
     expect(c.status).toBe("complete");
-    expect(c.path.map((p) => p.level)).toEqual(["direction", "bank"]);
-    expect(c.path[1].krText).toBe("KR банка");
-    expect(c.path[0].okrObjective).toBe("Цель dir");
+    expect(c.path.filter(isKrStep).map((p) => p.level)).toEqual(["direction", "bank"]);
+    expect(c.path.filter(isKrStep)[1].krText).toBe("KR банка");
+    expect(c.path.filter(isKrStep)[0].okrObjective).toBe("Цель dir");
   });
 
   it("обрыв на уровне направления → broken_at_direction с указанием KR", () => {
@@ -263,5 +263,77 @@ describe("suggestedMetricForSolution · приоритет опережающе�
       suggestedMetricForSolution({ id: "s", title: "t", originOkrId: "dir", originKrIndex: 2 }, cat, state),
     ).toEqual({ kind: "existing", metricId: "m1" });
     expect(suggestedMetricForSolution({ id: "s", title: "t" }, cat, state)).toBeNull();
+  });
+});
+
+describe("traceSolution через цепочку метрик", () => {
+  const dir = mk("dir", ["KR направления"]);
+  const bank = mk("bank", ["KR банка"]);
+  const items = [dir, bank];
+  const sol = { id: "s1", title: "Решение", description: "Описание" };
+  const cat = [
+    { id: "mA", name: "Метрика A", createdAt: "" },
+    { id: "mB", name: "Метрика B", createdAt: "" },
+    { id: "mC", name: "Метрика C", createdAt: "" },
+  ];
+  const base = (over: Partial<PyramidState> = {}): PyramidState => ({
+    ...emptyPyramid(),
+    levels: { dir: "direction", bank: "bank" },
+    contributions: [{ from: { okrId: "dir", krIndex: 0 }, to: { okrId: "bank", krIndex: 0 } }],
+    solutionMetrics: [{ solutionId: "s1", metricId: "mA" }],
+    ...over,
+  });
+
+  it("Решение → метрика A (не в KR) → метрика B (в KR) → KR → KR банка = complete", () => {
+    const state = base({
+      krMetrics: { "dir:0": "mB" },
+      metricInfluences: [{ from: "mA", to: "mB" }],
+    });
+    const [c] = traceSolution(sol, state, items, cat);
+    expect(c.status).toBe("complete");
+  });
+
+  it("в path видны промежуточные метрики наряду с KR", () => {
+    const state = base({
+      krMetrics: { "dir:0": "mB" },
+      metricInfluences: [{ from: "mA", to: "mB" }],
+    });
+    const [c] = traceSolution(sol, state, items, cat);
+    expect(c.path.filter((p) => p.kind === "metric").map((p) => (p as { metricName: string }).metricName)).toEqual([
+      "Метрика A",
+      "Метрика B",
+    ]);
+    expect(c.path.filter(isKrStep).map((p) => p.level)).toEqual(["direction", "bank"]);
+  });
+
+  it("метрика без influence и без KR → orphan_metric", () => {
+    const [c] = traceSolution(sol, base({ krMetrics: {} }), items, cat);
+    expect(c.status).toBe("orphan_metric");
+    expect(c.path).toHaveLength(0);
+  });
+
+  it("цепочка метрик глубиной 2+ трассируется корректно", () => {
+    const state = base({
+      krMetrics: { "dir:0": "mC" },
+      metricInfluences: [
+        { from: "mA", to: "mB" },
+        { from: "mB", to: "mC" },
+      ],
+    });
+    const [c] = traceSolution(sol, state, items, cat);
+    expect(c.status).toBe("complete");
+    expect(c.path.filter((p) => p.kind === "metric")).toHaveLength(3);
+  });
+
+  it("цикл в metricInfluences не вешает трассировку", () => {
+    const state = base({
+      krMetrics: {},
+      metricInfluences: [
+        { from: "mA", to: "mB" },
+        { from: "mB", to: "mA" },
+      ],
+    });
+    const [c] = traceSolution(sol, state, items, cat);
+    expect(c.status).toBe("orphan_metric");
   });
 });

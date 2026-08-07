@@ -3,6 +3,8 @@ import {
   krKey,
   liveContributions,
   metricsForSolution,
+  isKrStep,
+  type MetricInfluence,
   solutionsForPyramid,
   traceSolution,
   type MetricLike,
@@ -51,6 +53,7 @@ export interface PyramidDoc {
   generatedAt: string;
   solutions: DocSolution[];
   metrics: MetricLike[];
+  metricInfluences: MetricInfluence[];
   okrs: DocOkr[];
 }
 
@@ -82,6 +85,7 @@ export function buildPyramidDoc({
   const docSolutions: DocSolution[] = committed.map((s) => {
     const ids = metricsForSolution(s.id, state);
     ids.forEach((id) => shownMetricIds.add(id));
+    const chains = traceSolution(s, state, items, metrics);
     return {
       id: s.id,
       title: s.title,
@@ -89,9 +93,16 @@ export function buildPyramidDoc({
       metrics: ids
         .map((id) => metrics.find((m) => m.id === id))
         .filter((m): m is MetricLike => Boolean(m)),
-      chains: traceSolution(s, state, items, metrics),
+      chains,
     };
   });
+
+  // промежуточные метрики цепочек влияния тоже входят в документ
+  for (const ds of docSolutions) {
+    for (const c of ds.chains) {
+      for (const step of c.path) if (!isKrStep(step)) shownMetricIds.add(step.metricId);
+    }
+  }
 
   const links = liveContributions(items, state);
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -150,6 +161,9 @@ export function buildPyramidDoc({
     generatedAt,
     solutions: docSolutions,
     metrics: metrics.filter((m) => shownMetricIds.has(m.id)),
+    metricInfluences: (state.metricInfluences ?? []).filter(
+      (e) => shownMetricIds.has(e.from) && shownMetricIds.has(e.to),
+    ),
     okrs,
   };
 }

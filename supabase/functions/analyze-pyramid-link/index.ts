@@ -3,13 +3,15 @@ import { isEvidenceGrounded } from "../_shared/textGuards.ts";
 
 export const buildSystemPrompt = () => `Ты — коуч по связанности стратегии. Ты проверяешь, действительно ли работа (Решение) связана со стратегией через метрики и Key Results.
 
-ТРИ ЗАДАЧИ:
+ЧЕТЫРЕ ЗАДАЧИ:
 
 1. ДОСТРОЙКА ОБРЫВА (type = "bridge_gap"): где цепочка оборвалась — предложи конкретно, что связать: какой KR верхнего уровня напрашивается по смыслу, какая метрика могла бы стать мостом. Только из переданного контекста, не выдумывай.
 
 2. ОСМЫСЛЕННОСТЬ СВЯЗИ РЕШЕНИЕ→МЕТРИКА (type = "weak_link"): связь может существовать формально, но быть натянутой. Если механизм влияния Решения на метрику неочевиден — скажи прямо и попроси обосновать механизм. Это главная патология: «мы это делаем ради стратегии» без реального механизма влияния.
 
 3. СООТВЕТСТВИЕ KR↔МЕТРИКА (type = "metric_mismatch"): измеряет ли привязанная метрика то же, что заявлено в тексте KR. Пример патологии: KR «Доля фродовых операций, выявленных антифрод-системой, выросла с 17,3% до 40%» привязан к метрике «Индекс доверия клиентов (NPS)» — формально связь есть, по смыслу метрика измеряет другое (выявление фрода ≠ доверие клиентов). Такое несоответствие делает всю цепочку вверх недостоверной.
+
+4. ОСМЫСЛЕННОСТЬ ВЛИЯНИЯ МЕТРИКА→МЕТРИКА (type = "metric_influence_weak"): связь между метриками — это утверждение о причинности: «сдвиг метрики А приведёт к сдвигу метрики Б». Проверь, правдоподобен ли механизм. Если А и Б измеряют разные явления без понятной причинной связи — скажи прямо и попроси обосновать механизм. Пример осмысленной связи: «Конверсия в отказ на опросе безопасности» → «Доля превентивно предотвращённых фрод-операций» (отказ клиента на опросе напрямую предотвращает операцию). Пример натянутой: «Скорость загрузки приложения» → «Доля выявленного фрода» (связь не невозможна, но механизм не очевиден и требует обоснования). Как и в остальных задачах — ОБЯЗАТЕЛЬНА дословная цитата (названия обеих метрик). Для таких выводов указывай target_from_metric_id и target_to_metric_id.
 
 ОБЯЗАТЕЛЬНО: для КАЖДОГО вывода приведи evidence — дословную цитату из текста Решения, названия метрики или текста KR (≤120 символов, буквальная подстрока, без перефразирования). Если процитировать нечего — значит основания для сомнения нет, не выдумывай вывод.
 
@@ -29,12 +31,14 @@ export function buildParameters() {
         items: {
           type: "object",
           properties: {
-            type: { type: "string", enum: ["bridge_gap", "weak_link", "metric_mismatch"] },
+            type: { type: "string", enum: ["bridge_gap", "weak_link", "metric_mismatch", "metric_influence_weak"] },
             text: { type: "string", description: "Рекомендация на русском, 1-3 предложения." },
             evidence: { type: "string", description: "Дословная цитата из текста Решения, названия метрики или текста KR." },
             target_metric_id: { type: "string", description: "id метрики из переданного справочника или пустая строка." },
             target_okr_id: { type: "string", description: "okrId из переданного контекста или пустая строка." },
             target_kr_index: { type: "number", description: "0-based индекс KR в этом OKR; -1 если не применимо." },
+            target_from_metric_id: { type: "string", description: "id опережающей метрики из переданных связей метрика→метрика, или пустая строка." },
+            target_to_metric_id: { type: "string", description: "id метрики выше из переданных связей метрика→метрика, или пустая строка." },
           },
           required: ["type", "text", "evidence"],
           additionalProperties: false,
@@ -73,6 +77,9 @@ export const handler = async (req: Request): Promise<Response> => {
       ? body.metrics
       : [];
     const krMetrics: Record<string, string> = body?.kr_metrics ?? {};
+    const metricInfluences: Array<{ from: string; to: string }> = Array.isArray(body?.metric_influences)
+      ? body.metric_influences.filter((e: any) => e && typeof e.from === "string" && typeof e.to === "string")
+      : [];
 
     const solutionText = [solution?.title, solution?.description].filter(Boolean).join(". ").trim();
     if (solutionText.length < 3) return errorJson("Пустое Решение", 400);
@@ -113,6 +120,9 @@ ${chainsBlock || "— нет"}
 КОНТЕКСТ OKR (только из этого списка можно предлагать связи):
 ${okrBlock || "— нет"}
 
+СВЯЗИ МЕТРИКА→МЕТРИКА, УЧАСТВУЮЩИЕ В ЭТИХ ЦЕПОЧКАХ (только их и оценивай):
+${metricInfluences.map((e) => `- «${metricName(e.from)}» [${e.from}] → «${metricName(e.to)}» [${e.to}]`).join("\n") || "— нет"}
+
 СПРАВОЧНИК МЕТРИК:
 ${metrics.map((m) => `- ${m.name} [${m.id}]${m.unit ? `, ${m.unit}` : ""}`).join("\n") || "— пусто"}${buildExtraBlock(body?.extra_context, "ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ:")}`;
 
@@ -137,6 +147,9 @@ ${metrics.map((m) => `- ${m.name} [${m.id}]${m.unit ? `, ${m.unit}` : ""}`).join
     const metricIds = new Set(metrics.map((m) => m.id));
     const nodeById = new Map(okrNodes.map((n) => [n.okrId, n]));
 
+    const influenceFrom = new Set(metricInfluences.map((e) => e.from));
+    const influenceTo = new Set(metricInfluences.map((e) => e.to));
+
     if (Array.isArray(data.recommendations)) {
       data.recommendations = data.recommendations.map((r: any) => {
         const targetOkrId = r?.target_okr_id && nodeById.has(r.target_okr_id) ? r.target_okr_id : null;
@@ -150,6 +163,14 @@ ${metrics.map((m) => `- ${m.name} [${m.id}]${m.unit ? `, ${m.unit}` : ""}`).join
           target_metric_id: r?.target_metric_id && metricIds.has(r.target_metric_id) ? r.target_metric_id : null,
           target_okr_id: targetOkrId,
           target_kr_index: targetKrIndex,
+          target_from_metric_id:
+            r?.target_from_metric_id && influenceFrom.has(r.target_from_metric_id)
+              ? r.target_from_metric_id
+              : null,
+          target_to_metric_id:
+            r?.target_to_metric_id && influenceTo.has(r.target_to_metric_id)
+              ? r.target_to_metric_id
+              : null,
         };
       });
     } else {

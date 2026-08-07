@@ -89,11 +89,9 @@ describe("addAuditToProject", () => {
       data: { solutions: [{ id: "S1", problem: "p", bet: "старая ставка", result_image: "r", leading_metric: "m", confidence: "Medium", effort: "M", validation: "v" }] },
       error: null,
     });
-    const { result } = renderHook(() => useSolutionStudio("obj", "kr", []), { wrapper: Wrap });
+    const { result } = renderHook(() => useSolutionStudio("Цель", "Ключевой результат", []), { wrapper: Wrap });
     await act(async () => { await result.current.handleGenerate(); });
-    console.log("AFTERGEN", JSON.stringify(result.current.slice.solutions));
     act(() => { result.current.sendToAudit(result.current.slice.solutions[0]); });
-    console.log("AFTERAUDIT", JSON.stringify(result.current.slice));
     act(() => { result.current.updateAudit("bet", "новая ставка"); });
     act(() => { result.current.addAuditToProject(); });
     expect(result.current.slice.solutions).toHaveLength(1);

@@ -424,9 +424,9 @@ Deno.test("buildParameters: minItems === maxItems === knownRuleIdsFor(horizon).l
   assertEquals(p12.properties.rules.maxItems, knownRuleIdsFor("block_12m").length);
   assertEquals(pq.properties.rules.minItems, knownRuleIdsFor("quarter_3m").length);
   assertEquals(pq.properties.rules.maxItems, knownRuleIdsFor("quarter_3m").length);
-  assertEquals(p3y.properties.rules.minItems, 8);
-  assertEquals(pDefault.properties.rules.minItems, 8);
-  assertEquals(pq.properties.rules.minItems, 11);
+  assertEquals(p3y.properties.rules.minItems, 9);
+  assertEquals(pDefault.properties.rules.minItems, 9);
+  assertEquals(pq.properties.rules.minItems, 12);
 });
 
 Deno.test("buildParameters: rules.items.properties.id.enum === knownRuleIdsFor(horizon)", () => {

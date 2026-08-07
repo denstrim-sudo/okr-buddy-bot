@@ -21,11 +21,17 @@ import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { useMetricsCatalog } from "@/hooks/useMetricsCatalog";
 import { usePyramid } from "@/hooks/usePyramid";
 import { readModule3Solutions } from "@/lib/module3Solutions";
-import { traceSolution, solutionsForPyramid, TRACE_STATUS_LABELS, type TraceChain } from "@/lib/pyramid";
+import {
+  traceSolution,
+  solutionsForPyramid,
+  isKrStep,
+  TRACE_STATUS_LABELS,
+  type TraceChain,
+} from "@/lib/pyramid";
 import { STORAGE_KEY as STUDIO_KEY } from "@/hooks/useSolutionStudio";
 
 interface Recommendation {
-  type: "bridge_gap" | "weak_link" | "metric_mismatch";
+  type: "bridge_gap" | "weak_link" | "metric_mismatch" | "metric_influence_weak";
   text: string;
   evidence?: string;
   grounded?: boolean;
@@ -35,6 +41,7 @@ const REC_TITLES: Record<Recommendation["type"], string> = {
   bridge_gap: "Как достроить обрыв",
   weak_link: "Осмысленность связи Решение → метрика",
   metric_mismatch: "Соответствие метрики и KR",
+  metric_influence_weak: "Осмысленность влияния метрик",
 };
 
 const STATUS_TONE: Record<TraceChain["status"], string> = {
@@ -57,6 +64,7 @@ export const SolutionTrace = () => {
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [summary, setSummary] = useState("");
   const [newName, setNewName] = useState<string | null>(null);
+  const [influenceFrom, setInfluenceFrom] = useState<string | null>(null);
 
   const solutions = useMemo(() => {
     let studio: unknown = null;
@@ -90,10 +98,47 @@ export const SolutionTrace = () => {
     setNewName(null);
   };
 
+  const krLinkedMetricIds = useMemo(
+    () => new Set(Object.values(pyramid.state.krMetrics ?? {})),
+    [pyramid.state.krMetrics],
+  );
+
+  const influenceTargets = useMemo(() => {
+    const rest = metrics.filter((m) => m.id !== influenceFrom);
+    return [
+      ...rest.filter((m) => krLinkedMetricIds.has(m.id)),
+      ...rest.filter((m) => !krLinkedMetricIds.has(m.id)),
+    ];
+  }, [metrics, influenceFrom, krLinkedMetricIds]);
+
+  const linkInfluence = (toId: string) => {
+    if (!influenceFrom) return;
+    const res = pyramid.linkMetricInfluence(influenceFrom, toId);
+    if (!res.ok) {
+      toast.error(
+        res.reason === "cycle"
+          ? "Так возникнет цикл: эта метрика уже зависит от выбранной"
+          : "Нельзя связать метрику саму с собой",
+      );
+      return;
+    }
+    setInfluenceFrom(null);
+  };
+
   const chains = useMemo(
     () => (solution ? traceSolution(solution, pyramid.state, items, metrics) : []),
     [solution, pyramid.state, items, metrics],
   );
+
+  const chainInfluences = useMemo(() => {
+    const edges = pyramid.state.metricInfluences ?? [];
+    const used = new Set<string>();
+    for (const c of chains) {
+      const ids = c.path.filter((p) => !isKrStep(p)).map((p) => (isKrStep(p) ? "" : p.metricId));
+      for (let i = 0; i < ids.length - 1; i++) used.add(`${ids[i]}→${ids[i + 1]}`);
+    }
+    return edges.filter((e) => used.has(`${e.from}→${e.to}`));
+  }, [chains, pyramid.state.metricInfluences]);
 
   const select = (id: string) => {
     setSelectedId(id);
@@ -122,6 +167,7 @@ export const SolutionTrace = () => {
           okr_nodes,
           metrics,
           kr_metrics: pyramid.state.krMetrics,
+          metric_influences: chainInfluences,
           extra_context: buildContext(["methodology", "okr_context", "solutions_kb"]),
           model,
         },
@@ -283,11 +329,23 @@ export const SolutionTrace = () => {
                 {c.path.length > 0 && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
                     {c.path.map((p, i) => (
-                      <span key={`${p.okrId}:${p.krIndex}`} className="flex items-center gap-1">
+                      <span
+                        key={isKrStep(p) ? `kr:${p.okrId}:${p.krIndex}` : `m:${p.metricId}`}
+                        className="flex items-center gap-1"
+                      >
                         {i > 0 && <ArrowRight className="h-3 w-3" />}
-                        <span title={p.okrObjective}>
-                          {p.level === "bank" ? "Банк" : "Направление"} · KR{p.krIndex + 1}: {p.krText}
-                        </span>
+                        {isKrStep(p) ? (
+                          <span className="font-medium text-foreground" title={p.okrObjective}>
+                            {p.level === "bank" ? "Банк" : "Направление"} · KR{p.krIndex + 1}: {p.krText}
+                          </span>
+                        ) : (
+                          <span
+                            data-testid={`path-metric-${p.metricId}`}
+                            className="italic text-muted-foreground/80"
+                          >
+                            {p.metricName}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -304,9 +362,21 @@ export const SolutionTrace = () => {
                   </p>
                 )}
                 {c.status === "orphan_metric" && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Эта метрика пока не привязана ни к одному KR в пирамиде
-                  </p>
+                  <div className="mt-1 space-y-1">
+                    <p className="text-[11px] text-muted-foreground">
+                      Эта метрика пока не привязана ни к одному KR в пирамиде
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid={`link-influence-${c.metricId}`}
+                      className="h-6 gap-1 px-2 text-[11px]"
+                      onClick={() => setInfluenceFrom(c.metricId)}
+                    >
+                      <Link2 className="h-3 w-3" />
+                      Связать с метрикой выше
+                    </Button>
+                  </div>
                 )}
                 {c.status === "no_metrics" && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -360,6 +430,36 @@ export const SolutionTrace = () => {
           ))}
         </div>
       )}
+
+      <Dialog open={Boolean(influenceFrom)} onOpenChange={(o) => !o && setInfluenceFrom(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>На какую метрику выше влияет эта метрика</DialogTitle>
+            <DialogDescription>
+              Опережающая метрика Решения — ранний сигнал метрики, стоящей в KR
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-1.5">
+            {influenceTargets.length === 0 && (
+              <p className="text-xs text-muted-foreground">Других метрик в справочнике нет</p>
+            )}
+            {influenceTargets.map((m) => (
+              <Button
+                key={m.id}
+                size="sm"
+                variant={krLinkedMetricIds.has(m.id) ? "default" : "outline"}
+                data-testid={`influence-target-${m.id}`}
+                className="h-7 px-2 text-[11px]"
+                title={m.description ?? m.name}
+                onClick={() => linkInfluence(m.id)}
+              >
+                {m.name}
+                {krLinkedMetricIds.has(m.id) ? " · в KR" : ""}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent className="max-w-md">

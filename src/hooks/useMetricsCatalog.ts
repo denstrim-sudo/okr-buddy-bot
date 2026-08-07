@@ -4,6 +4,8 @@ export interface Metric {
   id: string;
   name: string;
   unit?: string;
+  /** Полный текст метрики — заполняется только при автозаведении из Решения. */
+  description?: string;
   createdAt: string;
 }
 
@@ -55,7 +57,11 @@ export function useMetricsCatalog() {
   }, []);
 
   const addMetric = useCallback(
-    (name: string, unit?: string): { metric: Metric; ok: boolean; existed: boolean } => {
+    (
+      name: string,
+      unit?: string,
+      description?: string,
+    ): { metric: Metric; ok: boolean; existed: boolean } => {
       const clean = name.trim().replace(/\s+/g, " ");
       const norm = normalizeMetricName(clean);
       const existing = ref.current.find((m) => normalizeMetricName(m.name) === norm);
@@ -64,6 +70,9 @@ export function useMetricsCatalog() {
         id: `met_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         name: clean,
         ...(unit && unit.trim() ? { unit: unit.trim() } : {}),
+        ...(description && description.trim() && description.trim() !== clean
+          ? { description: description.trim() }
+          : {}),
         createdAt: new Date().toISOString(),
       };
       const ok = commit([...ref.current, metric]);

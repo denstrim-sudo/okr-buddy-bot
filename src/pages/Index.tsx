@@ -148,8 +148,9 @@ const Index = () => {
             />
           </div>
 
-          <section id="metrics-pyramid" className="animate-fade-in scroll-mt-6" style={{ animationDelay: "300ms" }}>
+          <section id="metrics-pyramid" className="animate-fade-in space-y-4 scroll-mt-6" style={{ animationDelay: "300ms" }}>
             <MetricsPyramid />
+            <SolutionTrace />
           </section>
         </div>
 

@@ -171,3 +171,37 @@ describe("suggestedMetricForSolution", () => {
     expect(suggestedMetricForSolution({ id: "s", title: "t" }, state)).toBeNull();
   });
 });
+
+import { solutionsForPyramid } from "@/lib/pyramid";
+
+describe("solutionsForPyramid", () => {
+  const studio = {
+    slices: {
+      "kr-0": { solutions: [{ id: "a" }, { id: "b" }], selected: [1] },
+      "kr-1": { solutions: [{ id: "c" }], selected: [] },
+    },
+  };
+
+  it("возвращает только Решения со статусом «в проекте»", () => {
+    expect(solutionsForPyramid(studio)).toEqual(["kr-0:1"]);
+  });
+
+  it("если ни одно Решение не помечено «в проекте» — пустой массив", () => {
+    expect(solutionsForPyramid({ slices: { "kr-0": { solutions: [{}], selected: [] } } })).toEqual([]);
+    expect(solutionsForPyramid(null)).toEqual([]);
+  });
+
+  it("связи solutionMetrics Решения без статуса сохраняются в PyramidState", () => {
+    const state: PyramidState = {
+      ...emptyPyramid(),
+      solutionMetrics: [
+        { solutionId: "kr-0:0", metricId: "m1" },
+        { solutionId: "kr-0:1", metricId: "m2" },
+      ],
+    };
+    const visible = solutionsForPyramid(studio);
+    expect(visible).not.toContain("kr-0:0");
+    expect(state.solutionMetrics).toHaveLength(2);
+    expect(state.solutionMetrics.find((l) => l.solutionId === "kr-0:0")).toBeTruthy();
+  });
+});

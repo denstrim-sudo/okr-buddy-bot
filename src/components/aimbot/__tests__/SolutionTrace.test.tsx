@@ -328,3 +328,75 @@ describe("SolutionTrace · автоподстановка опережающей
     expect(chip).toHaveAttribute("title", LONG);
   });
 });
+
+describe("SolutionTrace · связь метрика→метрика", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    invokeMock.mockReset();
+  });
+
+  const orphanPyramid = {
+    levels: { dir: "direction", bank: "bank" },
+    krMetrics: { "dir:0": "m2" },
+    contributions: [{ from: { okrId: "dir", krIndex: 0 }, to: { okrId: "bank", krIndex: 0 } }],
+    solutionMetrics: [{ solutionId: "kr-0:0", metricId: "m1" }],
+    metricInfluences: [],
+  };
+
+  it("у непривязанной метрики есть кнопка «Связать с метрикой выше», выбор приоритезирует метрики в KR", async () => {
+    seedAll({ pyramid: orphanPyramid });
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    await userEvent.click(await screen.findByTestId("link-influence-m1"));
+    const targets = await screen.findAllByTestId(/^influence-target-/);
+    expect(targets[0]).toHaveAttribute("data-testid", "influence-target-m2");
+  });
+
+  it("после связывания цепочка достраивается и в пути видны промежуточные метрики", async () => {
+    seedAll({ pyramid: orphanPyramid });
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    await userEvent.click(await screen.findByTestId("link-influence-m1"));
+    await userEvent.click(await screen.findByTestId("influence-target-m2"));
+    const chain = await screen.findByTestId("trace-chain-m1");
+    expect(chain).toHaveTextContent(/цепочка связная/i);
+    expect(within(chain).getByTestId("path-metric-m1")).toBeInTheDocument();
+    expect(within(chain).getByTestId("path-metric-m2")).toBeInTheDocument();
+    expect(chain).toHaveTextContent(/Банк · KR1/);
+  });
+
+  it("попытка создать цикл не создаёт связь", async () => {
+    seedAll({
+      pyramid: {
+        ...orphanPyramid,
+        krMetrics: {},
+        metricInfluences: [{ from: "m2", to: "m1" }],
+      },
+    });
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    await userEvent.click(await screen.findByTestId("link-influence-m1"));
+    await userEvent.click(await screen.findByTestId("influence-target-m2"));
+    const saved = JSON.parse(localStorage.getItem("aimbot.pyramid.v1")!);
+    expect(saved.metricInfluences).toHaveLength(1);
+  });
+
+  it("рекомендации metric_influence_weak рендерятся отдельным блоком, пустой блок не показывается", async () => {
+    seedAll({ pyramid: fullPyramid });
+    invokeMock.mockResolvedValue({
+      data: {
+        summary: "s",
+        recommendations: [
+          { type: "metric_influence_weak", text: "Механизм неочевиден", evidence: "NPS", grounded: true },
+        ],
+      },
+      error: null,
+    });
+    render(<SolutionTrace />);
+    await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
+    await userEvent.click(screen.getByRole("button", { name: /проверить связанность/i }));
+    const block = await screen.findByTestId("rec-group-metric_influence_weak");
+    expect(block).toHaveTextContent(/Осмысленность влияния метрик/i);
+    expect(screen.queryByTestId("rec-group-weak_link")).not.toBeInTheDocument();
+  });
+});

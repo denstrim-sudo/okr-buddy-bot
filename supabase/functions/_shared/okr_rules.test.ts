@@ -71,7 +71,7 @@ const NEW_IDS = [
   "KR-LEADING",
 ];
 
-Deno.test("BASE_RULES содержит все 8 новых id как токены в начале строк-правил", () => {
+Deno.test("BASE_RULES содержит все базовые новые id как токены в начале строк-правил", () => {
   for (const id of NEW_IDS) {
     assert(
       OKR_RULES_BLOCK.includes(`- ${id} `),
@@ -171,4 +171,32 @@ Deno.test("getFewShotBlock: симметрия — в каждом блоке �
     assert(bad >= 2, `${h}: ожидали ≥2 маркера ПЛОХО, получили ${bad}`);
     assert(good >= 2, `${h}: ожидали ≥2 маркера ОТЛИЧНО, получили ${good}`);
   }
+});
+
+// --- KR-PERSPECTIVES: типология KR из AI-Native SAFe ---
+
+Deno.test("BASE_RULES содержит правило KR-PERSPECTIVES с описанием трёх осей", () => {
+  assert(OKR_RULES_BLOCK.includes("- KR-PERSPECTIVES "), "правило KR-PERSPECTIVES должно быть активным токеном");
+  for (const axis of ["КЛИЕНТ И БИЗНЕС", "ОСУЩЕСТВИМОСТЬ И РИСКИ", "ОБУЧЕНИЕ И РАЗВИТИЕ"]) {
+    assert(OKR_RULES_BLOCK.includes(axis), `ось '${axis}' должна быть описана в правиле`);
+  }
+});
+
+Deno.test("текст правила KR-PERSPECTIVES подчёркивает, что это подсказка, а не требование", () => {
+  assert(/ПОДСКАЗКА/i.test(OKR_RULES_BLOCK), "должен быть маркер 'подсказка'");
+  assert(/не все оси применимы/i.test(OKR_RULES_BLOCK), "должен быть маркер 'не все оси применимы'");
+  assert(/НЕ требуй механически/i.test(OKR_RULES_BLOCK), "должен быть запрет механического дописывания KR");
+});
+
+Deno.test("описание оси feasibility_risk содержит обе функции — осуществимость и защиту критичного", () => {
+  assert(/осуществимость/i.test(OKR_RULES_BLOCK), "должна быть функция осуществимости");
+  assert(/не сломать/i.test(OKR_RULES_BLOCK), "должна быть функция защиты критичного ('не сломать')");
+  assert(/удерживать/i.test(OKR_RULES_BLOCK), "должна быть грамматика контр-метрики 'удерживать'");
+});
+
+Deno.test("квартальный блок упоминает предпочтение опережающих KR", () => {
+  assert(
+    /предпочтительны опережающие/i.test(OKR_RULES_BLOCK_QUARTER),
+    "OKR_RULES_BLOCK_QUARTER должен указывать предпочтение опережающих показателей",
+  );
 });

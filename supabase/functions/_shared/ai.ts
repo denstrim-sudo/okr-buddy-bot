@@ -46,12 +46,18 @@ interface CallResult {
 export const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
-/** Общий бюджет времени на весь запрос (до обрыва соединения с браузером). */
-export const TOTAL_BUDGET_MS = 55_000;
-/** Максимум времени на попытку с выбранной пользователем моделью. */
-export const PRIMARY_ATTEMPT_MS = 25_000;
+/** Общий бюджет времени на весь запрос. Edge Function живёт ~150с, браузер
+ *  через supabase-js ждёт столько же — поэтому 55с были искусственным
+ *  ограничением, из-за которого «медленные, но качественные» модели
+ *  (Claude, Gemini, GPT-5) не успевали и молча заменялись на gpt-4o. */
+export const TOTAL_BUDGET_MS = 140_000;
+/** Максимум времени на попытку с выбранной пользователем моделью.
+ *  Должен быть заведомо больше реального времени генерации сложной JSON-схемы
+ *  (замеры: Claude Sonnet ~35-40с, Gemini Pro ~30с на аудите OKR). */
+export const PRIMARY_ATTEMPT_MS = 100_000;
 /** Минимум времени, при котором есть смысл начинать ещё одну попытку. */
-export const MIN_ATTEMPT_MS = 6_000;
+export const MIN_ATTEMPT_MS = 15_000;
+
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 const getProviderError = (txt: string) => {

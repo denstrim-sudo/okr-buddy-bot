@@ -390,7 +390,9 @@ export const handler = async (req: Request) => {
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
-    const params = buildAuditorParameters(h);
+    // Не-OpenAI модели слишком медленно генерируют reasoning на каждое правило —
+    // для них используем облегчённую схему, чтобы уложиться в дедлайн запроса.
+    const params = buildAuditorParameters(h, { lite: Boolean(modelArg && modelArg !== "gpt-4o") });
     const first = await callAITool({
       systemPrompt,
       userPrompt,

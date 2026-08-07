@@ -136,6 +136,8 @@ export interface ValidationReport {
   model_used?: string;
   /** Пояснение коуча-редактора (mode=fix): что изменено, что сохранено, откуда взять данные для X/Y. */
   editor_note?: string;
+  /** Классификация KR по трём точкам зрения (AI-Native SAFe). */
+  kr_perspectives?: KrPerspective[];
 }
 
 export interface ValidationKR {

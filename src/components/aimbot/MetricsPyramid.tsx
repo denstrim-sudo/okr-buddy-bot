@@ -97,9 +97,13 @@ export const MetricsPyramid = () => {
   const handleImportFile = async (file: File) => {
     const text = await file.text();
     const res = pyramid.importPyramid(text);
-    if (res.ok) toast.success("Пирамида импортирована");
-    else toast.error(res.error);
+    if (res.ok === false) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Пирамида импортирована");
   };
+
 
 
   const renderKr = (okr: SavedOkr, krIndex: number, level: PyramidLevel) => {

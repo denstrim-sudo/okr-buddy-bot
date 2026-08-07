@@ -69,12 +69,10 @@ describe("addAuditToProject", () => {
   });
 
   const fill = (r: any) => {
-    act(() => {
-      r.current.updateAudit("problem", "Боль");
-      r.current.updateAudit("bet", "Ставка");
-      r.current.updateAudit("result_image", "Картина");
-      r.current.updateAudit("leading_metric", "Метрика");
-    });
+    act(() => { r.current.updateAudit("problem", "Боль"); });
+    act(() => { r.current.updateAudit("bet", "Ставка"); });
+    act(() => { r.current.updateAudit("result_image", "Картина"); });
+    act(() => { r.current.updateAudit("leading_metric", "Метрика"); });
   };
 
   it("кейс 2: ручное Решение из аудита добавляется в список и получает статус «в проекте»", () => {

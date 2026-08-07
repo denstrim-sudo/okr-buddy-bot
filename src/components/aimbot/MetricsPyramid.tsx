@@ -23,6 +23,9 @@ import {
   type Gap,
   type PyramidLevel,
 } from "@/lib/pyramid";
+import { buildPyramidDoc } from "@/lib/pyramidExport";
+import { readModule3Solutions } from "@/lib/module3Solutions";
+import { STORAGE_KEY as STUDIO_KEY } from "@/hooks/useSolutionStudio";
 
 
 interface MetricDialogState {

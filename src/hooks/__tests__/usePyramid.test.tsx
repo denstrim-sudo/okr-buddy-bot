@@ -247,3 +247,84 @@ describe("usePyramid: связи Решение→метрика", () => {
     expect(result.current.getSolutionMetrics("s1")).toEqual(["m1"]);
   });
 });
+
+describe("usePyramid: связи метрика→метрика", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("linkMetricInfluence создаёт связь влияния, many-to-many", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkMetricInfluence("a", "b");
+      result.current.linkMetricInfluence("a", "c");
+    });
+    expect(result.current.state.metricInfluences).toEqual([
+      { from: "a", to: "b" },
+      { from: "a", to: "c" },
+    ]);
+    expect(result.current.getIncomingInfluences("b")).toEqual(["a"]);
+  });
+
+  it("unlinkMetricInfluence удаляет одну связь, не задевая остальные", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkMetricInfluence("a", "b");
+      result.current.linkMetricInfluence("a", "c");
+    });
+    act(() => {
+      result.current.unlinkMetricInfluence("a", "b");
+    });
+    expect(result.current.state.metricInfluences).toEqual([{ from: "a", to: "c" }]);
+  });
+
+  it("не создаётся дубль на ту же пару", () => {
+    const { result } = renderHook(() => usePyramid());
+    let res!: { ok: boolean; duplicate?: boolean };
+    act(() => {
+      result.current.linkMetricInfluence("a", "b");
+    });
+    act(() => {
+      res = result.current.linkMetricInfluence("a", "b");
+    });
+    expect(res).toEqual({ ok: true, duplicate: true });
+    expect(result.current.state.metricInfluences).toHaveLength(1);
+  });
+
+  it("нельзя связать метрику саму с собой", () => {
+    const { result } = renderHook(() => usePyramid());
+    let res!: { ok: boolean };
+    act(() => {
+      res = result.current.linkMetricInfluence("a", "a");
+    });
+    expect(res.ok).toBe(false);
+    expect(result.current.state.metricInfluences).toHaveLength(0);
+  });
+
+  it("детектится цикл: A→B есть, B→A запрещена", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkMetricInfluence("a", "b");
+    });
+    let res!: { ok: boolean; reason?: string };
+    act(() => {
+      res = result.current.linkMetricInfluence("b", "a");
+    });
+    expect(res).toEqual({ ok: false, reason: "cycle" });
+    expect(result.current.state.metricInfluences).toHaveLength(1);
+  });
+
+  it("metricInfluences входят в exportPyramid/importPyramid", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkMetricInfluence("a", "b");
+    });
+    const dump = result.current.exportPyramid();
+    act(() => {
+      result.current.clear();
+    });
+    expect(result.current.state.metricInfluences).toEqual([]);
+    act(() => {
+      result.current.importPyramid(dump);
+    });
+    expect(result.current.state.metricInfluences).toEqual([{ from: "a", to: "b" }]);
+  });
+});

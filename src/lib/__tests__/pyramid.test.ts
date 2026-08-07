@@ -124,9 +124,9 @@ describe("traceSolution", () => {
     });
     const [c] = traceSolution(sol, state, items, metrics);
     expect(c.status).toBe("complete");
-    expect(c.path.map((p) => p.level)).toEqual(["direction", "bank"]);
-    expect(c.path[1].krText).toBe("KR банка");
-    expect(c.path[0].okrObjective).toBe("Цель dir");
+    expect(c.path.filter(isKrStep).map((p) => p.level)).toEqual(["direction", "bank"]);
+    expect(c.path.filter(isKrStep)[1].krText).toBe("KR банка");
+    expect(c.path.filter(isKrStep)[0].okrObjective).toBe("Цель dir");
   });
 
   it("обрыв на уровне направления → broken_at_direction с указанием KR", () => {

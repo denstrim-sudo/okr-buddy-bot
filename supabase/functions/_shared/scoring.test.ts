@@ -74,7 +74,7 @@ Deno.test("scoreDiscrepancy: модель занизила (60 vs 71) → true",
 
 // --- knownRuleIdsFor: семантические id, старые мертвы ---
 
-Deno.test("knownRuleIdsFor('block_12m') возвращает ровно 8 новых семантических id", () => {
+Deno.test("knownRuleIdsFor('block_12m') возвращает ровно 9 новых семантических id", () => {
   assertEquals(knownRuleIdsFor("block_12m"), [
     "OBJ-QUALITATIVE",
     "OBJ-AMBITIOUS",
@@ -84,14 +84,27 @@ Deno.test("knownRuleIdsFor('block_12m') возвращает ровно 8 нов
     "KR-OUTCOME",
     "KR-TIMEBOUND",
     "KR-LEADING",
+    "KR-PERSPECTIVES",
   ]);
 });
 
 Deno.test("knownRuleIdsFor('quarter_3m') добавляет Q-FOCUS/Q-THEME/Q-REACH", () => {
   const ids = knownRuleIdsFor("quarter_3m");
-  assertEquals(ids.length, 11);
+  assertEquals(ids.length, 12);
   for (const q of ["Q-FOCUS", "Q-THEME", "Q-REACH"]) {
     assert(ids.includes(q), `${q} должен присутствовать в quarter ids`);
+  }
+});
+
+Deno.test("knownRuleIdsFor включает KR-PERSPECTIVES для всех горизонтов", () => {
+  for (const h of [undefined, "strategic_3y", "block_12m", "quarter_3m"]) {
+    assert(knownRuleIdsFor(h).includes("KR-PERSPECTIVES"), `KR-PERSPECTIVES отсутствует для горизонта ${h}`);
+  }
+});
+
+Deno.test("severityFor('KR-PERSPECTIVES', любой горизонт) === 'improve'", () => {
+  for (const h of [undefined, "strategic_3y", "block_12m", "quarter_3m"]) {
+    assertEquals(severityFor("KR-PERSPECTIVES", h), "improve");
   }
 });
 

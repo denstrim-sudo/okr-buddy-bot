@@ -16,7 +16,14 @@ import { cn } from "@/lib/utils";
 import { useSavedOkrs, type SavedOkr } from "@/hooks/useSavedOkrs";
 import { useMetricsCatalog } from "@/hooks/useMetricsCatalog";
 import { usePyramid } from "@/hooks/usePyramid";
-import { findGaps, GAP_LABELS, type Gap, type PyramidLevel } from "@/lib/pyramid";
+import {
+  describeContribution,
+  findGaps,
+  GAP_LABELS,
+  type Gap,
+  type PyramidLevel,
+} from "@/lib/pyramid";
+
 
 interface MetricDialogState {
   okrId: string;

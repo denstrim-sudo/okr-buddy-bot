@@ -117,11 +117,65 @@ describe("MetricsPyramid", () => {
 
     await user.click(screen.getByRole("button", { name: /Связь вверх/ }));
     await user.click(screen.getByRole("button", { name: /KR1: KR банка A/ }));
-    expect(screen.getByText(/→ Цель банка · KR1: KR банка A/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("contribution-link")).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: /Связь вверх/ }));
     await user.click(screen.getByRole("button", { name: /KR2: KR банка B/ }));
-    expect(screen.getByText(/→ Цель банка · KR2: KR банка B/)).toBeInTheDocument();
-    expect(screen.getByText(/→ Цель банка · KR1: KR банка A/)).toBeInTheDocument();
+    const rows = screen.getAllByTestId("contribution-link");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("KR1: KR банка A");
+    expect(rows[1]).toHaveTextContent("KR2: KR банка B");
+  });
+
+  it("связь вверх показывает конкретный KR родителя, а не только Objective", () => {
+    seedOkrs([
+      mk("b1", "Цель банка", [{ text: "KR банка A" }, { text: "KR банка B" }]),
+      mk("d1", "Цель направления", [{ text: "KR направления" }]),
+    ]);
+    seedPyramid({
+      levels: { b1: "bank", d1: "direction" },
+      krMetrics: {},
+      contributions: [{ from: { okrId: "d1", krIndex: 0 }, to: { okrId: "b1", krIndex: 1 } }],
+    });
+    render(<MetricsPyramid />);
+
+    const row = screen.getByTestId("contribution-link");
+    expect(row).toHaveTextContent("Банк");
+    expect(row).toHaveTextContent("KR2: KR банка B");
+  });
+
+  it("две связи на разные KR одного OKR визуально различимы", () => {
+    seedOkrs([
+      mk("b1", "Цель банка", [{ text: "KR банка A" }, { text: "KR банка B" }]),
+      mk("d1", "Цель направления", [{ text: "KR направления" }]),
+    ]);
+    seedPyramid({
+      levels: { b1: "bank", d1: "direction" },
+      krMetrics: {},
+      contributions: [
+        { from: { okrId: "d1", krIndex: 0 }, to: { okrId: "b1", krIndex: 0 } },
+        { from: { okrId: "d1", krIndex: 0 }, to: { okrId: "b1", krIndex: 1 } },
+      ],
+    });
+    render(<MetricsPyramid />);
+
+    const rows = screen.getAllByTestId("contribution-link");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).not.toBe(rows[1].textContent);
+    expect(rows[0]).toHaveTextContent("KR1: KR банка A");
+    expect(rows[1]).toHaveTextContent("KR2: KR банка B");
+  });
+
+  it("связь на удалённый OKR помечена как оборванная", () => {
+    seedOkrs([mk("d1", "Цель направления", [{ text: "KR направления" }])]);
+    seedPyramid({
+      levels: { d1: "direction" },
+      krMetrics: {},
+      contributions: [{ from: { okrId: "d1", krIndex: 0 }, to: { okrId: "ghost", krIndex: 0 } }],
+    });
+    render(<MetricsPyramid />);
+
+    expect(screen.getByTestId("contribution-link")).toHaveTextContent("связь оборвана");
   });
 });
+

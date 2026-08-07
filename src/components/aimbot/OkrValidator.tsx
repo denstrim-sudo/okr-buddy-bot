@@ -451,6 +451,9 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                 );
               })()}
               <RuleList rules={report.rules} />
+              {report.kr_perspectives && report.kr_perspectives.length > 0 && (
+                <KrPerspectives keyResults={krs} perspectives={report.kr_perspectives} />
+              )}
             </>
           )}
         </div>

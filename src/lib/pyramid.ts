@@ -1,4 +1,5 @@
 import type { SavedOkr } from "@/hooks/useSavedOkrs";
+import { normalizeMetricName } from "@/hooks/useMetricsCatalog";
 
 export type PyramidLevel = "bank" | "direction";
 
@@ -134,6 +135,8 @@ export interface PyramidSolution {
   /** KR, под которым Решение родилось в Модуле 3 (для автоподстановки метрики). */
   originOkrId?: string;
   originKrIndex?: number;
+  /** Поле «ОПЕРЕЖАЮЩАЯ МЕТРИКА» из Модуля 3 (leading_metric). */
+  leadingMetric?: string;
 }
 
 export interface MetricLike {
@@ -142,15 +145,71 @@ export interface MetricLike {
   unit?: string;
 }
 
-/** Метрика KR-происхождения Решения — автоподстановка при первой привязке. */
+export type MetricSuggestion =
+  | { kind: "existing"; metricId: string }
+  | { kind: "new"; name: string; fullName?: string };
+
+const FILLERS = [
+  /\bот проведения\b/gi,
+  /\bна этапе\b/gi,
+  /\bв процессе\b/gi,
+  /\bв общем объ[её]ме\b/gi,
+  /\bв рамках\b/gi,
+  /\bпо итогам\b/gi,
+];
+
+const MAX_METRIC_NAME = 40;
+
+/** Мгновенная эвристика (без LLM): убираем служебные обороты и лишние слова. */
+export function shortenMetricName(fullName: string): string {
+  let s = (fullName ?? "").trim().replace(/\s+/g, " ");
+  if (s.length <= MAX_METRIC_NAME) return s;
+  for (const re of FILLERS) s = s.replace(re, " ");
+  s = s.trim().replace(/\s+/g, " ");
+  if (s.length <= MAX_METRIC_NAME) return s;
+
+  // Выбрасываем самые длинные слова из середины, сохраняя начало и конец
+  const words = s.split(" ");
+  while (words.join(" ").length > MAX_METRIC_NAME && words.length > 3) {
+    let victim = -1;
+    for (let i = 2; i < words.length - 1; i++) {
+      if (victim < 0 || words[i].length > words[victim].length) victim = i;
+    }
+    if (victim < 0) break;
+    words.splice(victim, 1);
+  }
+  const out = words.join(" ");
+  return out.length <= MAX_METRIC_NAME ? out : out.slice(0, MAX_METRIC_NAME).trim();
+}
+
+/**
+ * Приоритет: опережающая метрика самого Решения (точнее описывает механизм) →
+ * существующая в справочнике → предложение завести → метрика KR-происхождения.
+ */
 export function suggestedMetricForSolution(
   solution: PyramidSolution,
+  metrics: MetricLike[],
   state: PyramidState,
-): string | null {
-  if (!solution?.originOkrId || solution.originKrIndex === undefined || solution.originKrIndex === null) {
+): MetricSuggestion | null {
+  const leading = (solution?.leadingMetric ?? "").trim().replace(/\s+/g, " ");
+  if (leading) {
+    const norm = normalizeMetricName(leading);
+    const existing = (metrics ?? []).find((m) => normalizeMetricName(m.name) === norm);
+    if (existing) return { kind: "existing", metricId: existing.id };
+    const short = shortenMetricName(leading);
+    return short === leading
+      ? { kind: "new", name: short }
+      : { kind: "new", name: short, fullName: leading };
+  }
+  if (
+    !solution?.originOkrId ||
+    solution.originKrIndex === undefined ||
+    solution.originKrIndex === null
+  ) {
     return null;
   }
-  return state.krMetrics?.[krKey(solution.originOkrId, solution.originKrIndex)] ?? null;
+  const metricId = state.krMetrics?.[krKey(solution.originOkrId, solution.originKrIndex)];
+  return metricId ? { kind: "existing", metricId } : null;
 }
 
 export type TraceStatus = "complete" | "broken_at_direction" | "orphan_metric" | "no_metrics";

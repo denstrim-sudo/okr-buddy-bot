@@ -134,7 +134,8 @@ Return STRICT JSON only via the provided tool.`;
 export function buildAuditorParameters(horizon?: string, opts: { lite?: boolean } = {}) {
   const ids = knownRuleIdsFor(horizon);
   const lite = opts.lite === true;
-  const ruleProps: Record<string, unknown> = {
+  // deno-lint-ignore no-explicit-any
+  const ruleProps: Record<string, any> = {
     id: { type: "string", enum: ids },
     label: { type: "string" },
     ...(lite

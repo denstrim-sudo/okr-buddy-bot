@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Layers, Gauge, ArrowUpRight, Download, Upload, X } from "lucide-react";
+import { Layers, Gauge, ArrowUpRight, Download, FileDown, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSavedOkrs, type SavedOkr } from "@/hooks/useSavedOkrs";

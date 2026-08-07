@@ -75,3 +75,37 @@ export const GAP_LABELS: Record<GapType, string> = {
   direction_kr_no_parent: "нет связи вверх",
   bank_kr_no_contributors: "нет контрибьюторов",
 };
+
+export const LEVEL_LABELS: Record<PyramidLevel, string> = {
+  bank: "Банк",
+  direction: "Направление",
+};
+
+export interface ContributionDescription {
+  level?: PyramidLevel;
+  levelLabel: string;
+  krLabel: string;
+  krText: string;
+  okrObjective: string;
+  orphaned: boolean;
+}
+
+/** Описание связи вверх для отображения: конкретный KR родителя, а не Objective. */
+export function describeContribution(
+  contribution: Contribution,
+  items: SavedOkr[],
+  state: PyramidState = emptyPyramid(),
+): ContributionDescription {
+  const { okrId, krIndex } = contribution.to;
+  const parent = items.find((i) => i.id === okrId);
+  const kr = parent?.plan?.key_results?.[krIndex];
+  const level = parent ? state.levels?.[okrId] : undefined;
+  return {
+    level,
+    levelLabel: level ? LEVEL_LABELS[level] : "",
+    krLabel: `KR${krIndex + 1}`,
+    krText: kr?.text ?? "",
+    okrObjective: parent?.objective ?? "",
+    orphaned: !parent || !kr,
+  };
+}

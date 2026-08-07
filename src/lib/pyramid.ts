@@ -254,3 +254,30 @@ export function traceSolution(
     return broken!;
   });
 }
+
+/* ------------------------------------------------------------------ *
+ * Фильтр Решений: пирамида работает только с обязательствами
+ * ------------------------------------------------------------------ */
+
+/** Минимальная форма состояния Модуля 3, нужная пирамиде. */
+export interface SolutionStudioLike {
+  slices?: Record<string, { solutions?: unknown[]; selected?: number[] } | null | undefined>;
+}
+
+/**
+ * Идентификаторы Решений со статусом «в проекте» (slice.selected в Модуле 3).
+ * Фильтр применяется ТОЛЬКО на чтение/отображение — PyramidState и связи
+ * solutionMetrics не изменяются при снятии статуса.
+ */
+export function solutionsForPyramid(studioState: SolutionStudioLike | null | undefined): string[] {
+  const slices = studioState?.slices;
+  if (!slices) return [];
+  const ids: string[] = [];
+  for (const [sliceKey, slice] of Object.entries(slices)) {
+    const total = slice?.solutions?.length ?? 0;
+    for (const idx of slice?.selected ?? []) {
+      if (idx >= 0 && idx < total) ids.push(`${sliceKey}:${idx}`);
+    }
+  }
+  return ids;
+}

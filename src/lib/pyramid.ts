@@ -19,6 +19,14 @@ export interface PyramidState {
   contributions: Contribution[];
   /** Фаза 2: связи Решений (Модуль 3) с метриками, many-to-many. */
   solutionMetrics: SolutionMetricLink[];
+  /** Нижний ярус: опережающая метрика Решения влияет на метрику KR, many-to-many. */
+  metricInfluences: MetricInfluence[];
+}
+
+/** Связь влияния метрика → метрика (утверждение о причинности). */
+export interface MetricInfluence {
+  from: string;
+  to: string;
 }
 
 export const emptyPyramid = (): PyramidState => ({
@@ -26,7 +34,33 @@ export const emptyPyramid = (): PyramidState => ({
   krMetrics: {},
   contributions: [],
   solutionMetrics: [],
+  metricInfluences: [],
 });
+
+/** Появится ли цикл, если добавить ребро from → to (или это петля). */
+export function detectMetricCycle(
+  edges: MetricInfluence[],
+  from: string,
+  to: string,
+): boolean {
+  if (!from || !to) return false;
+  if (from === to) return true;
+  const out = new Map<string, string[]>();
+  for (const e of edges ?? []) {
+    if (!e) continue;
+    (out.get(e.from) ?? out.set(e.from, []).get(e.from)!).push(e.to);
+  }
+  const visited = new Set<string>();
+  const stack = [to];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (cur === from) return true;
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    for (const next of out.get(cur) ?? []) stack.push(next);
+  }
+  return false;
+}
 
 export const krKey = (okrId: string, krIndex: number) => `${okrId}:${krIndex}`;
 
@@ -214,7 +248,18 @@ export function suggestedMetricForSolution(
 
 export type TraceStatus = "complete" | "broken_at_direction" | "orphan_metric" | "no_metrics";
 
+export interface TraceMetricStep {
+  kind: "metric";
+  metricId: string;
+  metricName: string;
+}
+
+export type TracePathStep = TraceNode | TraceMetricStep;
+
+export const isKrStep = (p: TracePathStep): p is TraceNode => p.kind === "kr";
+
 export interface TraceNode {
+  kind: "kr";
   level: PyramidLevel;
   okrId: string;
   okrObjective: string;
@@ -226,7 +271,7 @@ export interface TraceChain {
   metricId: string;
   metricName: string;
   status: TraceStatus;
-  path: TraceNode[];
+  path: TracePathStep[];
   brokenAt?: { okrId: string; krIndex: number; krText: string };
 }
 
@@ -266,12 +311,11 @@ export function traceSolution(
     const kr = okr?.plan?.key_results?.[krIndex];
     const level = state.levels?.[okrId];
     if (!okr || !kr || !level) return null;
-    return { level, okrId, okrObjective: okr.objective, krIndex, krText: kr.text };
+    return { kind: "kr", level, okrId, okrObjective: okr.objective, krIndex, krText: kr.text };
   };
 
-  return metricIds.map((metricId) => {
-    // все KR, измеряемые этой метрикой (оборванные ссылки отбрасываем)
-    const users: TraceNode[] = Object.entries(state.krMetrics ?? {})
+  const krUsers = (metricId: string): TraceNode[] =>
+    Object.entries(state.krMetrics ?? {})
       .filter(([, id]) => id === metricId)
       .map(([key]) => {
         const sep = key.lastIndexOf(":");
@@ -279,15 +323,45 @@ export function traceSolution(
       })
       .filter((n): n is TraceNode => Boolean(n));
 
-    if (users.length === 0) {
-      return { metricId, metricName: nameOf(metricId), status: "orphan_metric" as const, path: [] };
+  const influences = state.metricInfluences ?? [];
+
+  /** BFS по графу влияний до первой метрики, привязанной к KR (visited от циклов). */
+  const routeToKrMetric = (startId: string): string[] | null => {
+    const visited = new Set<string>([startId]);
+    const queue: string[][] = [[startId]];
+    while (queue.length) {
+      const route = queue.shift()!;
+      const cur = route[route.length - 1];
+      if (krUsers(cur).length > 0) return route;
+      for (const e of influences) {
+        if (e?.from !== cur || visited.has(e.to)) continue;
+        visited.add(e.to);
+        queue.push([...route, e.to]);
+      }
+    }
+    return null;
+  };
+
+  return metricIds.map((metricId) => {
+    const route = routeToKrMetric(metricId);
+    const metricName = nameOf(metricId);
+
+    if (!route) {
+      return { metricId, metricName, status: "orphan_metric" as const, path: [] };
     }
 
+    // Промежуточные метрики видны в пути (стартовая — только если был переход)
+    const metricSteps: TracePathStep[] =
+      route.length > 1
+        ? route.map((id) => ({ kind: "metric" as const, metricId: id, metricName: nameOf(id) }))
+        : [];
+
+    const users = krUsers(route[route.length - 1]);
     let broken: TraceChain | null = null;
 
     for (const node of users) {
       if (node.level === "bank") {
-        return { metricId, metricName: nameOf(metricId), status: "complete" as const, path: [node] };
+        return { metricId, metricName, status: "complete" as const, path: [...metricSteps, node] };
       }
       const up = links.find(
         (c) => c.from.okrId === node.okrId && c.from.krIndex === node.krIndex,
@@ -296,16 +370,16 @@ export function traceSolution(
       if (parent) {
         return {
           metricId,
-          metricName: nameOf(metricId),
+          metricName,
           status: "complete" as const,
-          path: [node, parent],
+          path: [...metricSteps, node, parent],
         };
       }
       broken ??= {
         metricId,
-        metricName: nameOf(metricId),
+        metricName,
         status: "broken_at_direction",
-        path: [node],
+        path: [...metricSteps, node],
         brokenAt: { okrId: node.okrId, krIndex: node.krIndex, krText: node.krText },
       };
     }

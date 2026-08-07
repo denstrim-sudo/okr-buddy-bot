@@ -171,33 +171,52 @@ export const MetricsPyramid = () => {
         {links.length > 0 && (
           <ul className="mt-1.5 space-y-1">
             {links.map((c) => {
-              const parent = items.find((i) => i.id === c.to.okrId);
-              const parentKr = parent?.plan.key_results?.[c.to.krIndex];
-              if (!parent || !parentKr) return null;
+              const d = describeContribution(c, items, pyramid.state);
+              const full = d.orphaned
+                ? "Связь оборвана: родительский KR удалён"
+                : `${d.levelLabel} · ${d.krLabel}: ${d.krText} — ${d.okrObjective}`;
               return (
                 <li
                   key={`${c.to.okrId}:${c.to.krIndex}`}
-                  className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                  data-testid="contribution-link"
+                  className="text-[11px] text-muted-foreground"
+                  title={full}
                 >
-                  <ArrowUpRight className="h-3 w-3 shrink-0" />
-                  <span className="truncate">
-                    → {parent.objective} · KR{c.to.krIndex + 1}: {parentKr.text}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Удалить связь"
-                    className="ml-auto text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      pyramid.unlinkKrContribution(okr.id, krIndex, c.to.okrId, c.to.krIndex)
-                    }
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <ArrowUpRight
+                      className={cn("h-3 w-3 shrink-0", d.orphaned && "text-amber-600")}
+                    />
+                    {d.orphaned ? (
+                      <span className="truncate text-amber-700 dark:text-amber-300">
+                        связь оборвана
+                      </span>
+                    ) : (
+                      <span className="truncate">
+                        {d.levelLabel} · {d.krLabel}: {d.krText}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="Удалить связь"
+                      className="ml-auto text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        pyramid.unlinkKrContribution(okr.id, krIndex, c.to.okrId, c.to.krIndex)
+                      }
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {!d.orphaned && d.okrObjective && (
+                    <p className="truncate pl-4 text-[10px] text-muted-foreground/70">
+                      {d.okrObjective}
+                    </p>
+                  )}
                 </li>
               );
             })}
           </ul>
         )}
+
       </li>
     );
   };

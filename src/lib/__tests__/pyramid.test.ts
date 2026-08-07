@@ -167,10 +167,13 @@ describe("traceSolution", () => {
 describe("suggestedMetricForSolution", () => {
   it("берёт метрику KR-происхождения", () => {
     const state = { ...emptyPyramid(), krMetrics: { "dir:2": "m1" } };
-    expect(suggestedMetricForSolution({ id: "s", title: "t", originOkrId: "dir", originKrIndex: 2 }, state)).toBe("m1");
-    expect(suggestedMetricForSolution({ id: "s", title: "t" }, state)).toBeNull();
+    expect(
+      suggestedMetricForSolution({ id: "s", title: "t", originOkrId: "dir", originKrIndex: 2 }, [], state),
+    ).toEqual({ kind: "existing", metricId: "m1" });
+    expect(suggestedMetricForSolution({ id: "s", title: "t" }, [], state)).toBeNull();
   });
 });
+
 
 import { solutionsForPyramid } from "@/lib/pyramid";
 

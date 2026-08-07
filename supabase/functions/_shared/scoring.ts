@@ -107,6 +107,7 @@ export function knownRuleIdsFor(horizon?: string): string[] {
     "KR-OUTCOME",
     "KR-TIMEBOUND",
     "KR-LEADING",
+    "KR-PERSPECTIVES",
   ];
   return horizon === "quarter_3m" ? [...base, "Q-FOCUS", "Q-THEME", "Q-REACH"] : base;
 }

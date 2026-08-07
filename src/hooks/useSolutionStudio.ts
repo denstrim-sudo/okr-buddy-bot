@@ -230,6 +230,29 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     validateSolution(next);
   };
 
+  const addAuditToProject = useCallback(() => {
+    const a = slice.audit;
+    if (!a.problem?.trim() || !a.bet?.trim() || !a.result_image?.trim() || !a.leading_metric?.trim()) {
+      toast.error("Заполните все основные поля решения");
+      return;
+    }
+    const idx = a.id ? slice.solutions.findIndex((x) => x.id === a.id) : -1;
+    const targetIdx = idx >= 0 ? idx : slice.solutions.length;
+    const solutions =
+      idx >= 0
+        ? slice.solutions.map((x, i) => (i === idx ? { ...x, ...a } : x))
+        : [...slice.solutions, { ...a, id: a.id || `S${targetIdx + 1}` }];
+    const cardReports = slice.report
+      ? { ...slice.cardReports, [targetIdx]: slice.report }
+      : slice.cardReports;
+    patchSlice({
+      solutions,
+      cardReports,
+      selected: Array.from(new Set([...slice.selected, targetIdx])),
+    });
+    toast.success(idx >= 0 ? "Решение обновлено и включено в проект" : "Решение добавлено в проект");
+  }, [slice.audit, slice.solutions, slice.report, slice.cardReports, slice.selected, patchSlice]);
+
   const updateAudit = (k: keyof GeneratedSolution, v: string) =>
     patchSlice({ audit: { ...slice.audit, [k]: v as any } });
 
@@ -278,7 +301,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
     setContext: (v: string) => patchSlice({ context: v }),
     toggleSelected, resetActive, resetAll,
     validateCard, applyCardRewrite, handleGenerate,
-    sendToAudit, validateSolution, applyRewrite, updateAudit,
+    sendToAudit, validateSolution, applyRewrite, updateAudit, addAuditToProject,
     exportJson, importJson, fileInputRef,
   };
 }

@@ -391,9 +391,11 @@ export const handler = async (req: Request) => {
     const systemPrompt = buildSystemPrompt(h);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
-    // Не-OpenAI модели слишком медленно генерируют reasoning на каждое правило —
-    // для них используем облегчённую схему, чтобы уложиться в дедлайн запроса.
-    const params = buildAuditorParameters(h, { lite: Boolean(modelArg && modelArg !== "gpt-4o") });
+    // Полная схема (с reasoning на каждое правило) для ВСЕХ моделей — качество
+    // аудита важнее скорости. Бюджет времени в _shared/ai.ts рассчитан на то,
+    // что не-OpenAI модели генерируют её 30-60с.
+    const params = buildAuditorParameters(h);
+
     const first = await callAITool({
       systemPrompt,
       userPrompt,

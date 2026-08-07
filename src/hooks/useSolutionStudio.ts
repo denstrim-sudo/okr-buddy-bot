@@ -56,11 +56,9 @@ const loadInitial = (): PersistedState | null => {
 };
 
 const handleAIError = (e: any, fallback = "Ошибка") => {
-  const msg = e?.message || fallback;
-  if (msg.includes("Rate")) toast.error("Слишком много запросов.");
-  else if (msg.includes("credits")) toast.error("Закончились AI-кредиты.");
-  else toast.error(msg);
+  toast.error(e?.message || fallback);
 };
+
 
 export function useSolutionStudio(defaultObjective: string, defaultKeyResult: string, keyResults: string[]) {
   const initial = loadInitial();

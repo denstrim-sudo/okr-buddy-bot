@@ -111,17 +111,25 @@ export function usePyramid() {
   );
 
   const linkKrContribution = useCallback(
-    (childOkrId: string, childKrIndex: number, parentOkrId: string, parentKrIndex: number) => {
+    (
+      childOkrId: string,
+      childKrIndex: number,
+      parentOkrId: string,
+      parentKrIndex: number,
+    ): { ok: boolean; duplicate?: boolean } => {
       const from: KrRef = { okrId: childOkrId, krIndex: childKrIndex };
       const to: KrRef = { okrId: parentOkrId, krIndex: parentKrIndex };
       const exists = ref.current.contributions.some(
         (c) => sameRef(c.from, from) && sameRef(c.to, to),
       );
-      if (exists) return true;
-      return commit({ ...ref.current, contributions: [...ref.current.contributions, { from, to }] });
+      if (exists) return { ok: true, duplicate: true };
+      return {
+        ok: commit({ ...ref.current, contributions: [...ref.current.contributions, { from, to }] }),
+      };
     },
     [commit],
   );
+
 
   const unlinkKrContribution = useCallback(
     (childOkrId: string, childKrIndex: number, parentOkrId: string, parentKrIndex: number) => {

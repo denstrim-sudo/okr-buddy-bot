@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findGaps, liveContributions, krKey, emptyPyramid } from "@/lib/pyramid";
+import { findGaps, liveContributions, krKey, emptyPyramid, describeContribution } from "@/lib/pyramid";
 import type { SavedOkr } from "@/hooks/useSavedOkrs";
 
 const mk = (id: string, krs: string[]): SavedOkr => ({
@@ -46,5 +46,36 @@ describe("pyramid lib", () => {
     const gaps = findGaps([mk("a", ["Мой KR"])], { ...emptyPyramid(), levels: { a: "bank" } });
     expect(gaps[0].objective).toBe("Цель a");
     expect(gaps[0].krText).toBe("Мой KR");
+  });
+});
+
+describe("describeContribution", () => {
+  const items = [mk("bank", ["KR банка A", "KR банка B"])];
+  const state = { ...emptyPyramid(), levels: { bank: "bank" as const } };
+
+  it("возвращает уровень родителя, номер KR и текст KR", () => {
+    const d = describeContribution(
+      { from: { okrId: "dir", krIndex: 0 }, to: { okrId: "bank", krIndex: 1 } },
+      items,
+      state,
+    );
+    expect(d.orphaned).toBe(false);
+    expect(d.level).toBe("bank");
+    expect(d.levelLabel).toBe("Банк");
+    expect(d.krLabel).toBe("KR2");
+    expect(d.krText).toBe("KR банка B");
+    expect(d.okrObjective).toBe("Цель bank");
+  });
+
+  it("для связи на удалённый OKR возвращает orphaned и не падает", () => {
+    const d = describeContribution(
+      { from: { okrId: "dir", krIndex: 0 }, to: { okrId: "ghost", krIndex: 3 } },
+      items,
+      state,
+    );
+    expect(d.orphaned).toBe(true);
+    expect(d.krLabel).toBe("KR4");
+    expect(d.krText).toBe("");
+    expect(d.okrObjective).toBe("");
   });
 });

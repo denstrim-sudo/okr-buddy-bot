@@ -10,6 +10,7 @@ import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import { MetricsPyramid } from "@/components/aimbot/MetricsPyramid";
+import { SolutionTrace } from "@/components/aimbot/SolutionTrace";
 
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";

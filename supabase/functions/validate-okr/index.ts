@@ -126,9 +126,32 @@ Return STRICT JSON only via the provided tool.`;
 /**
  * Схема АУДИТОРА. Только вердикты по правилам, БЕЗ rewritten_*. Переписыванием
  * занимается отдельный проход РЕДАКТОРА (mode=fix).
+ *
+ * opts.lite — облегчённая схема без обязательного `reasoning` в каждом правиле.
+ * Используется для не-OpenAI моделей: генерация reasoning на каждое правило
+ * занимает у них в разы больше времени и упирается в дедлайн запроса.
  */
-export function buildAuditorParameters(horizon?: string) {
+export function buildAuditorParameters(horizon?: string, opts: { lite?: boolean } = {}) {
   const ids = knownRuleIdsFor(horizon);
+  const lite = opts.lite === true;
+  const ruleProps: Record<string, unknown> = {
+    id: { type: "string", enum: ids },
+    label: { type: "string" },
+    ...(lite
+      ? {}
+      : {
+          reasoning: { type: "string", description: "Сначала рассуждение: к какому типу относится KR (outcome/activity, leading/lagging), сверка с эталоном, и ТОЛЬКО потом вывод. Заполняется ДО pass." },
+        }),
+    pass: { type: "boolean" },
+    hint: { type: "string" },
+    severity: { type: "string", enum: ["critical", "important", "improve"] },
+    why: { type: "string" },
+    evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
+  };
+  const required = lite
+    ? ["id", "label", "pass", "hint", "severity", "why", "evidence"]
+    : ["id", "label", "reasoning", "pass", "hint", "severity", "why", "evidence"];
+
   return {
     type: "object",
     properties: {
@@ -144,17 +167,8 @@ export function buildAuditorParameters(horizon?: string) {
           // ВАЖНО: порядок properties влияет на порядок генерации у tool-calling
           // моделей. reasoning ДОЛЖНО идти раньше pass — сначала рассуждение,
           // потом вердикт (chain-of-thought до вердикта).
-          properties: {
-            id: { type: "string", enum: ids },
-            label: { type: "string" },
-            reasoning: { type: "string", description: "Сначала рассуждение: к какому типу относится KR (outcome/activity, leading/lagging), сверка с эталоном, и ТОЛЬКО потом вывод. Заполняется ДО pass." },
-            pass: { type: "boolean" },
-            hint: { type: "string" },
-            severity: { type: "string", enum: ["critical", "important", "improve"] },
-            why: { type: "string" },
-            evidence: { type: "string", description: "Для pass=false: ДОСЛОВНАЯ цитата (≤80 символов) из текста Objective или конкретного KR — фрагмент, который стал причиной fail. Для pass=true — пустая строка." },
-          },
-          required: ["id", "label", "reasoning", "pass", "hint", "severity", "why", "evidence"],
+          properties: ruleProps,
+          required,
           additionalProperties: false,
         },
       },
@@ -183,6 +197,7 @@ export function buildAuditorParameters(horizon?: string) {
  * Используется в тестах и внешнем коде, где может встречаться прямой вызов.
  */
 export const buildParameters = buildAuditorParameters;
+
 
 /**
  * Проверяет, обоснован ли вердикт fail дословной цитатой из текста OKR.

@@ -8,6 +8,7 @@ import {
   type Gap,
   type KrRef,
   type PyramidLevel,
+  detectMetricCycle,
   suggestedMetricForSolution as suggestedMetricPure,
   metricsForSolution,
   type PyramidSolution,
@@ -37,6 +38,7 @@ const load = (): PyramidState => {
       krMetrics: parsed?.krMetrics ?? {},
       contributions: Array.isArray(parsed?.contributions) ? parsed.contributions : [],
       solutionMetrics: Array.isArray(parsed?.solutionMetrics) ? parsed.solutionMetrics : [],
+      metricInfluences: Array.isArray(parsed?.metricInfluences) ? parsed.metricInfluences : [],
     };
   } catch {
     return emptyPyramid();
@@ -178,6 +180,48 @@ export function usePyramid() {
     [commit],
   );
 
+  const linkMetricInfluence = useCallback(
+    (
+      fromMetricId: string,
+      toMetricId: string,
+    ): { ok: boolean; duplicate?: boolean; reason?: "self" | "cycle" } => {
+      if (!fromMetricId || !toMetricId || fromMetricId === toMetricId) {
+        return { ok: false, reason: "self" };
+      }
+      const edges = ref.current.metricInfluences ?? [];
+      if (edges.some((e) => e.from === fromMetricId && e.to === toMetricId)) {
+        return { ok: true, duplicate: true };
+      }
+      if (detectMetricCycle(edges, fromMetricId, toMetricId)) {
+        return { ok: false, reason: "cycle" };
+      }
+      return {
+        ok: commit({
+          ...ref.current,
+          metricInfluences: [...edges, { from: fromMetricId, to: toMetricId }],
+        }),
+      };
+    },
+    [commit],
+  );
+
+  const unlinkMetricInfluence = useCallback(
+    (fromMetricId: string, toMetricId: string) =>
+      commit({
+        ...ref.current,
+        metricInfluences: (ref.current.metricInfluences ?? []).filter(
+          (e) => !(e.from === fromMetricId && e.to === toMetricId),
+        ),
+      }),
+    [commit],
+  );
+
+  const getIncomingInfluences = useCallback(
+    (metricId: string): string[] =>
+      (state.metricInfluences ?? []).filter((e) => e.to === metricId).map((e) => e.from),
+    [state],
+  );
+
   const getSolutionMetrics = useCallback(
     (solutionId: string): string[] => metricsForSolution(solutionId, state),
     [state],
@@ -232,6 +276,9 @@ export function usePyramid() {
         solutionMetrics: Array.isArray(parsed.state.solutionMetrics)
           ? parsed.state.solutionMetrics
           : [],
+        metricInfluences: Array.isArray(parsed.state.metricInfluences)
+          ? parsed.state.metricInfluences
+          : [],
       });
       if (!ok) return { ok: false, error: "Хранилище недоступно" };
       return { ok: true };
@@ -253,6 +300,9 @@ export function usePyramid() {
     linkSolutionToMetric,
     unlinkSolutionFromMetric,
     getSolutionMetrics,
+    linkMetricInfluence,
+    unlinkMetricInfluence,
+    getIncomingInfluences,
     suggestedMetricForSolution,
     findGaps,
     clear,

@@ -223,7 +223,8 @@ describe("usePyramid: связи Решение→метрика", () => {
     });
     expect(
       result.current.suggestedMetricForSolution({ id: "s1", title: "T", originOkrId: "dir", originKrIndex: 1 }),
-    ).toBe("m9");
+    ).toEqual({ kind: "existing", metricId: "m9" });
+
     expect(
       result.current.suggestedMetricForSolution({ id: "s2", title: "T", originOkrId: "dir", originKrIndex: 0 }),
     ).toBeNull();

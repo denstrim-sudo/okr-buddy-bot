@@ -12,6 +12,8 @@ import {
   metricsForSolution,
   type PyramidSolution,
   type PyramidState,
+  type MetricLike,
+  type MetricSuggestion,
 } from "@/lib/pyramid";
 import type { SavedOkr } from "@/hooks/useSavedOkrs";
 
@@ -182,7 +184,8 @@ export function usePyramid() {
   );
 
   const suggestedMetricForSolution = useCallback(
-    (solution: PyramidSolution): string | null => suggestedMetricPure(solution, ref.current),
+    (solution: PyramidSolution, metrics: MetricLike[] = []): MetricSuggestion | null =>
+      suggestedMetricPure(solution, metrics, ref.current),
     [],
   );
 

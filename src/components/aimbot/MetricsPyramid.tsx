@@ -169,7 +169,11 @@ export const MetricsPyramid = () => {
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {metric ? (
-            <Badge variant="secondary" className="gap-1 text-[10px]">
+            <Badge
+              variant="secondary"
+              className="gap-1 text-[10px]"
+              title={metric.description ?? metric.name}
+            >
               <Gauge className="h-3 w-3" />
               {metric.name}
               {metric.unit ? `, ${metric.unit}` : ""}
@@ -438,6 +442,7 @@ export const MetricsPyramid = () => {
                       size="sm"
                       variant="outline"
                       className="h-7 px-2 text-[11px]"
+                      title={m.description ?? m.name}
                       onClick={() => chooseExisting(m.id)}
                     >
                       {m.name}

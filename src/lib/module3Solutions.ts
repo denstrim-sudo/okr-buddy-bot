@@ -38,6 +38,7 @@ export function readModule3Solutions(items: SavedOkr[]): PyramidSolution[] {
         id: `${sliceKey}:${i}`,
         title,
         description: [s.problem, s.bet, s.result_image, s.leading_metric].filter(Boolean).join(". "),
+        ...(s.leading_metric?.trim() ? { leadingMetric: s.leading_metric.trim() } : {}),
         ...(originOkrId !== undefined ? { originOkrId, originKrIndex } : {}),
       });
     });

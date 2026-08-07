@@ -424,9 +424,9 @@ Deno.test("buildParameters: minItems === maxItems === knownRuleIdsFor(horizon).l
   assertEquals(p12.properties.rules.maxItems, knownRuleIdsFor("block_12m").length);
   assertEquals(pq.properties.rules.minItems, knownRuleIdsFor("quarter_3m").length);
   assertEquals(pq.properties.rules.maxItems, knownRuleIdsFor("quarter_3m").length);
-  assertEquals(p3y.properties.rules.minItems, 8);
-  assertEquals(pDefault.properties.rules.minItems, 8);
-  assertEquals(pq.properties.rules.minItems, 11);
+  assertEquals(p3y.properties.rules.minItems, 9);
+  assertEquals(pDefault.properties.rules.minItems, 9);
+  assertEquals(pq.properties.rules.minItems, 12);
 });
 
 Deno.test("buildParameters: rules.items.properties.id.enum === knownRuleIdsFor(horizon)", () => {
@@ -859,3 +859,43 @@ Deno.test("handler mode=fix: sanitizeRewrittenObjective по-прежнему п
 });
 
 
+
+// --- kr_perspectives: типология KR (AI-Native SAFe) ---
+
+Deno.test("buildAuditorParameters содержит kr_perspectives с тремя осями в enum", () => {
+  for (const h of [undefined, "strategic_3y", "block_12m", "quarter_3m"]) {
+    const p = buildAuditorParameters(h);
+    const kp = p.properties.kr_perspectives;
+    assert(kp, `horizon=${h}: kr_perspectives должен присутствовать`);
+    assertEquals(kp.type, "array");
+    assertEquals(kp.items.properties.perspective.enum, [
+      "customer_business",
+      "feasibility_risk",
+      "learning",
+    ]);
+    assertEquals((kp.items.required as string[]).sort(), ["index", "perspective", "rationale"]);
+  }
+});
+
+Deno.test("buildAuditorParameters: kr_perspectives входит в required верхнего уровня", () => {
+  const req = buildAuditorParameters("block_12m").required as string[];
+  assert(req.includes("kr_perspectives"), "kr_perspectives должен быть обязательным полем ответа аудитора");
+});
+
+Deno.test("buildAuditorParameters: rules покрывают KR-PERSPECTIVES (enum id и количество)", () => {
+  for (const h of ["block_12m", "quarter_3m"]) {
+    const p = buildAuditorParameters(h);
+    const ids = p.properties.rules.items.properties.id.enum as string[];
+    assert(ids.includes("KR-PERSPECTIVES"), `horizon=${h}: KR-PERSPECTIVES должен быть в enum id`);
+    assertEquals(p.properties.rules.minItems, knownRuleIdsFor(h).length);
+  }
+});
+
+Deno.test("промпт аудитора описывает три оси и обе функции оси осуществимости", () => {
+  const prompt = buildSystemPrompt("block_12m");
+  for (const axis of ["customer_business", "feasibility_risk", "learning"]) {
+    assert(prompt.includes(axis), `промпт должен называть ось ${axis}`);
+  }
+  assert(/удерживать/i.test(prompt), "промпт должен содержать грамматику контр-метрики");
+  assert(/не сломать/i.test(prompt), "промпт должен содержать функцию защиты критичного");
+});

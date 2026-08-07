@@ -78,6 +78,9 @@ export const SEVERITY_BY_RULE_ID: Record<string, RuleSeverity> = {
   "KR-OUTCOME": "critical",
   "KR-TIMEBOUND": "important",
   "KR-LEADING": "important",
+  // Типология KR (AI-Native SAFe): баланс набора по трём точкам зрения.
+  // Мягкая подсказка — вес improve, не рушит score.
+  "KR-PERSPECTIVES": "improve",
   // quarter-only:
   "Q-FOCUS": "important",
   "Q-THEME": "improve",
@@ -104,6 +107,7 @@ export function knownRuleIdsFor(horizon?: string): string[] {
     "KR-OUTCOME",
     "KR-TIMEBOUND",
     "KR-LEADING",
+    "KR-PERSPECTIVES",
   ];
   return horizon === "quarter_3m" ? [...base, "Q-FOCUS", "Q-THEME", "Q-REACH"] : base;
 }

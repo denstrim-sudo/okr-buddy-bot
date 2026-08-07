@@ -108,6 +108,16 @@ export interface ValidationRule {
   grounded?: boolean;
 }
 
+/** Точка зрения на Key Result (типология AI-Native SAFe). */
+export type KrPerspectiveAxis = "customer_business" | "feasibility_risk" | "learning";
+
+export interface KrPerspective {
+  /** 0-based индекс KR в наборе. */
+  index: number;
+  perspective: KrPerspectiveAxis;
+  rationale: string;
+}
+
 export interface ValidationReport {
   score: number;
   status: "pass" | "warn" | "fail";
@@ -126,6 +136,8 @@ export interface ValidationReport {
   model_used?: string;
   /** Пояснение коуча-редактора (mode=fix): что изменено, что сохранено, откуда взять данные для X/Y. */
   editor_note?: string;
+  /** Классификация KR по трём точкам зрения (AI-Native SAFe). */
+  kr_perspectives?: KrPerspective[];
 }
 
 export interface ValidationKR {

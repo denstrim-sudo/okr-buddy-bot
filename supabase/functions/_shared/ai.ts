@@ -87,7 +87,7 @@ export const shouldFallbackToDefault = (res: CallResult, requestedModel?: string
 };
 
 
-async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
+async function openaiToolCall(args: CallArgs, retryHint = "", timeoutMs = PRIMARY_ATTEMPT_MS): Promise<CallResult> {
   const RAW_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
   // Strip whitespace / non-ASCII chars that may have been pasted with the key
   // (otherwise fetch throws "headers ... is not a valid ByteString").

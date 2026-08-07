@@ -216,40 +216,59 @@ const buildMeta = (
   ...(fallbackReason ? { fallback_reason: fallbackReason } : {}),
 });
 
+/**
+ * Порядок попыток с общим дедлайном:
+ *   1) выбранная пользователем модель (не дольше PRIMARY_ATTEMPT_MS);
+ *   2) при любой невосстановимой ошибке — DEFAULT_MODEL на остатке бюджета;
+ *   3) один retry DEFAULT_MODEL, только если бюджета ещё достаточно.
+ * Повторного захода в исходную (медленную) модель больше нет.
+ */
 async function runWithFallback(args: CallArgs): Promise<{ res: CallResult; meta: AiMeta }> {
   const requested = args.model;
+  const startedAt = Date.now();
+  const remaining = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
   let usedModel = requested ?? DEFAULT_MODEL;
   let fallbackReason: string | undefined;
 
-  let res = await openaiToolCall(args);
-  if (shouldFallbackToDefault(res, args.model)) {
-    console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
+  const deadlineResult = (): CallResult => ({
+    ok: false,
+    status: 504,
+    errorCode: "deadline_exceeded",
+    errorMessage: `Модель "${requested ?? DEFAULT_MODEL}" не успела ответить за отведённое время. Попробуйте ещё раз или выберите стабильную модель GPT-4o.`,
+    retryable: true,
+  });
+
+  const fallbackHint = `Выбранная пользователем модель "${requested}" недоступна или слишком медленная. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`;
+
+  let res = await openaiToolCall(
+    args,
+    "",
+    Math.max(MIN_ATTEMPT_MS, Math.min(PRIMARY_ATTEMPT_MS, remaining())),
+  );
+
+  if (shouldFallbackToDefault(res, requested)) {
+    console.warn("AI model fallback", requested, "->", DEFAULT_MODEL, res.errorCode);
     fallbackReason = res.errorCode;
     usedModel = DEFAULT_MODEL;
-    res = await openaiToolCall(
-      { ...args, model: DEFAULT_MODEL },
-      `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
-    );
+    if (remaining() < MIN_ATTEMPT_MS) return { res: deadlineResult(), meta: buildMeta(requested, usedModel, fallbackReason) };
+    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, fallbackHint, remaining());
   }
-  if (!res.ok && res.retryable) {
-    await new Promise((r) => setTimeout(r, 800));
+
+  // Один retry — всегда на модели, которая уже используется (обычно DEFAULT_MODEL).
+  if (!res.ok && res.retryable && remaining() >= MIN_ATTEMPT_MS) {
     const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
       ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
       : "";
-    res = await openaiToolCall({ ...args, model: usedModel === DEFAULT_MODEL ? DEFAULT_MODEL : args.model }, hint);
-    if (shouldFallbackToDefault(res, args.model)) {
-      console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
-      fallbackReason = res.errorCode;
-      usedModel = DEFAULT_MODEL;
-      res = await openaiToolCall(
-        { ...args, model: DEFAULT_MODEL },
-        `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
-      );
-    }
+    res = await openaiToolCall({ ...args, model: usedModel }, hint, remaining());
+  }
+
+  if (!res.ok && res.errorCode === "timeout") {
+    res = { ...deadlineResult(), errorMessage: res.errorMessage };
   }
 
   return { res, meta: buildMeta(requested, usedModel, fallbackReason) };
 }
+
 
 /**
  * Call OpenAI via tool-calling for guaranteed JSON output.

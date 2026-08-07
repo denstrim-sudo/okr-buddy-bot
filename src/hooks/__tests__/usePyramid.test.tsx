@@ -149,3 +149,30 @@ describe("usePyramid", () => {
     expect(result.current.getLevel("a")).toBe("bank");
   });
 });
+
+describe("usePyramid: дубли связей", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("linkKrContribution НЕ создаёт дубль на ту же пару {from,to}", () => {
+    const { result } = renderHook(() => usePyramid());
+    let res!: { ok: boolean; duplicate?: boolean };
+    act(() => {
+      result.current.linkKrContribution("child", 0, "bank", 0);
+    });
+    act(() => {
+      res = result.current.linkKrContribution("child", 0, "bank", 0);
+    });
+    expect(res.ok).toBe(true);
+    expect(res.duplicate).toBe(true);
+    expect(result.current.state.contributions).toHaveLength(1);
+  });
+
+  it("разные krIndex одного родительского OKR — две разные связи", () => {
+    const { result } = renderHook(() => usePyramid());
+    act(() => {
+      result.current.linkKrContribution("child", 0, "bank", 0);
+      result.current.linkKrContribution("child", 0, "bank", 1);
+    });
+    expect(result.current.state.contributions).toHaveLength(2);
+  });
+});

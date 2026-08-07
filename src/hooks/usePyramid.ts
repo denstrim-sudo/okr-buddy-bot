@@ -8,6 +8,9 @@ import {
   type Gap,
   type KrRef,
   type PyramidLevel,
+  suggestedMetricForSolution as suggestedMetricPure,
+  metricsForSolution,
+  type PyramidSolution,
   type PyramidState,
 } from "@/lib/pyramid";
 import type { SavedOkr } from "@/hooks/useSavedOkrs";
@@ -31,6 +34,7 @@ const load = (): PyramidState => {
       levels: parsed?.levels ?? {},
       krMetrics: parsed?.krMetrics ?? {},
       contributions: Array.isArray(parsed?.contributions) ? parsed.contributions : [],
+      solutionMetrics: Array.isArray(parsed?.solutionMetrics) ? parsed.solutionMetrics : [],
     };
   } catch {
     return emptyPyramid();
@@ -145,6 +149,43 @@ export function usePyramid() {
     [commit],
   );
 
+  const linkSolutionToMetric = useCallback(
+    (solutionId: string, metricId: string): { ok: boolean; duplicate?: boolean } => {
+      const exists = (ref.current.solutionMetrics ?? []).some(
+        (l) => l.solutionId === solutionId && l.metricId === metricId,
+      );
+      if (exists) return { ok: true, duplicate: true };
+      return {
+        ok: commit({
+          ...ref.current,
+          solutionMetrics: [...(ref.current.solutionMetrics ?? []), { solutionId, metricId }],
+        }),
+      };
+    },
+    [commit],
+  );
+
+  const unlinkSolutionFromMetric = useCallback(
+    (solutionId: string, metricId: string) =>
+      commit({
+        ...ref.current,
+        solutionMetrics: (ref.current.solutionMetrics ?? []).filter(
+          (l) => !(l.solutionId === solutionId && l.metricId === metricId),
+        ),
+      }),
+    [commit],
+  );
+
+  const getSolutionMetrics = useCallback(
+    (solutionId: string): string[] => metricsForSolution(solutionId, state),
+    [state],
+  );
+
+  const suggestedMetricForSolution = useCallback(
+    (solution: PyramidSolution): string | null => suggestedMetricPure(solution, ref.current),
+    [],
+  );
+
   const getMetricId = useCallback(
     (okrId: string, krIndex: number): string | undefined => state.krMetrics[krKey(okrId, krIndex)],
     [state],
@@ -185,6 +226,9 @@ export function usePyramid() {
         levels: parsed.state.levels,
         krMetrics: parsed.state.krMetrics,
         contributions: parsed.state.contributions,
+        solutionMetrics: Array.isArray(parsed.state.solutionMetrics)
+          ? parsed.state.solutionMetrics
+          : [],
       });
       if (!ok) return { ok: false, error: "Хранилище недоступно" };
       return { ok: true };
@@ -203,6 +247,10 @@ export function usePyramid() {
     linkKrContribution,
     unlinkKrContribution,
     getContributionsFrom,
+    linkSolutionToMetric,
+    unlinkSolutionFromMetric,
+    getSolutionMetrics,
+    suggestedMetricForSolution,
     findGaps,
     clear,
     exportPyramid,

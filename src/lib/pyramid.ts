@@ -16,9 +16,16 @@ export interface PyramidState {
   levels: Record<string, PyramidLevel>;
   krMetrics: Record<string, string>;
   contributions: Contribution[];
+  /** Фаза 2: связи Решений (Модуль 3) с метриками, many-to-many. */
+  solutionMetrics: SolutionMetricLink[];
 }
 
-export const emptyPyramid = (): PyramidState => ({ levels: {}, krMetrics: {}, contributions: [] });
+export const emptyPyramid = (): PyramidState => ({
+  levels: {},
+  krMetrics: {},
+  contributions: [],
+  solutionMetrics: [],
+});
 
 export const krKey = (okrId: string, krIndex: number) => `${okrId}:${krIndex}`;
 
@@ -108,4 +115,142 @@ export function describeContribution(
     okrObjective: parent?.objective ?? "",
     orphaned: !parent || !kr,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Фаза 2: Решения (Модуль 3) → метрики → KR направления → KR банка
+ * ------------------------------------------------------------------ */
+
+export interface SolutionMetricLink {
+  solutionId: string;
+  metricId: string;
+}
+
+/** Решение, прочитанное из Модуля 3 (дубля данных не создаём). */
+export interface PyramidSolution {
+  id: string;
+  title: string;
+  description?: string;
+  /** KR, под которым Решение родилось в Модуле 3 (для автоподстановки метрики). */
+  originOkrId?: string;
+  originKrIndex?: number;
+}
+
+export interface MetricLike {
+  id: string;
+  name: string;
+  unit?: string;
+}
+
+/** Метрика KR-происхождения Решения — автоподстановка при первой привязке. */
+export function suggestedMetricForSolution(
+  solution: PyramidSolution,
+  state: PyramidState,
+): string | null {
+  if (!solution?.originOkrId || solution.originKrIndex === undefined || solution.originKrIndex === null) {
+    return null;
+  }
+  return state.krMetrics?.[krKey(solution.originOkrId, solution.originKrIndex)] ?? null;
+}
+
+export type TraceStatus = "complete" | "broken_at_direction" | "orphan_metric" | "no_metrics";
+
+export interface TraceNode {
+  level: PyramidLevel;
+  okrId: string;
+  okrObjective: string;
+  krIndex: number;
+  krText: string;
+}
+
+export interface TraceChain {
+  metricId: string;
+  metricName: string;
+  status: TraceStatus;
+  path: TraceNode[];
+  brokenAt?: { okrId: string; krIndex: number; krText: string };
+}
+
+export const TRACE_STATUS_LABELS: Record<TraceStatus, string> = {
+  complete: "цепочка связная",
+  broken_at_direction: "обрыв на уровне направления",
+  orphan_metric: "метрика ни к чему не привязана",
+  no_metrics: "у Решения нет метрик",
+};
+
+/** Метрики, привязанные к Решению (в порядке добавления). */
+export const metricsForSolution = (solutionId: string, state: PyramidState): string[] =>
+  (state.solutionMetrics ?? []).filter((l) => l.solutionId === solutionId).map((l) => l.metricId);
+
+/**
+ * Трассировка Решения: ОТДЕЛЬНАЯ цепочка на каждую привязанную метрику.
+ * Показываем все параллельные ветки, а не «лучшую».
+ */
+export function traceSolution(
+  solution: PyramidSolution,
+  state: PyramidState,
+  items: SavedOkr[],
+  metrics: MetricLike[],
+): TraceChain[] {
+  const metricIds = metricsForSolution(solution.id, state);
+  const nameOf = (id: string) => metrics.find((m) => m.id === id)?.name ?? "";
+
+  if (metricIds.length === 0) {
+    return [{ metricId: "", metricName: "", status: "no_metrics", path: [] }];
+  }
+
+  const links = liveContributions(items, state);
+  const byId = new Map(items.map((i) => [i.id, i]));
+
+  const nodeFor = (okrId: string, krIndex: number): TraceNode | null => {
+    const okr = byId.get(okrId);
+    const kr = okr?.plan?.key_results?.[krIndex];
+    const level = state.levels?.[okrId];
+    if (!okr || !kr || !level) return null;
+    return { level, okrId, okrObjective: okr.objective, krIndex, krText: kr.text };
+  };
+
+  return metricIds.map((metricId) => {
+    // все KR, измеряемые этой метрикой (оборванные ссылки отбрасываем)
+    const users: TraceNode[] = Object.entries(state.krMetrics ?? {})
+      .filter(([, id]) => id === metricId)
+      .map(([key]) => {
+        const sep = key.lastIndexOf(":");
+        return nodeFor(key.slice(0, sep), Number(key.slice(sep + 1)));
+      })
+      .filter((n): n is TraceNode => Boolean(n));
+
+    if (users.length === 0) {
+      return { metricId, metricName: nameOf(metricId), status: "orphan_metric" as const, path: [] };
+    }
+
+    let broken: TraceChain | null = null;
+
+    for (const node of users) {
+      if (node.level === "bank") {
+        return { metricId, metricName: nameOf(metricId), status: "complete" as const, path: [node] };
+      }
+      const up = links.find(
+        (c) => c.from.okrId === node.okrId && c.from.krIndex === node.krIndex,
+      );
+      const parent = up ? nodeFor(up.to.okrId, up.to.krIndex) : null;
+      if (parent) {
+        return {
+          metricId,
+          metricName: nameOf(metricId),
+          status: "complete" as const,
+          path: [node, parent],
+        };
+      }
+      broken ??= {
+        metricId,
+        metricName: nameOf(metricId),
+        status: "broken_at_direction",
+        path: [node],
+        brokenAt: { okrId: node.okrId, krIndex: node.krIndex, krText: node.krText },
+      };
+    }
+
+    return broken!;
+  });
 }

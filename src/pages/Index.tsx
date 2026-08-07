@@ -10,6 +10,7 @@ import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
 import { MetricsPyramid } from "@/components/aimbot/MetricsPyramid";
+import { SolutionTrace } from "@/components/aimbot/SolutionTrace";
 
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
@@ -148,8 +149,9 @@ const Index = () => {
             />
           </div>
 
-          <section id="metrics-pyramid" className="animate-fade-in scroll-mt-6" style={{ animationDelay: "300ms" }}>
+          <section id="metrics-pyramid" className="animate-fade-in space-y-4 scroll-mt-6" style={{ animationDelay: "300ms" }}>
             <MetricsPyramid />
+            <SolutionTrace />
           </section>
         </div>
 

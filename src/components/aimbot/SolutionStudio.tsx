@@ -215,9 +215,19 @@ export const SolutionStudio = ({ defaultObjective = "", defaultKeyResult = "", k
           <Field label="Подход к валидации" className="md:col-span-2"><Input value={slice.audit.validation} onChange={(e) => s.updateAudit("validation", e.target.value)} className="rounded-lg bg-secondary/40" placeholder="Прототип, A/B-тест, discovery..." /></Field>
         </div>
 
-        <Button onClick={() => s.validateSolution()} disabled={s.valLoading} className="mt-4 w-full bg-navy text-navy-foreground hover:opacity-95">
-          {s.valLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI проверяет...</>) : (<><ShieldCheck className="mr-2 h-4 w-4" /> Запустить аудит решения</>)}
-        </Button>
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <Button onClick={() => s.validateSolution()} disabled={s.valLoading} className="w-full bg-navy text-navy-foreground hover:opacity-95">
+            {s.valLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> AI проверяет...</>) : (<><ShieldCheck className="mr-2 h-4 w-4" /> Запустить аудит решения</>)}
+          </Button>
+          <Button
+            onClick={s.addAuditToProject}
+            variant="outline"
+            className="w-full border-primary/30 text-primary hover:bg-accent"
+            title="Сохранить формулировки из аудита как Решение со статусом «в проекте»"
+          >
+            <Star className="mr-2 h-4 w-4" /> Включить в проект
+          </Button>
+        </div>
 
         {slice.report && (
           <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4">

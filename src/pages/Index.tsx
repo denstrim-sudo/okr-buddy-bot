@@ -147,7 +147,12 @@ const Index = () => {
               keyResults={krTexts}
             />
           </div>
+
+          <section id="metrics-pyramid" className="animate-fade-in scroll-mt-6" style={{ animationDelay: "300ms" }}>
+            <MetricsPyramid />
+          </section>
         </div>
+
       </main>
     </div>
   );

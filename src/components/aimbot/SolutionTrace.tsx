@@ -94,7 +94,7 @@ export const SolutionTrace = () => {
           okr_nodes,
           metrics,
           kr_metrics: pyramid.state.krMetrics,
-          extra_context: buildContext?.(),
+          extra_context: buildContext(["methodology", "okr_context", "solutions_kb"]),
           model,
         },
       });

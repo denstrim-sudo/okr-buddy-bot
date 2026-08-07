@@ -13,6 +13,7 @@ import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 import { ParentKrPicker } from "./ParentKrPicker";
+import { KrPerspectives } from "./KrPerspectives";
 
 const HORIZON_LABELS: Record<OkrHorizon, string> = {
   strategic_3y: "Стратегия · 3 года",

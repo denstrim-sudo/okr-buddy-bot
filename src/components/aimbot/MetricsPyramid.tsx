@@ -308,6 +308,11 @@ export const MetricsPyramid = () => {
             <Download className="h-3.5 w-3.5" />
             Экспорт
           </Button>
+          <Button size="sm" variant="outline" className="gap-1" onClick={handleExportDoc}>
+            <FileDown className="h-3.5 w-3.5" />
+            Документ
+          </Button>
+
           <Button
             size="sm"
             variant="outline"

@@ -61,3 +61,58 @@ describe("useSolutionStudio (Module 3)", () => {
     expect(result.current.state["kr-1"].krText).toBe("KR два");
   });
 });
+
+describe("addAuditToProject", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.removeItem(STORAGE_KEY);
+  });
+
+  const fill = (r: any) => {
+    act(() => {
+      r.current.updateAudit("problem", "Боль");
+      r.current.updateAudit("bet", "Ставка");
+      r.current.updateAudit("result_image", "Картина");
+      r.current.updateAudit("leading_metric", "Метрика");
+    });
+  };
+
+  it("кейс 2: ручное Решение из аудита добавляется в список и получает статус «в проекте»", () => {
+    const { result } = renderHook(() => useSolutionStudio("obj", "kr", []), { wrapper: Wrap });
+    fill(result);
+    act(() => { result.current.addAuditToProject(); });
+    expect(result.current.slice.solutions).toHaveLength(1);
+    expect(result.current.slice.solutions[0].bet).toBe("Ставка");
+    expect(result.current.selectedSet.has(0)).toBe(true);
+  });
+
+  it("кейс 1: если Решение с таким id уже есть — оно обновляется, дубля нет", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: { solutions: [{ id: "S1", problem: "p", bet: "старая ставка", result_image: "r", leading_metric: "m", confidence: "Medium", effort: "M", validation: "v" }] },
+      error: null,
+    });
+    const { result } = renderHook(() => useSolutionStudio("obj", "kr", []), { wrapper: Wrap });
+    await act(async () => { await result.current.handleGenerate(); });
+    act(() => { result.current.sendToAudit(result.current.slice.solutions[0]); });
+    act(() => { result.current.updateAudit("bet", "новая ставка"); });
+    act(() => { result.current.addAuditToProject(); });
+    expect(result.current.slice.solutions).toHaveLength(1);
+    expect(result.current.slice.solutions[0].bet).toBe("новая ставка");
+    expect(result.current.selectedSet.has(0)).toBe(true);
+  });
+
+  it("отчёт аудита переносится в карточку добавленного Решения", async () => {
+    invokeMock.mockResolvedValueOnce({ data: { score: 82, summary: "ок", rules: [] }, error: null });
+    const { result } = renderHook(() => useSolutionStudio("obj", "kr", []), { wrapper: Wrap });
+    fill(result);
+    await act(async () => { await result.current.validateSolution(); });
+    act(() => { result.current.addAuditToProject(); });
+    expect(result.current.slice.cardReports[0].score).toBe(82);
+  });
+
+  it("не добавляет незаполненное Решение", () => {
+    const { result } = renderHook(() => useSolutionStudio("obj", "kr", []), { wrapper: Wrap });
+    act(() => { result.current.addAuditToProject(); });
+    expect(result.current.slice.solutions).toHaveLength(0);
+  });
+});

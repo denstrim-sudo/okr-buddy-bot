@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Layers, Gauge, ArrowUpRight, Download, Upload, X } from "lucide-react";
+import { Layers, Gauge, ArrowUpRight, Download, FileDown, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSavedOkrs, type SavedOkr } from "@/hooks/useSavedOkrs";
@@ -23,6 +23,9 @@ import {
   type Gap,
   type PyramidLevel,
 } from "@/lib/pyramid";
+import { buildPyramidDoc } from "@/lib/pyramidExport";
+import { readModule3Solutions } from "@/lib/module3Solutions";
+import { STORAGE_KEY as STUDIO_KEY } from "@/hooks/useSolutionStudio";
 
 
 interface MetricDialogState {
@@ -100,6 +103,43 @@ export const MetricsPyramid = () => {
       toast.error("Не удалось экспортировать");
     }
   };
+
+  const handleExportDoc = () => {
+    try {
+      let studio: unknown = null;
+      try {
+        const raw = localStorage.getItem(STUDIO_KEY);
+        studio = raw ? JSON.parse(raw) : null;
+      } catch {
+        studio = null;
+      }
+      const doc = buildPyramidDoc({
+        items,
+        state: pyramid.state,
+        metrics,
+        solutions: readModule3Solutions(items),
+        studioState: studio as never,
+      });
+      if (doc.solutions.length === 0) {
+        toast.error("Нет Решений со статусом «в проекте» — отметьте их в Модуле 3");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aimbot-pyramid-doc-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Документ пирамиды готов");
+    } catch {
+      toast.error("Не удалось сформировать документ");
+    }
+  };
+
+
 
   const handleImportFile = async (file: File) => {
     const text = await file.text();
@@ -268,6 +308,11 @@ export const MetricsPyramid = () => {
             <Download className="h-3.5 w-3.5" />
             Экспорт
           </Button>
+          <Button size="sm" variant="outline" className="gap-1" onClick={handleExportDoc}>
+            <FileDown className="h-3.5 w-3.5" />
+            Документ
+          </Button>
+
           <Button
             size="sm"
             variant="outline"

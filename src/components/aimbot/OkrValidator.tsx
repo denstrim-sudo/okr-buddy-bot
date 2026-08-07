@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { GeneratedPlan, OkrHorizon, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";

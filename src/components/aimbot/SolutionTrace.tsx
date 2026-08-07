@@ -20,7 +20,8 @@ import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { useMetricsCatalog } from "@/hooks/useMetricsCatalog";
 import { usePyramid } from "@/hooks/usePyramid";
 import { readModule3Solutions } from "@/lib/module3Solutions";
-import { traceSolution, TRACE_STATUS_LABELS, type TraceChain } from "@/lib/pyramid";
+import { traceSolution, solutionsForPyramid, TRACE_STATUS_LABELS, type TraceChain } from "@/lib/pyramid";
+import { STORAGE_KEY as STUDIO_KEY } from "@/hooks/useSolutionStudio";
 
 interface Recommendation {
   type: "bridge_gap" | "weak_link" | "metric_mismatch";
@@ -55,7 +56,17 @@ export const SolutionTrace = () => {
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [summary, setSummary] = useState("");
 
-  const solutions = useMemo(() => readModule3Solutions(items), [items]);
+  const solutions = useMemo(() => {
+    let studio: unknown = null;
+    try {
+      const raw = typeof window === "undefined" ? null : localStorage.getItem(STUDIO_KEY);
+      studio = raw ? JSON.parse(raw) : null;
+    } catch {
+      studio = null;
+    }
+    const allowed = new Set(solutionsForPyramid(studio as never));
+    return readModule3Solutions(items).filter((s) => allowed.has(s.id));
+  }, [items]);
   const solution = solutions.find((s) => s.id === selectedId) ?? null;
 
   const linked = solution ? pyramid.getSolutionMetrics(solution.id) : [];
@@ -131,8 +142,9 @@ export const SolutionTrace = () => {
       </div>
 
       {solutions.length === 0 ? (
-        <p className="mt-4 rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-          Сгенерируйте Решения в Модуле 3 — они появятся здесь для проверки связанности
+        <p
+          data-testid="trace-empty" className="mt-4 rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+          Отметьте Решения как «в проекте» в Модуле 3, чтобы проверить их связанность со стратегией
         </p>
       ) : (
         <div className="mt-3 flex flex-wrap gap-1.5">

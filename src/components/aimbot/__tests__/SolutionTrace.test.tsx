@@ -61,7 +61,7 @@ const seedAll = ({ pyramid, metrics }: { pyramid?: unknown; metrics?: unknown } 
           audit: {},
           report: null,
           cardReports: {},
-          selected: [],
+          selected: [0],
         },
       },
     }),
@@ -178,5 +178,51 @@ describe("SolutionTrace", () => {
     await userEvent.click(screen.getByTestId("trace-solution-kr-0:0"));
     const chain = await screen.findByTestId("trace-chain-none");
     expect(chain).toHaveTextContent(/нет метрик/i);
+  });
+});
+
+describe("SolutionTrace · только Решения «в проекте»", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    invokeMock.mockReset();
+  });
+
+  const seedTwo = (selected: number[]) => {
+    seedAll({ pyramid: fullPyramid });
+    const st = JSON.parse(localStorage.getItem("aimbot.solutionStudio.v2")!);
+    st.slices["kr-0"].solutions.push({
+      id: "S2",
+      problem: "Черновик",
+      bet: "Черновая ставка",
+      result_image: "",
+      leading_metric: "",
+      confidence: "Low",
+      effort: "S",
+      validation: "",
+    });
+    st.slices["kr-0"].selected = selected;
+    localStorage.setItem("aimbot.solutionStudio.v2", JSON.stringify(st));
+  };
+
+  it("в списке выбора отображаются только Решения «в проекте»", async () => {
+    seedTwo([0]);
+    render(<SolutionTrace />);
+    expect(await screen.findByTestId("trace-solution-kr-0:0")).toBeInTheDocument();
+    expect(screen.queryByTestId("trace-solution-kr-0:1")).not.toBeInTheDocument();
+  });
+
+  it("если таких Решений нет — подсказка про статус «в проекте»", async () => {
+    seedTwo([]);
+    render(<SolutionTrace />);
+    expect(await screen.findByTestId("trace-empty")).toHaveTextContent(/в проекте.*Модуле 3/i);
+    expect(screen.queryByTestId("trace-solution-kr-0:0")).not.toBeInTheDocument();
+  });
+
+  it("после снятия статуса Решение скрыто, но связи в PyramidState сохранены", async () => {
+    seedTwo([]);
+    render(<SolutionTrace />);
+    await screen.findByTestId("trace-empty");
+    const state = JSON.parse(localStorage.getItem("aimbot.pyramid.v1")!);
+    expect(state.solutionMetrics).toHaveLength(2);
   });
 });

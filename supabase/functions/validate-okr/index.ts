@@ -151,8 +151,22 @@ export function buildAuditorParameters(horizon?: string) {
           additionalProperties: false,
         },
       },
+      kr_perspectives: {
+        type: "array",
+        description: "Классификация КАЖДОГО Key Result по одной наиболее подходящей точке зрения (AI-Native SAFe). Порядок — как в исходном списке KR.",
+        items: {
+          type: "object",
+          properties: {
+            index: { type: "number", description: "0-based индекс Key Result в исходном списке." },
+            perspective: { type: "string", enum: ["customer_business", "feasibility_risk", "learning"] },
+            rationale: { type: "string", description: "Одно короткое предложение на русском: почему именно эта ось." },
+          },
+          required: ["index", "perspective", "rationale"],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ["score", "status", "summary", "rules"],
+    required: ["score", "status", "summary", "rules", "kr_perspectives"],
     additionalProperties: false,
   };
 }

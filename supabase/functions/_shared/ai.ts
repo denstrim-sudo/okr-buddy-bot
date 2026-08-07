@@ -43,10 +43,15 @@ interface CallResult {
 
 // AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
-const DEFAULT_MODEL = "gpt-4o";
+export const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
-const REQUEST_TIMEOUT_MS = 90_000;
+/** Общий бюджет времени на весь запрос (до обрыва соединения с браузером). */
+export const TOTAL_BUDGET_MS = 55_000;
+/** Максимум времени на попытку с выбранной пользователем моделью. */
+export const PRIMARY_ATTEMPT_MS = 25_000;
+/** Минимум времени, при котором есть смысл начинать ещё одну попытку. */
+export const MIN_ATTEMPT_MS = 6_000;
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 const getProviderError = (txt: string) => {
@@ -62,10 +67,25 @@ const getProviderError = (txt: string) => {
   }
 };
 
-const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
+/**
+ * Любая невосстановимая на этой модели ошибка → уходим на DEFAULT_MODEL.
+ * Включая "медленно" (timeout), "не умеет tool calling" (no_tool_call)
+ * и "сломанный JSON" (invalid_json).
+ */
+export const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
   if (!requestedModel || requestedModel === DEFAULT_MODEL || res.ok) return false;
-  return ["model_unavailable", "provider_unavailable", "timeout", "network_error"].includes(res.errorCode ?? "");
+  return [
+    "model_unavailable",
+    "provider_unavailable",
+    "timeout",
+    "network_error",
+    "no_tool_call",
+    "invalid_json",
+    "aiai_error",
+    "rate_limit",
+  ].includes(res.errorCode ?? "");
 };
+
 
 async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
   const RAW_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");

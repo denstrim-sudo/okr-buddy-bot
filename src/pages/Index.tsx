@@ -9,6 +9,8 @@ import { AppHeader } from "@/components/aimbot/AppHeader";
 import { StatsGrid } from "@/components/aimbot/StatsGrid";
 import { SolutionsSection } from "@/components/aimbot/SolutionsSection";
 import { SavedOkrsList } from "@/components/aimbot/SavedOkrsList";
+import { MetricsPyramid } from "@/components/aimbot/MetricsPyramid";
+
 import { fallbackSolutions } from "@/lib/fallbackSolutions";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { STORAGE_KEY as SOLUTION_STUDIO_KEY } from "@/hooks/useSolutionStudio";
@@ -145,7 +147,12 @@ const Index = () => {
               keyResults={krTexts}
             />
           </div>
+
+          <section id="metrics-pyramid" className="animate-fade-in scroll-mt-6" style={{ animationDelay: "300ms" }}>
+            <MetricsPyramid />
+          </section>
         </div>
+
       </main>
     </div>
   );

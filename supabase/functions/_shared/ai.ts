@@ -43,10 +43,15 @@ interface CallResult {
 
 // AIAI.BY — OpenAI-compatible gateway. Docs: https://aiai.by/docs
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
-const DEFAULT_MODEL = "gpt-4o";
+export const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 4000;
-const REQUEST_TIMEOUT_MS = 90_000;
+/** Общий бюджет времени на весь запрос (до обрыва соединения с браузером). */
+export const TOTAL_BUDGET_MS = 55_000;
+/** Максимум времени на попытку с выбранной пользователем моделью. */
+export const PRIMARY_ATTEMPT_MS = 25_000;
+/** Минимум времени, при котором есть смысл начинать ещё одну попытку. */
+export const MIN_ATTEMPT_MS = 6_000;
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 const getProviderError = (txt: string) => {
@@ -62,12 +67,27 @@ const getProviderError = (txt: string) => {
   }
 };
 
-const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
+/**
+ * Любая невосстановимая на этой модели ошибка → уходим на DEFAULT_MODEL.
+ * Включая "медленно" (timeout), "не умеет tool calling" (no_tool_call)
+ * и "сломанный JSON" (invalid_json).
+ */
+export const shouldFallbackToDefault = (res: CallResult, requestedModel?: string) => {
   if (!requestedModel || requestedModel === DEFAULT_MODEL || res.ok) return false;
-  return ["model_unavailable", "provider_unavailable", "timeout", "network_error"].includes(res.errorCode ?? "");
+  return [
+    "model_unavailable",
+    "provider_unavailable",
+    "timeout",
+    "network_error",
+    "no_tool_call",
+    "invalid_json",
+    "aiai_error",
+    "rate_limit",
+  ].includes(res.errorCode ?? "");
 };
 
-async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResult> {
+
+async function openaiToolCall(args: CallArgs, retryHint = "", timeoutMs = PRIMARY_ATTEMPT_MS): Promise<CallResult> {
   const RAW_KEY = Deno.env.get("AIAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
   // Strip whitespace / non-ASCII chars that may have been pasted with the key
   // (otherwise fetch throws "headers ... is not a valid ByteString").
@@ -100,7 +120,7 @@ async function openaiToolCall(args: CallArgs, retryHint = ""): Promise<CallResul
         tools: [tool],
         tool_choice: { type: "function", function: { name: args.toolName } },
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
     console.error("AIAI.BY fetch failed", args.model, e);
@@ -196,40 +216,59 @@ const buildMeta = (
   ...(fallbackReason ? { fallback_reason: fallbackReason } : {}),
 });
 
+/**
+ * Порядок попыток с общим дедлайном:
+ *   1) выбранная пользователем модель (не дольше PRIMARY_ATTEMPT_MS);
+ *   2) при любой невосстановимой ошибке — DEFAULT_MODEL на остатке бюджета;
+ *   3) один retry DEFAULT_MODEL, только если бюджета ещё достаточно.
+ * Повторного захода в исходную (медленную) модель больше нет.
+ */
 async function runWithFallback(args: CallArgs): Promise<{ res: CallResult; meta: AiMeta }> {
   const requested = args.model;
+  const startedAt = Date.now();
+  const remaining = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
   let usedModel = requested ?? DEFAULT_MODEL;
   let fallbackReason: string | undefined;
 
-  let res = await openaiToolCall(args);
-  if (shouldFallbackToDefault(res, args.model)) {
-    console.warn("AI model fallback", args.model, "->", DEFAULT_MODEL, res.errorCode);
+  const deadlineResult = (): CallResult => ({
+    ok: false,
+    status: 504,
+    errorCode: "deadline_exceeded",
+    errorMessage: `Модель "${requested ?? DEFAULT_MODEL}" не успела ответить за отведённое время. Попробуйте ещё раз или выберите стабильную модель GPT-4o.`,
+    retryable: true,
+  });
+
+  const fallbackHint = `Выбранная пользователем модель "${requested}" недоступна или слишком медленная. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`;
+
+  let res = await openaiToolCall(
+    args,
+    "",
+    Math.max(MIN_ATTEMPT_MS, Math.min(PRIMARY_ATTEMPT_MS, remaining())),
+  );
+
+  if (shouldFallbackToDefault(res, requested)) {
+    console.warn("AI model fallback", requested, "->", DEFAULT_MODEL, res.errorCode);
     fallbackReason = res.errorCode;
     usedModel = DEFAULT_MODEL;
-    res = await openaiToolCall(
-      { ...args, model: DEFAULT_MODEL },
-      `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
-    );
+    if (remaining() < MIN_ATTEMPT_MS) return { res: deadlineResult(), meta: buildMeta(requested, usedModel, fallbackReason) };
+    res = await openaiToolCall({ ...args, model: DEFAULT_MODEL }, fallbackHint, remaining());
   }
-  if (!res.ok && res.retryable) {
-    await new Promise((r) => setTimeout(r, 800));
+
+  // Один retry — всегда на модели, которая уже используется (обычно DEFAULT_MODEL).
+  if (!res.ok && res.retryable && remaining() >= MIN_ATTEMPT_MS) {
     const hint = res.errorCode === "invalid_json" || res.errorCode === "no_tool_call"
       ? "Предыдущий ответ не прошёл валидацию. Верни СТРОГО JSON через указанный tool, без свободного текста."
       : "";
-    res = await openaiToolCall({ ...args, model: usedModel === DEFAULT_MODEL ? DEFAULT_MODEL : args.model }, hint);
-    if (shouldFallbackToDefault(res, args.model)) {
-      console.warn("AI model fallback after retry", args.model, "->", DEFAULT_MODEL, res.errorCode);
-      fallbackReason = res.errorCode;
-      usedModel = DEFAULT_MODEL;
-      res = await openaiToolCall(
-        { ...args, model: DEFAULT_MODEL },
-        `Выбранная пользователем модель "${args.model}" недоступна. Выполни запрос через fallback-модель ${DEFAULT_MODEL}.`,
-      );
-    }
+    res = await openaiToolCall({ ...args, model: usedModel }, hint, remaining());
+  }
+
+  if (!res.ok && res.errorCode === "timeout") {
+    res = { ...deadlineResult(), errorMessage: res.errorMessage };
   }
 
   return { res, meta: buildMeta(requested, usedModel, fallbackReason) };
 }
+
 
 /**
  * Call OpenAI via tool-calling for guaranteed JSON output.

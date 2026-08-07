@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
@@ -56,11 +57,9 @@ const loadInitial = (): PersistedState | null => {
 };
 
 const handleAIError = (e: any, fallback = "Ошибка") => {
-  const msg = e?.message || fallback;
-  if (msg.includes("Rate")) toast.error("Слишком много запросов.");
-  else if (msg.includes("credits")) toast.error("Закончились AI-кредиты.");
-  else toast.error(msg);
+  toast.error(e?.message || fallback);
 };
+
 
 export function useSolutionStudio(defaultObjective: string, defaultKeyResult: string, keyResults: string[]) {
   const initial = loadInitial();
@@ -152,8 +151,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       const { data, error } = await supabase.functions.invoke("validate-solution", {
         body: { objective, key_result: slice.krText, solution: s, extra_context, model },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       patchSlice({ cardReports: { ...cr, [idx]: data as SolutionReport } });
       toast.success(`Аудит ${s.id || `S${idx + 1}`} · ${(data as SolutionReport).score}/100`);
@@ -184,8 +182,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       const { data, error } = await supabase.functions.invoke("generate-solutions", {
         body: { objective, key_result: slice.krText, context: slice.context, extra_context, model },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       const list: GeneratedSolution[] = (data as any).solutions ?? [];
       patchSlice({ solutions: list });
@@ -214,8 +211,7 @@ export function useSolutionStudio(defaultObjective: string, defaultKeyResult: st
       const { data, error } = await supabase.functions.invoke("validate-solution", {
         body: { objective, key_result: slice.krText, solution: s, extra_context, model },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       patchSlice({ report: data as SolutionReport });
       toast.success(`Аудит готов · ${(data as SolutionReport).score}/100`);

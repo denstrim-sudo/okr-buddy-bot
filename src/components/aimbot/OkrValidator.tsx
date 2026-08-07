@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { GeneratedPlan, OkrHorizon, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
@@ -123,20 +124,17 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       const { data, error } = await supabase.functions.invoke("validate-okr", {
         body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       setReport(data as ValidationReport);
       toast.success(`Аудит готов · оценка ${(data as ValidationReport).score}/100`);
     } catch (e: any) {
-      const msg = e?.message || "Ошибка валидации";
-      if (msg.includes("Rate")) toast.error("Слишком много запросов. Подождите немного.");
-      else if (msg.includes("credits")) toast.error("Закончились AI-кредиты. Пополните в Настройках → Использование.");
-      else toast.error(msg);
+      toast.error(e?.message || "Ошибка валидации");
     } finally {
       setLoading(false);
     }
   };
+
 
   const failedRules: ValidationRule[] = report?.rules?.filter((r) => !r.pass) ?? [];
 
@@ -158,8 +156,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           model,
         },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
       setReport((p) => p ? {

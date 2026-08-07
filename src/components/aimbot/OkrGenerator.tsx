@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { describeInvokeError } from "@/lib/invokeError";
 import type { GeneratedPlan, HorizonFit, HorizonFitItem, HorizonFitVerdict, OkrDraft, OkrHorizon, OkrInputInterpretation } from "@/types/okr";
 import { cn } from "@/lib/utils";
 import { useDocs } from "@/contexts/DocsContext";
@@ -75,7 +76,9 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
           if (body?.error && typeof body.error === "string") return body.error;
         } catch {}
       }
-      if (typeof error.message === "string" && error.message) return error.message;
+      if (typeof error.message === "string" && error.message) {
+        return describeInvokeError(error, undefined);
+      }
     }
     return fallback;
   };

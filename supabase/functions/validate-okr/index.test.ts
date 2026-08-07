@@ -899,3 +899,22 @@ Deno.test("промпт аудитора описывает три оси и о�
   assert(/удерживать/i.test(prompt), "промпт должен содержать грамматику контр-метрики");
   assert(/не сломать/i.test(prompt), "промпт должен содержать функцию защиты критичного");
 });
+
+// --- Облегчённая схема для не-OpenAI моделей ---
+Deno.test("buildParameters(h, {lite:true}): reasoning не обязателен и отсутствует в properties", () => {
+  const lite = buildParameters("quarter_3m", { lite: true });
+  const required = lite.properties.rules.items.required as string[];
+  const props = lite.properties.rules.items.properties as Record<string, unknown>;
+  assertEquals(required.includes("reasoning"), false);
+  assertEquals("reasoning" in props, false);
+  // Остальной контракт не меняется
+  for (const f of ["id", "label", "pass", "hint", "severity", "why", "evidence"]) {
+    assertEquals(required.includes(f), true, `${f} должен остаться обязательным`);
+  }
+});
+
+Deno.test("buildParameters(h) по умолчанию (gpt-4o) сохраняет reasoning", () => {
+  const full = buildParameters("quarter_3m");
+  const required = full.properties.rules.items.required as string[];
+  assertEquals(required.includes("reasoning"), true);
+});

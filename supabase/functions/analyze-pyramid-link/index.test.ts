@@ -75,6 +75,7 @@ Deno.test("buildSystemPrompt содержит инструкции по трём
   assert(p.includes("ДОСТРОЙКА ОБРЫВА"), "нет задачи достройки обрыва");
   assert(p.includes("ОСМЫСЛЕННОСТЬ СВЯЗИ РЕШЕНИЕ"), "нет задачи осмысленности связи");
   assert(p.includes("СООТВЕТСТВИЕ KR"), "нет задачи соответствия KR↔метрика");
+  assert(p.includes("ОСМЫСЛЕННОСТЬ ВЛИЯНИЯ МЕТРИКА"), "нет задачи осмысленности влияния метрик");
   assert(p.includes("evidence"), "нет требования цитаты");
   assert(p.includes("НЕ выдумывай"), "нет запрета на выдумывание");
 });
@@ -85,7 +86,14 @@ Deno.test("схема требует evidence для каждой рекомен
   assert(item.required.includes("evidence"), JSON.stringify(item.required));
   assert(item.required.includes("type"));
   assert(item.required.includes("text"));
-  assertEquals(item.properties.type.enum, ["bridge_gap", "weak_link", "metric_mismatch"]);
+  assertEquals(item.properties.type.enum, [
+    "bridge_gap",
+    "weak_link",
+    "metric_mismatch",
+    "metric_influence_weak",
+  ]);
+  assert(item.properties.target_from_metric_id);
+  assert(item.properties.target_to_metric_id);
 });
 
 Deno.test("handler вычисляет grounded серверно через isGrounded", async () => {
@@ -167,6 +175,45 @@ Deno.test("target_* валидируются против контекста, в
     assertEquals(bad.target_metric_id, null);
     assertEquals(bad.target_okr_id, null);
     assertEquals(bad.target_kr_index, null);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("оцениваются только связи метрик из цепочек Решения; target_* валидируются", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([
+    {
+      summary: "итог",
+      recommendations: [
+        {
+          type: "metric_influence_weak",
+          text: "Механизм влияния не очевиден",
+          evidence: "Время ответа на заявку",
+          target_from_metric_id: "m1",
+          target_to_metric_id: "m2",
+        },
+        {
+          type: "metric_influence_weak",
+          text: "Выдуманная связь",
+          evidence: "Индекс доверия клиентов (NPS)",
+          target_from_metric_id: "m2",
+          target_to_metric_id: "m999",
+        },
+      ],
+    },
+  ]);
+  try {
+    const { data } = await callHandler(handler, {
+      ...baseBody,
+      metric_influences: [{ from: "m1", to: "m2" }],
+    });
+    const [ok, bad] = data.recommendations;
+    assertEquals(ok.target_from_metric_id, "m1");
+    assertEquals(ok.target_to_metric_id, "m2");
+    assertEquals(ok.grounded, true);
+    assertEquals(bad.target_from_metric_id, null);
+    assertEquals(bad.target_to_metric_id, null);
   } finally {
     _restoreFetch();
   }

@@ -101,6 +101,7 @@ export const MetricsPyramid = () => {
     else toast.error(res.error);
   };
 
+
   const renderKr = (okr: SavedOkr, krIndex: number, level: PyramidLevel) => {
     const kr = okr.plan.key_results[krIndex];
     const metricId = pyramid.state.krMetrics[`${okr.id}:${krIndex}`];

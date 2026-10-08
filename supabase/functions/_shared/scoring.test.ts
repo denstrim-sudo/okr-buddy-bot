@@ -341,7 +341,7 @@ Deno.test("эталон P4 (committed): бинарный второй KR → KR-
 const P3_KRS = ["Доля клиентов с операцией в первый день с 35% до 60%", "NPS онбординга с 20 до 40", "Отток в первый месяц остаётся ниже 8%"];
 const P3_LABELS = () => L(["К", "range", "lagging"], ["К", "range", "lagging"], ["О", "threshold", "lagging"]);
 Deno.test("KR-LEADING: P3 обычный годовой без опережающих → fail, improve, рекомендация", () => {
-  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" } as any;
   const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
   assertEquals(r.pass, false);
   assertEquals(r.applicable, true);
@@ -349,14 +349,14 @@ Deno.test("KR-LEADING: P3 обычный годовой без опережаю�
   assert(r.hint.startsWith("Рекомендация: добавьте опережающий KR"));
 });
 Deno.test("KR-LEADING: тот же набор со статусом direction → fail, critical", () => {
-  const ctx = { okr_type: "aspirational", okr_status: "direction", horizon: "block_12m" };
+  const ctx = { okr_type: "aspirational", okr_status: "direction", horizon: "block_12m" } as any;
   const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
   assertEquals(r.pass, false);
   assertEquals(r.severity, "critical");
   assert(r.hint.startsWith("Все KR запаздывающие"));
 });
 Deno.test("KR-LEADING: квартальный горизонт → fail, critical", () => {
-  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "quarter_3m" };
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "quarter_3m" } as any;
   const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
   assertEquals(r.pass, false);
   assertEquals(r.severity, "critical");

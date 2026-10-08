@@ -142,3 +142,20 @@ Deno.test({
     assert(data.reasoning.facts.some((f: { source: string }) => f.source === "doc:metrics.txt"));
   },
 });
+
+Deno.test({
+  name: "interpret-okr-input [AI]: returns reasoning with 2-3 variants",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      raw_input: "Хотим за год удвоить активацию новых пользователей в мобильном приложении, отток 45% на первой неделе",
+      horizon: "block_12m",
+    });
+    assertEquals(status, 200);
+    assert(data.reasoning.facts.length >= 3);
+    assert(data.reasoning.variants.length >= 2 && data.reasoning.variants.length <= 3);
+    assert(data.reasoning_quality);
+    assertEquals(data.reasoning.lever_label, "показатель направления");
+    assert(data.detected_mode && data.topic_summary !== undefined && Array.isArray(data.clarifying_questions));
+  },
+});

@@ -43,3 +43,40 @@ Deno.test({
     assertEquals(data.has_existing_okr, true);
   },
 });
+
+Deno.test("interpret-okr-input: SYSTEM_PROMPT includes REASONING_RULES and old instructions", async () => {
+  const { SYSTEM_PROMPT } = await import("./index.ts");
+  const { REASONING_RULES } = await import("./reasoning.ts");
+  assert(SYSTEM_PROMPT.includes(REASONING_RULES));
+  assert(SYSTEM_PROMPT.includes("clarifying_questions"));
+});
+
+Deno.test({
+  name: "interpret-okr-input [AI]: returns reasoning with 2-3 variants",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      raw_input: "Хотим за год удвоить активацию новых пользователей в мобильном приложении, отток 45% на первой неделе",
+      horizon: "block_12m",
+    });
+    assertEquals(status, 200);
+    assert(data.reasoning.facts.length >= 3);
+    assert(data.reasoning.variants.length >= 2 && data.reasoning.variants.length <= 3);
+    assert(data.reasoning_quality);
+    assert(data.detected_mode && data.topic_summary !== undefined && Array.isArray(data.clarifying_questions));
+  },
+});
+
+Deno.test({
+  name: "interpret-okr-input [AI]: cites doc source",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      raw_input: "Хотим за год удвоить активацию новых пользователей в мобильном приложении",
+      horizon: "block_12m",
+      extra_context: "--- metrics.txt ---\nDAU 12 000, retention D7 18%",
+    });
+    assertEquals(status, 200);
+    assert(data.reasoning.facts.some((f: { source: string }) => f.source === "doc:metrics.txt"));
+  },
+});

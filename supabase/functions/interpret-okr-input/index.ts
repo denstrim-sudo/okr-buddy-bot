@@ -1,5 +1,5 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_shared/ai.ts";
-import { REASONING_RULES, extractDocNames, ensureDistinctVariants, type Reasoning } from "./reasoning.ts";
+import { REASONING_RULES, extractDocNames, ensureDistinctVariants, leverLabel, type Reasoning } from "./reasoning.ts";
 
 export const SYSTEM_PROMPT = `You are an OKR Intake Analyst. The canonical OKR hierarchy in this product is:
 Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
@@ -21,7 +21,7 @@ ${REASONING_RULES}
 
 ALL text fields in RUSSIAN. Enum values stay English. Return STRICT JSON via the tool.`;
 
-const PARAMETERS = {
+export const PARAMETERS = {
   type: "object",
   properties: {
     reasoning: {
@@ -46,29 +46,85 @@ const PARAMETERS = {
             required: ["id", "gap", "who_affected", "evidence_fact_ids"], additionalProperties: false,
           },
         },
+        lever_tree: { type: "string" },
+        boundary_conditions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { statement: { type: "string" }, how_to_work_around: { type: "string" } },
+            required: ["statement", "how_to_work_around"], additionalProperties: false,
+          },
+        },
+        reframed_solutions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { original: { type: "string" }, why_not_constraint: { type: "string" }, question: { type: "string" } },
+            required: ["original", "why_not_constraint", "question"], additionalProperties: false,
+          },
+        },
         variants: {
           type: "array", minItems: 2, maxItems: 3,
           items: {
             type: "object",
             properties: {
               id: { type: "string" },
-              bet_axis: { type: "string", enum: ["customer_business", "feasibility_risk", "learning"] },
-              bet_thesis: { type: "string" },
+              origin: { type: "string", enum: ["group", "suggested"] },
+              strike_at: { type: "string" },
+              where_it_holds: {
+                type: "object",
+                properties: { lever: { type: "string" }, step: { type: "string" } },
+                required: ["lever", "step"], additionalProperties: false,
+              },
+              evidence: {
+                type: "object",
+                properties: {
+                  status: { type: "string", enum: ["data", "hypothesis"] },
+                  what_shows: { type: "string" }, data_needed: { type: "string" },
+                },
+                required: ["status", "what_shows", "data_needed"], additionalProperties: false,
+              },
+              if_removed: {
+                type: "object",
+                properties: { lever_change: { type: "string" }, effect_formula: { type: "string" }, next_constraint: { type: "string" } },
+                required: ["lever_change", "effect_formula", "next_constraint"], additionalProperties: false,
+              },
+              hypothesis: {
+                type: "object",
+                properties: { if: { type: "string" }, then: { type: "string" }, because: { type: "string" } },
+                required: ["if", "then", "because"], additionalProperties: false,
+              },
+              refutation: {
+                type: "object",
+                properties: { signal: { type: "string" }, by_when: { type: "string" } },
+                required: ["signal", "by_when"], additionalProperties: false,
+              },
+              narrowing: { type: "string" },
               objective_sketch: { type: "string" },
-              kr_directions: { type: "array", items: { type: "string" } },
+              kr_directions: {
+                type: "array", minItems: 3, maxItems: 4,
+                items: {
+                  type: "object",
+                  properties: { text: { type: "string" }, angle: { type: "string", enum: ["К", "О", "У"] } },
+                  required: ["text", "angle"], additionalProperties: false,
+                },
+              },
               supports_fact_ids: { type: "array", items: { type: "string" } },
               addresses_tension_ids: { type: "array", items: { type: "string" } },
-              trade_off: { type: "string" },
               key_risk: { type: "string" },
               unknowns: { type: "array", items: { type: "string" } },
             },
-            required: ["id", "bet_axis", "bet_thesis", "objective_sketch", "kr_directions", "supports_fact_ids", "addresses_tension_ids", "trade_off", "key_risk", "unknowns"],
+            required: [
+              "id", "origin", "strike_at", "where_it_holds", "evidence", "if_removed", "hypothesis", "refutation",
+              "narrowing", "objective_sketch", "kr_directions", "supports_fact_ids", "addresses_tension_ids", "key_risk", "unknowns",
+            ],
             additionalProperties: false,
           },
         },
         choice_question: { type: "string" },
+        discriminating_data: { type: "array", minItems: 1, maxItems: 3, items: { type: "string" } },
       },
-      required: ["facts", "tensions", "variants", "choice_question"],
+      required: ["facts", "tensions", "lever_tree", "boundary_conditions", "reframed_solutions", "variants", "choice_question", "discriminating_data"],
       additionalProperties: false,
     },
     detected_horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
@@ -95,21 +151,39 @@ const PARAMETERS = {
   additionalProperties: false,
 };
 
+export const REDO_HINT = "ОГРАНИЧЕНИЯ В ВАРИАНТАХ СОВПАДАЮТ. Дай 2–3 варианта с РАЗНЫМИ ограничениями (разными ответами на вопрос «куда бьём»).";
+
+export function normalizeKnownConstraints(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x) => typeof x === "string").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+}
+
+export function buildUserPrompt(p: {
+  raw_input: string; horizon: string; extra_context?: unknown; parent_kr_context?: unknown; known_constraints?: string[];
+}): string {
+  const extraBlock = buildExtraBlock(p.extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
+  const parentKrBlock = typeof p.parent_kr_context === "string" && p.parent_kr_context.trim()
+    ? `\n\nPARENT KEY RESULT (каждый вариант должен явно продвигать именно этот KR родителя):\n${p.parent_kr_context.trim()}`
+    : "";
+  const kc = p.known_constraints ?? [];
+  const constraintsBlock = kc.length
+    ? `\n\nОГРАНИЧЕНИЯ, НАЗВАННЫЕ ГРУППОЙ:\n${kc.map((c, i) => `${i + 1}. ${c}`).join("\n")}`
+    : "";
+  return `USER-SELECTED HORIZON: ${p.horizon}\n\nUSER INPUT:\n${p.raw_input.trim()}${parentKrBlock}${constraintsBlock}${extraBlock}\n\nInterpret this input. Decide horizon, mode (rewrite_existing if a draft OKR is already pasted), extract any existing objective/KRs, list missing info, and generate at most 3 clarifying questions ONLY if truly needed.`;
+}
+
 export const handler = async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    const { raw_input, horizon, extra_context, model, parent_kr_context } = await req.json();
+    const { raw_input, horizon, extra_context, model, parent_kr_context, known_constraints } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required (min 3 chars)", 400);
     }
     const horizonHint = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
-    const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
-    const parentKrBlock = typeof parent_kr_context === "string" && parent_kr_context.trim()
-      ? `\n\nPARENT KEY RESULT (каждый вариант должен явно продвигать именно этот KR родителя):\n${parent_kr_context.trim()}`
-      : "";
-    const userPrompt = `USER-SELECTED HORIZON: ${horizonHint}\n\nUSER INPUT:\n${raw_input.trim()}${parentKrBlock}${extraBlock}\n\nInterpret this input. Decide horizon, mode (rewrite_existing if a draft OKR is already pasted), extract any existing objective/KRs, list missing info, and generate at most 3 clarifying questions ONLY if truly needed.`;
+    const kc = normalizeKnownConstraints(known_constraints);
+    const userPrompt = buildUserPrompt({ raw_input, horizon: horizonHint, extra_context, parent_kr_context, known_constraints: kc });
 
     const modelArg = typeof model === "string" && model ? model : undefined;
     const call = (prompt: string) => callAITool({
@@ -125,16 +199,17 @@ export const handler = async (req: Request) => {
     const data = await res.clone().json().catch(() => null);
     if (!data || data.error) return res;
 
-    const docNames = extractDocNames(extra_context);
+    const haystack = [raw_input, typeof extra_context === "string" ? extra_context : "", kc.join("\n")].join("\n");
+    const opts = { docNames: extractDocNames(extra_context), haystack, knownConstraints: kc };
     const out = await ensureDistinctVariants(data.reasoning, async () => {
-      const r2 = await call(`${userPrompt}\n\nПРЕДЫДУЩИЕ ВАРИАНТЫ НЕ РАЗЛИЧАЛИСЬ ПО bet_axis. Дай 2–3 варианта с РАЗНЫМИ осями.`);
+      const r2 = await call(`${userPrompt}\n\n${REDO_HINT}`);
       const d2 = await r2.json().catch(() => null);
       return d2 && !d2.error ? (d2.reasoning as Reasoning) : null;
-    }, docNames);
+    }, opts);
 
     return json({
       ...data,
-      reasoning: out.reasoning,
+      reasoning: { ...out.reasoning, lever_label: leverLabel(horizonHint) },
       reasoning_quality: out.quality,
       ...(out.warning ? { reasoning_warning: out.warning } : {}),
     }, res.status);

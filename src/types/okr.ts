@@ -108,6 +108,8 @@ export interface ValidationRule {
   grounded?: boolean;
   /** Провал без цитаты: показывается, но не влияет на оценку. */
   unconfirmed?: boolean;
+  /** Сервер не смог проверить правило (неполная разметка ракурсов). */
+  unreliable?: boolean;
   /** false — правило неприменимо к типу/статусу OKR (OKR-PI) и в score не учитывается. */
   applicable?: boolean;
 }

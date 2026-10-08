@@ -21,9 +21,9 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
   const sev: RuleSeverity | undefined = r.pass ? undefined : (r.severity ?? "important");
   const meta = sev ? severityMeta(sev) : null;
   const hasReasoning = !isSm && !!r.reasoning && r.reasoning.trim().length > 0;
-  if (r.unconfirmed === true && !r.pass) {
+  if ((r.unconfirmed === true || r.unreliable === true) && !r.pass) {
     return (
-      <li data-testid={`rule-unconfirmed-${r.id}`} className={cn("flex items-start text-warning", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
+      <li data-testid={r.unreliable ? `rule-unreliable-${r.id}` : `rule-unconfirmed-${r.id}`} className={cn("flex items-start text-warning", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
         <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
         <div className="flex-1">
           <div className={cn("flex flex-wrap items-baseline", isSm ? "gap-1.5" : "gap-2")}>
@@ -31,7 +31,9 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
             <span>{r.label}</span>
           </div>
           {r.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{r.hint}</p>}
-          <p className="mt-0.5 text-[11px] italic">не подтверждено цитатой — не влияет на оценку</p>
+          <p className="mt-0.5 text-[11px] italic">
+            {r.unreliable ? "не удалось проверить — разметка ракурсов неполная" : "не подтверждено цитатой — не влияет на оценку"}
+          </p>
         </div>
       </li>
     );

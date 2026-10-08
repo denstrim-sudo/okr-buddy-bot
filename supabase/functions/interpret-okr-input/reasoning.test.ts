@@ -263,3 +263,75 @@ Deno.test("Фикстура 6.2: два ограничения различны,
   assertEquals(reasoning.facts[0].source_unverified, undefined);
   assertEquals(reasoning.facts[1].source_unverified, true);
 });
+
+// --- Одно утверждение — одна корзина ---
+import { dedupeBuckets, hasUnknownNumber } from "./reasoning.ts";
+
+const mkVariant = (id: string, strike_at: string): Variant => ({
+  id, origin: "suggested", strike_at,
+  where_it_holds: { lever: "l", step: "s" },
+  evidence: { status: "data", what_shows: "w", data_needed: "" },
+  if_removed: { lever_change: "рост", effect_formula: "f", next_constraint: "n" },
+  hypothesis: { if: "a", then: "b", because: "c" },
+  refutation: { signal: "s", by_when: "b" },
+  narrowing: "уходит X", objective_sketch: "o",
+  kr_directions: [{ text: "a", angle: "К" }, { text: "b", angle: "У" }],
+  supports_fact_ids: [], addresses_tension_ids: [], key_risk: "", unknowns: [],
+});
+const BOUND = "Разные юрлица, не можем передавать базы клиентов друг другу";
+
+Deno.test("dedupeBuckets: совпадающее утверждение остаётся только в boundary_conditions", () => {
+  const r = normalizeReasoning({
+    boundary_conditions: [{ statement: BOUND, how_to_work_around: "согласие" }],
+    reframed_solutions: [{ original: "разные юрлица — не можем передавать базы", why_not_constraint: "", question: "" }],
+  });
+  assertEquals(r.reasoning.reframed_solutions.length, 0);
+  assertEquals(r.reasoning.boundary_conditions.length, 1);
+  assertEquals(r.reasoning.boundary_conditions[0].statement, BOUND);
+});
+
+Deno.test("dedupeBuckets: разные утверждения остаются в обеих корзинах", () => {
+  const r = normalizeReasoning({
+    boundary_conditions: [{ statement: BOUND, how_to_work_around: "" }],
+    reframed_solutions: [{ original: "Отсутствует единый профиль клиента", why_not_constraint: "", question: "" }],
+  });
+  assertEquals(r.reasoning.reframed_solutions.length, 1);
+  assertEquals(r.reasoning.boundary_conditions.length, 1);
+});
+
+Deno.test("dedupeBuckets: вариант-граница помечается is_boundary, не отбрасывается", () => {
+  const r = normalizeReasoning({
+    boundary_conditions: [{ statement: BOUND, how_to_work_around: "" }],
+    variants: [mkVariant("V1", "Разные юрлица не могут передавать базы клиентов"), mkVariant("V2", "Клиент не видит предложение в приложении")],
+  });
+  assertEquals(r.reasoning.variants.length, 2);
+  assertEquals(r.reasoning.variants[0].is_boundary, true);
+  assertEquals(r.reasoning.variants[1].is_boundary, undefined);
+  assertEquals(r.quality.boundary_variant_ids, ["V1"]);
+  assert(typeof dedupeBuckets === "function");
+});
+
+// --- Меньше ложных пометок цифр ---
+Deno.test("hasUnknownNumber: год 2027 не считается выдуманной цифрой", () => {
+  const r = normalizeReasoning(
+    { facts: [{ id: "F1", statement: "к концу 2027 охват вырастет", source: "input" }] },
+    { haystack: "охват клиентов 45%" },
+  );
+  assertEquals(r.reasoning.facts[0].source_unverified, undefined);
+});
+
+Deno.test("hasUnknownNumber: «PI 2», «Q3», «2 квартал», «KR №2» игнорируются", () => {
+  const known = new Set<string>();
+  assertEquals(hasUnknownNumber("в PI 2 проверим", known), false);
+  assertEquals(hasUnknownNumber("в Q3 запустим", known), false);
+  assertEquals(hasUnknownNumber("во 2 квартал", known), false);
+  assertEquals(hasUnknownNumber("как в KR №2 и KR3", known), false);
+});
+
+Deno.test("hasUnknownNumber: «отток 52%» при вводе с «45%» — флаг остаётся", () => {
+  const r = normalizeReasoning(
+    { facts: [{ id: "F1", statement: "отток 52%", source: "input" }] },
+    { haystack: "отток 45%" },
+  );
+  assertEquals(r.reasoning.facts[0].source_unverified, true);
+});

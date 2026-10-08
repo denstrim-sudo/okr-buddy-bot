@@ -33,3 +33,21 @@ export function isGrounded(
   if (rule.pass) return true;
   return isEvidenceGrounded(rule.evidence, [objective, ...krTexts]);
 }
+
+/** OKR-PI: цифра в Objective. Слова «первый», «один» цифрами не считаются. */
+export function hasDigitsInObjective(objective: string): boolean {
+  return /\d/.test(String(objective ?? ""));
+}
+
+const EXEC_INFINITIVES = new Set(["запустить", "внедрить", "перевести", "построить", "launch", "implement", "migrate", "build"]);
+const EXEC_NOUNS_AT_START = new Set(["запуск", "внедрение", "перевод", "построение"]);
+
+/**
+ * Глагол исполнения в KR (совпадение по словам целиком, без учёта регистра):
+ * инфинитивы — где угодно, отглагольные существительные — только первым словом.
+ */
+export function findExecutionVerb(krText: string): string | null {
+  const words = String(krText ?? "").toLowerCase().split(/[^\p{L}]+/u).filter(Boolean);
+  if (words.length && EXEC_NOUNS_AT_START.has(words[0])) return words[0];
+  return words.find((w) => EXEC_INFINITIVES.has(w)) ?? null;
+}

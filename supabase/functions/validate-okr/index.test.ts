@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
@@ -956,4 +956,79 @@ Deno.test("buildParameters(h) по умолчанию (gpt-4o) сохраняе�
   const full = buildParameters("quarter_3m");
   const required = full.properties.rules.items.required as string[];
   assertEquals(required.includes("reasoning"), true);
+});
+
+// --- Эталоны банка OKR-PI (только с RUN_AI) ---
+const ruleOf = (data: any, id: string) => data.rules.find((r: any) => r.id === id);
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 12 «Надёжность в пиковые дни» (committed) — удержание порога проходит",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Клиент не замечает, что сегодня день зарплаты.",
+      key_results: [
+        "Доступность входа, переводов и оплат через ЕРИП в пиковые дни остаётся не ниже 99,9%",
+        "Восстановление после сбоя остаётся не дольше 30 минут",
+        "Частота релизов остаётся не ниже текущей",
+      ],
+      horizon: "block_12m", okr_type: "committed", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-MEASURABLE").pass, true);
+    assertEquals(ruleOf(data, "KR-REQUIRED-ANGLES").pass, true);
+    const o = ruleOf(data, "KR-OUTCOME");
+    assert(o.applicable === false || o.pass === true);
+  },
+});
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 13 «Регуляторные изменения НБРБ» (committed) — KR-OUTCOME неприменимо",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Требования регулятора внедряем спокойно и с запасом.",
+      key_results: [
+        "100% регуляторных изменений в проде не позже чем за 10 рабочих дней до срока",
+        "Ёмкость на регуляторику закладывается при планировании PI, без изъятий внутри PI",
+        "Ноль переносов бизнес-обязательств из-за регуляторных авралов",
+      ],
+      horizon: "block_12m", okr_type: "committed", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-OUTCOME").applicable, false);
+  },
+});
+
+const ANTIFRAUD_O = "Клиент защищён от мошенников и не страдает от защиты.";
+const ANTIFRAUD_KR1 = "Потери от мошенничества на 1 млн операций снижены на 30%";
+const ANTIFRAUD_KR3 = "К концу PI на исторических данных проверены две поведенческие модели, известна точность каждой";
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 14 «Антифрод» без пары — KR-QUALITY-PAIR fail, форма обучения валидна",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: ANTIFRAUD_O,
+      key_results: [ANTIFRAUD_KR1, "Новое правило попадает в прод за 4 часа вместо 5 дней", ANTIFRAUD_KR3],
+      horizon: "block_12m", okr_type: "aspirational", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-QUALITY-PAIR").pass, false);
+    assertEquals(ruleOf(data, "KR-MEASURABLE").pass, true);
+  },
+});
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 15 «Антифрод» с парой ложных блокировок — KR-QUALITY-PAIR pass",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: ANTIFRAUD_O,
+      key_results: [ANTIFRAUD_KR1, "Доля ложных блокировок с 2% до 0,8%", ANTIFRAUD_KR3],
+      horizon: "block_12m", okr_type: "aspirational", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-QUALITY-PAIR").pass, true);
+  },
 });

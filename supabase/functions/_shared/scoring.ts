@@ -2,6 +2,8 @@
 // Источник истины для гейтов в UI — не доверяем числу, которое вернула модель.
 // Свод правил приведён к методологии банка OKR-PI (тип и статус OKR).
 
+import { findExecutionVerb, hasDigitsInObjective } from "./textGuards.ts";
+
 export type RuleSeverity = "critical" | "important" | "improve";
 export type OkrType = "committed" | "aspirational" | "mixed";
 export type OkrStatus = "direction" | "regular";
@@ -138,15 +140,17 @@ export const RULE_EVIDENCE_KIND: Record<string, EvidenceKind> = {
   "OKR-TYPE-DECLARED": "server",
   "KR-COUNT": "server",
   "KR-REQUIRED-ANGLES": "server",
-  "KR-LEADING": "absence",
-  "OBJ-NO-NUMBERS": "quote",
+  // Замер стабильности: суждения о наборе KR меняли вердикт между прогонами,
+  // поэтому формальные правила считает сервер по тексту и разметке каждого KR.
+  "OBJ-NO-NUMBERS": "server",
+  "KR-OUTCOME": "server",
+  "KR-MEASURABLE": "server",
+  "KR-TIMEBOUND": "server",
+  "KR-LEADING": "server",
   "OBJ-QUALITATIVE": "quote",
   "OBJ-AMBITIOUS": "quote",
-  "KR-MEASURABLE": "quote",
-  "KR-OUTCOME": "quote",
   "KR-QUALITY-PAIR": "quote",
   "KR-LEARNING-FORM": "quote",
-  "KR-TIMEBOUND": "quote",
   "Q-REACH": "quote",
 };
 export function evidenceKindOf(id: string): EvidenceKind {
@@ -202,11 +206,109 @@ export function computeRequiredAngles(
   return { pass: missing.length === 0, applicable: true, missing, hint: missing.map((m) => ANGLE_HINT[m]).join(". ") };
 }
 
-/** Серверные правила KR-COUNT и KR-REQUIRED-ANGLES вместо вердиктов модели. */
-// deno-lint-ignore no-explicit-any
-export function addServerRules(rules: any[], krTexts: string[], perspectives: unknown, ctxOrHorizon?: string | RuleCtx): any[] {
+// ---------- Разметка каждого KR от модели и серверные вердикты ----------
+
+export type KrForm = "range" | "threshold" | "learning" | "execution" | "binary" | "unmeasurable";
+export type KrTiming = "leading" | "lagging";
+export interface KrLabel {
+  index: number;
+  perspective?: string;
+  form?: KrForm | string;
+  timing?: KrTiming | string;
+  rationale?: string;
+}
+const FORMS = new Set(["range", "threshold", "learning", "execution", "binary", "unmeasurable"]);
+const TIMINGS = new Set(["leading", "lagging"]);
+
+/** Метки по индексу KR; null — разметка неполная (меньше валидных меток, чем KR). */
+function labelsByIndex(labels: unknown, krCount: number, field: "form" | "timing"): Map<number, string> | null {
+  const valid = field === "form" ? FORMS : TIMINGS;
+  const map = new Map<number, string>();
+  (Array.isArray(labels) ? labels : []).forEach((l: KrLabel, i: number) => {
+    const v = l?.[field];
+    if (typeof v === "string" && valid.has(v)) map.set(typeof l.index === "number" ? l.index : i, v);
+  });
+  if (krCount <= 0 || map.size < krCount) return null;
+  return map;
+}
+
+export interface ServerVerdict { pass: boolean; hint: string; evidence: string; unreliable?: boolean }
+const UNRELIABLE = (what: string): ServerVerdict =>
+  ({ pass: false, hint: `Не удалось разметить ${what} всех KR — проверьте вручную`, evidence: "", unreliable: true });
+
+const FORM_REASON: Record<string, string> = {
+  unmeasurable: "нельзя понять, выполнен ли",
+  execution: "факт поставки, а не исход",
+  binary: "выполнено / не выполнено без градиента",
+};
+
+/** OKR-PI 3.4.3/3.4.8: измеримость по форме каждого KR; исполнение и бинарность — только в committed. */
+export function computeMeasurable(labels: unknown, krCount: number, ctxOrHorizon?: string | RuleCtx): ServerVerdict {
   const ctx = toCtx(ctxOrHorizon);
-  const list = (Array.isArray(rules) ? rules : []).filter((r) => r?.id !== "KR-COUNT" && r?.id !== "KR-REQUIRED-ANGLES");
+  const forms = labelsByIndex(labels, krCount, "form");
+  if (!forms) return UNRELIABLE("форму");
+  const bad: string[] = [];
+  for (const [i, f] of [...forms.entries()].sort((a, b) => a[0] - b[0])) {
+    if (f === "unmeasurable" || ((f === "execution" || f === "binary") && ctx.okr_type !== "committed")) {
+      bad.push(`KR №${i + 1} — ${FORM_REASON[f]}`);
+    }
+  }
+  if (!bad.length) return { pass: true, hint: "", evidence: "" };
+  return { pass: false, evidence: "", hint: `${bad.join("; ")}. Нужна форма «с X до Y», «остаётся выше/ниже X» или «к дате известно, что…, с порогом…»` };
+}
+
+/** OKR-PI 3.4.5: достижение — вопрос степени; бинарный KR допустим только в committed. */
+export function computeTimebound(labels: unknown, krCount: number, ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const ctx = toCtx(ctxOrHorizon);
+  const forms = labelsByIndex(labels, krCount, "form");
+  if (!forms) return UNRELIABLE("форму");
+  if (ctx.okr_type === "committed") return { pass: true, hint: "", evidence: "" };
+  const bin = [...forms.entries()].filter(([, f]) => f === "binary").map(([i]) => `KR №${i + 1}`).sort();
+  if (!bin.length) return { pass: true, hint: "", evidence: "" };
+  return { pass: false, evidence: "", hint: `${bin.join(", ")} — бинарный: добавьте градиент прогресса («с X до Y»)` };
+}
+
+/** OKR-PI 3.4.2: хотя бы один опережающий KR (применимость — ruleApplicability). */
+export function computeLeading(labels: unknown, krCount: number, _ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const timings = labelsByIndex(labels, krCount, "timing");
+  if (!timings) return UNRELIABLE("опережающие/запаздывающие");
+  if ([...timings.values()].includes("leading")) return { pass: true, hint: "", evidence: "" };
+  return { pass: false, evidence: "", hint: "Все KR запаздывающие. Добавьте опережающий KR, который сдвигается раньше результата и позволяет скорректироваться внутри периода" };
+}
+
+/** OKR-PI 3.4.8: глаголы исполнения ищет код. Неприменимость для committed+regular — в applyRuleContext. */
+export function computeOutcome(krTexts: string[], _ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const list = Array.isArray(krTexts) ? krTexts : [];
+  for (let i = 0; i < list.length; i++) {
+    const verb = findExecutionVerb(String(list[i] ?? ""));
+    if (verb) {
+      return { pass: false, evidence: verb, hint: `KR №${i + 1} описывает работу («${verb}»), а не исход. Сформулируйте, что изменится у клиента или банка` };
+    }
+  }
+  return { pass: true, hint: "", evidence: "" };
+}
+
+/** OKR-PI: в Objective нет цифр. evidence — первый фрагмент с цифрой. */
+export function computeObjNoNumbers(objective: string): ServerVerdict {
+  if (!hasDigitsInObjective(objective)) return { pass: true, hint: "", evidence: "" };
+  const frag = String(objective).match(/\S*\d\S*/)?.[0]?.replace(/[.,;:!?]+$/, "") ?? "";
+  return { pass: false, evidence: frag, hint: "Уберите цифры из Objective — они место в KR" };
+}
+
+const SERVER_RULE_META: Record<string, { label: string; why: string; basis: string }> = {
+  "OBJ-NO-NUMBERS": { label: "В Objective нет цифр", why: "Цифры в Objective превращают цель в KPI.", basis: "по тексту Objective" },
+  "KR-OUTCOME": { label: "KR — исходы, а не задачи", why: "Выполненная работа не гарантирует изменения у клиента или банка.", basis: "по глаголам исполнения в тексте KR" },
+  "KR-MEASURABLE": { label: "Каждый KR измерим", why: "Без измеримой формы нельзя понять, достигнут ли KR.", basis: "по форме каждого KR (kr_perspectives.form)" },
+  "KR-TIMEBOUND": { label: "KR с градиентом прогресса", why: "Бинарный KR не показывает степень достижения.", basis: "по форме каждого KR (kr_perspectives.form)" },
+  "KR-LEADING": { label: "Есть опережающий KR", why: "Без опережающего KR нельзя скорректироваться внутри периода.", basis: "по разметке опережающий/запаздывающий (kr_perspectives.timing)" },
+};
+const COMPUTED_IDS = ["KR-COUNT", "KR-REQUIRED-ANGLES", ...Object.keys(SERVER_RULE_META)];
+
+/** Все серверные правила вместо вердиктов модели (вердикты модели по этим id отбрасываются). */
+// deno-lint-ignore no-explicit-any
+export function addServerRules(rules: any[], krTexts: string[], perspectives: unknown, ctxOrHorizon?: string | RuleCtx, objective = ""): any[] {
+  const ctx = toCtx(ctxOrHorizon);
+  const list = (Array.isArray(rules) ? rules : []).filter((r) => !COMPUTED_IDS.includes(r?.id));
   const krCount = (krTexts ?? []).filter((t) => String(t ?? "").trim()).length;
   const c = computeKrCount(krTexts, ctx);
   const a = computeRequiredAngles(perspectives, krCount, ctx);
@@ -222,6 +324,21 @@ export function addServerRules(rules: any[], krTexts: string[], perspectives: un
     why: a.pass ? "" : "Без обязательных ракурсов рост достигается за счёт клиента, риска или без проверки гипотез.",
     reasoning: "Проверяется сервером по разметке ракурсов kr_perspectives.",
   });
+  const verdicts: Record<string, ServerVerdict> = {
+    "OBJ-NO-NUMBERS": computeObjNoNumbers(objective),
+    "KR-OUTCOME": computeOutcome(krTexts, ctx),
+    "KR-MEASURABLE": computeMeasurable(perspectives, krCount, ctx),
+    "KR-TIMEBOUND": computeTimebound(perspectives, krCount, ctx),
+    "KR-LEADING": computeLeading(perspectives, krCount, ctx),
+  };
+  for (const [id, v] of Object.entries(verdicts)) {
+    const m = SERVER_RULE_META[id];
+    list.push({
+      id, label: m.label, pass: v.pass, hint: v.hint, evidence: v.evidence,
+      severity: severityFor(id, ctx), ...(v.unreliable ? { unreliable: true } : {}),
+      why: v.pass ? "" : m.why, reasoning: `Проверяется сервером ${m.basis}.`,
+    });
+  }
   return list;
 }
 
@@ -233,6 +350,8 @@ export function ruleApplicability(id: string, ctxOrHorizon?: string | RuleCtx): 
   const ctx = toCtx(ctxOrHorizon);
   if (id === "KR-REQUIRED-ANGLES" && ctx.okr_type === undefined) return "not_applicable";
   if (id === "KR-OUTCOME" && ctx.okr_type === "committed" && ctx.okr_status === "regular") return "not_applicable";
+  // OKR-PI 3.4.2: опережающий KR обязателен для направления; для квартала — правило помощника.
+  if (id === "KR-LEADING" && ctx.okr_status !== "direction" && ctx.horizon !== "quarter_3m") return "not_applicable";
   return "applies";
 }
 

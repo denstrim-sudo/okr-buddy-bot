@@ -126,6 +126,10 @@ export interface KrPerspective {
   /** 0-based индекс KR в наборе. */
   index: number;
   perspective: KrPerspectiveAxis;
+  /** Форма KR (разметка модели; по ней сервер считает измеримость и градиент). */
+  form?: "range" | "threshold" | "learning" | "execution" | "binary" | "unmeasurable";
+  /** Опережающий / запаздывающий. */
+  timing?: "leading" | "lagging";
   rationale: string;
 }
 

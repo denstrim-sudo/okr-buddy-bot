@@ -33,6 +33,16 @@ const LEGACY_AXIS: Record<string, KrPerspectiveAxis> = {
 export const normalizeAxis = (v: string): KrPerspectiveAxis | undefined =>
   v in AXIS_META ? (v as KrPerspectiveAxis) : LEGACY_AXIS[v];
 
+export const FORM_LABEL: Record<string, string> = {
+  range: "с X до Y",
+  threshold: "удержание порога",
+  learning: "обучение",
+  execution: "исполнение",
+  binary: "бинарный",
+  unmeasurable: "неизмерим",
+};
+export const TIMING_LABEL: Record<string, string> = { leading: "опережающий", lagging: "запаздывающий" };
+
 const AXIS_ORDER: KrPerspectiveAxis[] = ["К", "О", "У"];
 
 const EXAMPLES: Record<KrPerspectiveAxis, string> = {
@@ -84,6 +94,11 @@ export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) =>
               >
                 {meta.short}
               </span>
+              {(p.form || p.timing) && (
+                <span data-testid={`kr-form-${i}`} className="mt-0.5 text-[10px] text-muted-foreground">
+                  {[p.form && FORM_LABEL[p.form], p.timing && TIMING_LABEL[p.timing]].filter(Boolean).join(" · ")}
+                </span>
+              )}
               <span className="flex-1 text-xs text-muted-foreground">{kr}</span>
             </li>
           );

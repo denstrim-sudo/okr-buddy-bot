@@ -17,6 +17,16 @@ describe("KrPerspectives", () => {
     expect(screen.getByTestId("kr-axis-1")).toHaveTextContent("осуществимость и риски");
   });
 
+  it("показывает форму и опережающий/запаздывающий рядом с ракурсом", () => {
+    const p: KrPerspective[] = [
+      { index: 0, perspective: "К", form: "range", timing: "leading", rationale: "r" },
+      { index: 1, perspective: "О", rationale: "старый отчёт без формы" },
+    ];
+    render(<KrPerspectives keyResults={KRS} perspectives={p} />);
+    expect(screen.getByTestId("kr-form-0")).toHaveTextContent("с X до Y · опережающий");
+    expect(screen.queryByTestId("kr-form-1")).toBeNull();
+  });
+
   it("понимает старые значения осей из сохранённых отчётов", () => {
     const p = [{ index: 0, perspective: "learning", rationale: "r" }] as unknown as KrPerspective[];
     render(<KrPerspectives keyResults={KRS} perspectives={p} />);

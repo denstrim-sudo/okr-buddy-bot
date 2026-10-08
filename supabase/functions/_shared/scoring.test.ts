@@ -109,11 +109,15 @@ Deno.test("knownRuleIdsFor не содержит удалённых и стар�
   }
 });
 
-// Переписано: модель больше не оценивает KR-COUNT и KR-REQUIRED-ANGLES — их считает сервер.
-Deno.test("modelRuleIdsFor: без серверных OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES", () => {
+// Переписано (замер стабильности 2026-10-08): модель оценивает только смысловые правила,
+// формальные и разметочные считает сервер.
+const SERVER_IDS = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING"];
+Deno.test("modelRuleIdsFor: без серверных правил — только смысловые", () => {
   const ids = modelRuleIdsFor("block_12m");
-  for (const id of ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES"]) assert(!ids.includes(id), id);
-  assertEquals(ids.length, BASE_IDS.length - 3);
+  for (const id of SERVER_IDS) assert(!ids.includes(id), id);
+  assertEquals(ids, ["OBJ-QUALITATIVE", "KR-QUALITY-PAIR", "KR-LEARNING-FORM"]);
+  assertEquals(modelRuleIdsFor({ horizon: "quarter_3m", okr_type: "aspirational" }).sort(),
+    ["KR-LEARNING-FORM", "KR-QUALITY-PAIR", "OBJ-AMBITIOUS", "OBJ-QUALITATIVE", "Q-REACH"]);
   const known = knownRuleIdsFor("block_12m");
   assert(known.includes("KR-COUNT") && known.includes("KR-REQUIRED-ANGLES"));
 });
@@ -196,10 +200,10 @@ Deno.test("applyRuleContext: провал KR-OUTCOME при committed+regular н
 // --- Правила отсутствия и серверные правила ---
 import { RULE_EVIDENCE_KIND, computeKrCount, computeRequiredAngles, addServerRules } from "./scoring.ts";
 
-Deno.test("RULE_EVIDENCE_KIND: server / absence / quote", () => {
-  for (const id of ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES"]) assertEquals(RULE_EVIDENCE_KIND[id], "server");
-  assertEquals(RULE_EVIDENCE_KIND["KR-LEADING"], "absence");
-  for (const id of ["OBJ-NO-NUMBERS", "KR-MEASURABLE", "KR-QUALITY-PAIR"]) assertEquals(RULE_EVIDENCE_KIND[id], "quote");
+// Переписано: OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING теперь server.
+Deno.test("RULE_EVIDENCE_KIND: server / quote", () => {
+  for (const id of SERVER_IDS) assertEquals(RULE_EVIDENCE_KIND[id], "server", id);
+  for (const id of ["OBJ-QUALITATIVE", "KR-QUALITY-PAIR", "KR-LEARNING-FORM"]) assertEquals(RULE_EVIDENCE_KIND[id], "quote");
 });
 
 const kr = (n: number) => Array.from({ length: n }, (_, i) => `KR ${i}`);
@@ -257,4 +261,119 @@ Deno.test("интеграция: амбициозный OKR без [У] полу
     .map((id) => ({ id, pass: true }));
   const score = (p: unknown) => recomputeScore(applyRuleContext(addServerRules(modelRules, kr(3), p, ctx), ctx));
   assert(score(P("К", "К", "О")) < score(P("К", "К", "У")));
+});
+
+// --- Серверные правила по разметке каждого KR (замер стабильности) ---
+import {
+  computeMeasurable, computeTimebound, computeLeading, computeOutcome, computeObjNoNumbers, type KrLabel,
+} from "./scoring.ts";
+
+const L = (...a: Array<[string, string, string]>): KrLabel[] =>
+  a.map(([perspective, form, timing], index) => ({ index, perspective, form, timing, rationale: "" } as KrLabel));
+
+Deno.test("computeMeasurable: unmeasurable → fail с номером KR", () => {
+  const r = computeMeasurable(L(["К", "range", "lagging"], ["У", "unmeasurable", "lagging"]), 2, { okr_type: "aspirational" });
+  assertEquals(r.pass, false);
+  assert(r.hint.includes("KR №2"));
+});
+Deno.test("computeMeasurable: execution/binary → fail, кроме committed (OKR-PI 3.4.8)", () => {
+  const labels = L(["К", "threshold", "lagging"], ["О", "binary", "lagging"], ["О", "execution", "lagging"]);
+  assertEquals(computeMeasurable(labels, 3, { okr_type: "aspirational" }).pass, false);
+  assertEquals(computeMeasurable(labels, 3, { okr_type: "committed" }).pass, true);
+});
+Deno.test("computeMeasurable: неполная разметка → unreliable, не ложный провал и не ложный проход", () => {
+  const r = computeMeasurable(L(["К", "range", "lagging"]), 3, { okr_type: "aspirational" });
+  assertEquals(r.unreliable, true);
+  const noForm = computeMeasurable([{ index: 0, perspective: "К" }, { index: 1, perspective: "О" }] as KrLabel[], 2, {});
+  assertEquals(noForm.unreliable, true);
+});
+Deno.test("computeTimebound: binary → fail, кроме committed (OKR-PI 3.4.5)", () => {
+  const labels = L(["К", "range", "lagging"], ["О", "binary", "lagging"]);
+  assertEquals(computeTimebound(labels, 2, { okr_type: "mixed" }).pass, false);
+  assertEquals(computeTimebound(labels, 2, { okr_type: "committed" }).pass, true);
+  assertEquals(computeTimebound(L(["К", "execution", "lagging"]), 1, {}).pass, true);
+});
+Deno.test("computeLeading: нет leading → fail; есть → pass; неполная → unreliable", () => {
+  const ctx = { horizon: "quarter_3m" };
+  assertEquals(computeLeading(L(["К", "range", "lagging"], ["О", "threshold", "lagging"]), 2, ctx).pass, false);
+  assertEquals(computeLeading(L(["К", "range", "leading"], ["О", "threshold", "lagging"]), 2, ctx).pass, true);
+  assertEquals(computeLeading(L(["К", "range", "leading"]), 2, ctx).unreliable, true);
+});
+Deno.test("ruleApplicability: KR-LEADING только для направления и квартала (OKR-PI 3.4.2)", () => {
+  assertEquals(ruleApplicability("KR-LEADING", { horizon: "block_12m", okr_status: "regular" }), "not_applicable");
+  assertEquals(ruleApplicability("KR-LEADING", { horizon: "quarter_3m" }), "applies");
+  assertEquals(ruleApplicability("KR-LEADING", { horizon: "block_12m", okr_status: "direction" }), "applies");
+});
+Deno.test("computeOutcome: глагол исполнения → fail, evidence = слово, hint с номером KR", () => {
+  const r = computeOutcome(["Доля активных с 20% до 40%", "Запустить новый экран приветствия"], {});
+  assertEquals(r.pass, false);
+  assertEquals(r.evidence, "запустить");
+  assert(r.hint.includes("KR №2"));
+});
+Deno.test("computeObjNoNumbers: цифра → fail, evidence = фрагмент с цифрой", () => {
+  const r = computeObjNoNumbers("Новый клиент становится активным в первый же день: 60% новых клиентов с операцией за сутки.");
+  assertEquals(r.pass, false);
+  assertEquals(r.evidence, "60%");
+  assertEquals(computeObjNoNumbers("Новый клиент становится активным в первый же день.").pass, true);
+});
+
+// Эталоны из goldenSet (тексты продублированы — goldenSet не меняем и не импортируем во фронт-слой).
+const rule = (rules: any[], id: string) => rules.find((r) => r.id === id);
+const audit = (objective: string, krTexts: string[], labels: KrLabel[], ctx: any) =>
+  applyRuleContext(addServerRules([], krTexts, labels, ctx, objective), ctx);
+
+Deno.test("эталон P4 (committed): бинарный второй KR → KR-MEASURABLE и KR-TIMEBOUND pass", () => {
+  const ctx = { okr_type: "committed", okr_status: "regular", horizon: "block_12m" };
+  const rules = audit("Требования регулятора внедряем спокойно и с запасом.", [
+    "100% регуляторных изменений в проде не позже чем за 10 рабочих дней до срока",
+    "Ёмкость на регуляторику закладывается при планировании PI, без изъятий внутри PI",
+    "Ноль переносов бизнес-обязательств из-за регуляторных авралов",
+  ], L(["К", "threshold", "lagging"], ["О", "binary", "lagging"], ["О", "threshold", "lagging"]), ctx);
+  assertEquals(rule(rules, "KR-MEASURABLE").pass, true);
+  assertEquals(rule(rules, "KR-TIMEBOUND").pass, true);
+  assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, true);
+  assertEquals(rule(rules, "KR-LEADING").applicable, false);
+});
+Deno.test("эталон N6: «Провести исследование…» unmeasurable → KR-MEASURABLE fail", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const rules = audit("Клиент получает кредитное решение быстрее, чем успевает передумать.", [
+    "Конверсия с 18% до 26%", "Доля автоматических решений с 40% до 75%", "Просрочка не выше текущей",
+    "Провести исследование клиентского пути заёмщика в мобильном приложении",
+  ], L(["К", "range", "lagging"], ["К", "range", "leading"], ["О", "threshold", "lagging"], ["У", "unmeasurable", "lagging"]), ctx);
+  assertEquals(rule(rules, "KR-MEASURABLE").pass, false);
+  assert(rule(rules, "KR-MEASURABLE").hint.includes("KR №4"));
+});
+Deno.test("эталон N7: KR-OUTCOME fail «запустить», OBJ-NO-NUMBERS pass", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const rules = audit("Новый клиент становится активным в первый же день.", [
+    "KR a", "KR b", "KR c", "KR d",
+    "Запустить новый экран приветствия в мобильном приложении",
+    "Обучить сотрудников контакт-центра сценарию онбординга",
+  ], [], ctx);
+  assertEquals(rule(rules, "KR-OUTCOME").pass, false);
+  assertEquals(rule(rules, "KR-OUTCOME").evidence, "запустить");
+  assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, true);
+});
+Deno.test("эталон P6: KR-OUTCOME pass («Новое правило попадает в прод…»)", () => {
+  const ctx = { okr_type: "mixed", okr_status: "regular", horizon: "block_12m" };
+  const rules = audit("Клиент защищён от мошенников и не страдает от защиты.", [
+    "Потери от мошенничества на 1 млн операций снижены на 30%",
+    "Доля ложных блокировок с 2% до 0,8%",
+    "Новое правило попадает в прод за 4 часа вместо 5 дней",
+    "К концу PI на исторических данных проверены две поведенческие модели, известна точность каждой",
+  ], [], ctx);
+  assertEquals(rule(rules, "KR-OUTCOME").pass, true);
+});
+Deno.test("эталон N3: OBJ-NO-NUMBERS fail", () => {
+  const rules = audit("Новый клиент становится активным в первый же день: 60% новых клиентов с операцией за сутки.",
+    ["a", "b", "c"], [], { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" });
+  assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, false);
+});
+Deno.test("addServerRules: вердикты модели по серверным правилам отбрасываются", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const rules = addServerRules([{ id: "OBJ-NO-NUMBERS", pass: false, evidence: "x" }, { id: "OBJ-QUALITATIVE", pass: true }],
+    ["a", "b", "c"], [], ctx, "Цель без цифр");
+  assertEquals(rules.filter((r: any) => r.id === "OBJ-NO-NUMBERS").length, 1);
+  assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, true);
+  assertEquals(rule(rules, "OBJ-QUALITATIVE").pass, true);
 });

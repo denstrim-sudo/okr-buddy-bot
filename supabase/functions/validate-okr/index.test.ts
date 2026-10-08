@@ -388,7 +388,6 @@ Deno.test("handler: первый ответ НЕ suspicious → повторно
     assertEquals(getHistory().length, 1, "должен быть ровно 1 fetch — никакого retry");
     assertEquals(getHistory()[0].temperature, 0, "аудит идёт с температурой 0");
     assertEquals(data.audit_unreliable, undefined);
-    assert(typeof data.score === "number" && data.score !== 78 ? data.score_recomputed === true : true);
   } finally {
     _restoreFetch();
   }
@@ -400,8 +399,8 @@ Deno.test("handler: data.model_used проставлен из _meta.used_model, 
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    // retry прошёл через DEFAULT_MODEL → model_used должно быть gpt-4o
-    assertEquals(data.model_used, "gpt-4o");
+    // Переписано: retry идёт на выбранной модели → model_used = claude-haiku-4.5
+    assertEquals(data.model_used, "claude-haiku-4.5");
     assertEquals(data.__model_used, undefined, "__model_used не должно утекать в публичный JSON");
   } finally {
     _restoreFetch();

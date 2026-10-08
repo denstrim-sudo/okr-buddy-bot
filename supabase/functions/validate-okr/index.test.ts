@@ -358,8 +358,12 @@ Deno.test("handler: первый ответ suspicious → ровно ОДИН r
     assertEquals(history[1].temperature, 0);
     // финальный ответ — из retry, без флага audit_unreliable
     assertEquals(data.audit_unreliable, undefined);
-    // Переписано: +3 — сервер добавляет OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES
-    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length + 3);
+    // Переписано (замер стабильности): сервер отбрасывает вердикты модели по своим правилам
+    // и добавляет 8 серверных: OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES,
+    // OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING.
+    const serverIds = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING"];
+    const modelOnly = cleanRules.filter((r) => !serverIds.includes(r.id)).length;
+    assert(Array.isArray(data.rules) && data.rules.length === modelOnly + 8);
   } finally {
     _restoreFetch();
   }
@@ -461,9 +465,10 @@ Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).l
   assertEquals(p12.properties.rules.maxItems, modelRuleIdsFor("block_12m").length);
   assertEquals(pq.properties.rules.minItems, modelRuleIdsFor("quarter_3m").length);
   assertEquals(pq.properties.rules.maxItems, modelRuleIdsFor("quarter_3m").length);
-  assertEquals(p3y.properties.rules.minItems, 8);
-  assertEquals(pDefault.properties.rules.minItems, 8);
-  assertEquals(pq.properties.rules.minItems, 9);
+  // Переписано: модель оценивает только смысловые правила (3 базовых + Q-REACH в квартале).
+  assertEquals(p3y.properties.rules.minItems, 3);
+  assertEquals(pDefault.properties.rules.minItems, 3);
+  assertEquals(pq.properties.rules.minItems, 4);
 });
 
 Deno.test("buildParameters: rules.items.properties.id.enum === modelRuleIdsFor(ctx), без OKR-TYPE-DECLARED", () => {
@@ -481,8 +486,9 @@ Deno.test("buildParameters: rules.items.properties.id.enum === modelRuleIdsFor(c
 
 const rulesWithEvidence = [
   { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
-  // evidence реально встречается во втором KR
-  { id: "KR-OUTCOME", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
+  // evidence реально встречается во втором KR.
+  // Переписано: KR-OUTCOME теперь считает сервер — берём смысловое правило KR-LEARNING-FORM.
+  { id: "KR-LEARNING-FORM", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "NPS вырастет" },
   // evidence выдумана
   { id: "KR-QUALITY-PAIR", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "несуществующая фраза zzz" },
   { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
@@ -503,11 +509,11 @@ Deno.test("handler: добавляет grounded=true для pass=false с реа
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    const r = data.rules.find((x: any) => x.id === "KR-OUTCOME");
+    const r = data.rules.find((x: any) => x.id === "KR-LEARNING-FORM");
     assertEquals(r.grounded, true);
-    // pass сохранён; severity — канонический (KR-OUTCOME → critical)
+    // pass сохранён; severity — канонический (KR-LEARNING-FORM → important)
     assertEquals(r.pass, false);
-    assertEquals(r.severity, "critical");
+    assertEquals(r.severity, "important");
   } finally {
     _restoreFetch();
   }
@@ -912,7 +918,10 @@ Deno.test("buildAuditorParameters содержит kr_perspectives с ракур
     const kp = buildAuditorParameters(h).properties.kr_perspectives;
     assert(kp, `horizon=${h}: kr_perspectives должен присутствовать`);
     assertEquals(kp.items.properties.perspective.enum, ["К", "О", "У"]);
-    assertEquals((kp.items.required as string[]).sort(), ["index", "perspective", "rationale"]);
+    // Переписано: разметка каждого KR дополнена формой и timing.
+    assertEquals((kp.items.required as string[]).sort(), ["form", "index", "perspective", "rationale", "timing"]);
+    assertEquals(kp.items.properties.form.enum, ["range", "threshold", "learning", "execution", "binary", "unmeasurable"]);
+    assertEquals(kp.items.properties.timing.enum, ["leading", "lagging"]);
   }
 });
 
@@ -1125,8 +1134,16 @@ Deno.test("handler: неполная разметка ракурсов → unrel
   }
 });
 
-Deno.test("промпт аудитора: правила отсутствия не требуют pass=true, kr_perspectives для каждого KR", () => {
-  const p = buildSystemPrompt("block_12m", { okr_type: "aspirational" });
-  assert(p.includes("Не ставь pass=true только потому, что нечего процитировать"));
-  assert(p.includes("kr_perspectives заполняй для КАЖДОГО KR"));
+// Переписано: правил отсутствия у модели больше нет (KR-LEADING считает сервер);
+// модель размечает каждый KR и оценивает только пять смысловых правил.
+Deno.test("промпт аудитора: разметка каждого KR, серверные правила модель не оценивает", () => {
+  const p = buildSystemPrompt("quarter_3m", { okr_type: "aspirational" });
+  assert(p.includes("Для КАЖДОГО KR без пропусков заполни kr_perspectives"));
+  assert(p.includes("Это разметка ОДНОГО KR, а не оценка набора"));
+  for (const id of ["OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "KR-COUNT", "KR-REQUIRED-ANGLES"]) {
+    assert(!p.includes(`- ${id} [`), `${id} не должно быть в описаниях правил`);
+  }
+  for (const id of ["OBJ-QUALITATIVE", "OBJ-AMBITIOUS", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "Q-REACH"]) {
+    assert(p.includes(`- ${id} [`), id);
+  }
 });

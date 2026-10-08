@@ -106,6 +106,8 @@ export interface ValidationRule {
   /** Серверный сигнал: подтверждена ли evidence реальным фрагментом текста OKR.
    *  Для pass=true всегда true. Для pass=false: false → правило не подкреплено цитатой. */
   grounded?: boolean;
+  /** Провал без цитаты: показывается, но не влияет на оценку. */
+  unconfirmed?: boolean;
   /** false — правило неприменимо к типу/статусу OKR (OKR-PI) и в score не учитывается. */
   applicable?: boolean;
 }

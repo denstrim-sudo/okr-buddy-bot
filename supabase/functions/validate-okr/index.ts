@@ -3,7 +3,7 @@ import { getRulesBlock, getFewShotBlock, ANGLES_DEFINITION, okrTypeLabel, okrSta
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
 import {
-  recomputeScore, severityFor, modelRuleIdsFor, applyRuleContext, toCtx,
+  recomputeScore, severityFor, modelRuleIdsFor, evidenceKindOf, addServerRules, applyRuleContext, toCtx,
   normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
 } from "../_shared/scoring.ts";
 
@@ -37,7 +37,8 @@ For EACH rule you MUST return:
   - "improve" — точечное усиление: стилистика, уточнение сегмента, более конкретная метрика
   - Для pass=true ставь "improve" (или опускай).
 - "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно. Для pass=true можно оставить пустым.
-- "evidence": для pass=false — СКОПИРУЙ дословно фрагмент текста Objective или конкретного KR (≤80 символов), который стал причиной провала. Не перефразируй, не обобщай — буквальная подстрока. Если не можешь найти такую дословную фразу в тексте — значит, основания для fail нет, ставь pass=true вместо этого. Для pass=true — пустая строка.
+- "evidence": для pass=false — СКОПИРУЙ дословно фрагмент текста Objective или конкретного KR (≤80 символов), который стал причиной провала. Не перефразируй, не обобщай — буквальная подстрока. Для правил, которые нарушаются ФОРМУЛИРОВКОЙ: если не можешь найти такую дословную фразу в тексте — значит, основания для fail нет, ставь pass=true вместо этого. Для pass=true — пустая строка.
+- Для KR-LEADING провал означает ОТСУТСТВИЕ опережающего KR в наборе: evidence оставь пустым, в hint напиши, какого KR не хватает. Не ставь pass=true только потому, что нечего процитировать.
 
 ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
 
@@ -45,7 +46,7 @@ For EACH rule you MUST return:
 
 ${ANGLES_DEFINITION}
 
-Заполни поле kr_perspectives: отнеси КАЖДЫЙ Key Result к одному ракурсу — "К", "О" или "У" (index — 0-based позиция KR). rationale — одно короткое предложение, почему именно этот ракурс. Правило OKR-TYPE-DECLARED НЕ оценивай — его проверяет сервер.
+Заполни поле kr_perspectives: отнеси КАЖДЫЙ Key Result к одному ракурсу — "К", "О" или "У" (index — 0-based позиция KR). rationale — одно короткое предложение, почему именно этот ракурс. Поле kr_perspectives заполняй для КАЖДОГО KR без пропусков: по нему сервер проверяет обязательные ракурсы. Правила OKR-TYPE-DECLARED, KR-COUNT и KR-REQUIRED-ANGLES НЕ оценивай — их проверяет сервер.
 
 Return STRICT JSON only via the provided tool.
 
@@ -262,6 +263,7 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
     pass: Boolean(r?.pass),
     applicable: r?.applicable === false ? false : undefined,
     unconfirmed: r?.unconfirmed === true ? true : undefined,
+    unreliable: r?.unreliable === true ? true : undefined,
     severity: r?.severity === "critical" || r?.severity === "important" || r?.severity === "improve"
       ? r.severity
       : (typeof r?.id === "string" ? severityFor(r.id, horizon) : "improve"),
@@ -276,7 +278,9 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
 /** Провал без цитаты (pass=false, grounded=false) — unconfirmed, в score не идёт. */
 export function markUnconfirmed(rules: any[]): any[] {
   return rules.map((r: any) =>
-    r && r.pass === false && r.grounded === false && r.applicable !== false ? { ...r, unconfirmed: true } : r
+    r && r.pass === false && r.grounded === false && r.applicable !== false && evidenceKindOf(String(r.id ?? "")) === "quote"
+      ? { ...r, unconfirmed: true }
+      : r
   );
 }
 
@@ -464,6 +468,8 @@ export const handler = async (req: Request) => {
     // applyScoreRecompute, чтобы пересчёт шёл по каноническим весам.
     if (Array.isArray(finalData.rules)) {
       // Каноническая severity, применимость (OKR-PI 3.4.8) и серверное OKR-TYPE-DECLARED.
+      const krTexts = enriched.map((k: any) => String(k?.text ?? ""));
+      finalData.rules = addServerRules(finalData.rules, krTexts, finalData.kr_perspectives, ctx);
       finalData.rules = applyRuleContext(finalData.rules, ctx);
     }
 
@@ -483,7 +489,7 @@ export const handler = async (req: Request) => {
       finalData.rules = finalData.rules.map((r: any) => ({
         ...r,
         // OKR-TYPE-DECLARED считает сервер — цитата не нужна.
-        grounded: r?.id === "OKR-TYPE-DECLARED" ? true : isGrounded(r, objectiveText, krHaystack),
+        grounded: evidenceKindOf(String(r?.id ?? "")) === "server" ? true : isGrounded(r, objectiveText, krHaystack),
       }));
       finalData.rules = markUnconfirmed(finalData.rules);
     }

@@ -59,3 +59,16 @@ describe("RuleList — reasoning (chain-of-thought)", () => {
     expect(screen.queryByTestId("rule-reasoning-toggle-R3")).not.toBeInTheDocument();
   });
 });
+
+describe("RuleList — неприменимые правила (OKR-PI)", () => {
+  it("показывает правило с applicable=false серым с пометкой, без иконки провала", async () => {
+    const rules: ValidationRule[] = [
+      { id: "KR-OUTCOME", label: "Исходы", pass: true, hint: "", applicable: false },
+      { id: "KR-COUNT", label: "Число KR", pass: false, hint: "мало", severity: "important" },
+    ];
+    renderWithProviders(<RuleList rules={rules} />);
+    await userEvent.click(screen.getByText(/Что уже хорошо/));
+    const na = screen.getByTestId("rule-na-KR-OUTCOME");
+    expect(na).toHaveTextContent("не применимо для этого типа");
+  });
+});

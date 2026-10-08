@@ -3,32 +3,42 @@ import { cn } from "@/lib/utils";
 import type { KrPerspective, KrPerspectiveAxis } from "@/types/okr";
 
 export const AXIS_META: Record<KrPerspectiveAxis, { label: string; short: string; className: string; hint: string }> = {
-  customer_business: {
+  "К": {
     label: "Клиент и бизнес",
-    short: "Клиент/бизнес",
+    short: "К · клиент и бизнес",
     className: "bg-primary/10 text-primary",
-    hint: "Польза клиенту, который получает результат, и бизнесу, который от него зависит.",
+    hint: "Изменение у клиента или в результате банка.",
   },
-  feasibility_risk: {
+  "О": {
     label: "Осуществимость и риски",
-    short: "Осуществимость/риски",
+    short: "О · осуществимость и риски",
     className: "bg-warning-soft text-warning",
-    hint: "Ранние доказательства, что подход жизнеспособен, и защита критичного («не сломать»).",
+    hint: "Удержание порога критичного: «остаётся выше / ниже» по мере роста основного.",
   },
-  learning: {
-    label: "Обучение и развитие",
-    short: "Обучение",
+  "У": {
+    label: "Обучение",
+    short: "У · обучение",
     className: "bg-success/10 text-success",
-    hint: "Чему организация научится, добиваясь результата: что подтвердил прототип, эксперимент, тест на рынке.",
+    hint: "«К дате известно, что…, с порогом…» — что банк узнает и проверит.",
   },
 };
 
-const AXIS_ORDER: KrPerspectiveAxis[] = ["customer_business", "feasibility_risk", "learning"];
+/** Старые сохранённые отчёты могли содержать прежние значения осей. */
+const LEGACY_AXIS: Record<string, KrPerspectiveAxis> = {
+  customer_business: "К",
+  feasibility_risk: "О",
+  learning: "У",
+};
+
+export const normalizeAxis = (v: string): KrPerspectiveAxis | undefined =>
+  v in AXIS_META ? (v as KrPerspectiveAxis) : LEGACY_AXIS[v];
+
+const AXIS_ORDER: KrPerspectiveAxis[] = ["К", "О", "У"];
 
 const EXAMPLES: Record<KrPerspectiveAxis, string> = {
-  customer_business: "напр. «Увеличить долю заказов, выполняемых автономно, с 40% до 70%»",
-  feasibility_risk: "напр. «Удерживать долю сбоев ниже 1% по мере удвоения объёма»",
-  learning: "напр. «Подтвердить три типа заказов, которые клиенты больше всего хотят автоматизировать»",
+  "К": "напр. «Доля кредитов, оформленных полностью в приложении, с X% до Y%»",
+  "О": "напр. «Доля ложных блокировок остаётся ниже X%»",
+  "У": "напр. «К концу PI известно, какие два сегмента откликаются на предложение, с порогом конверсии X%»",
 };
 
 interface Props {
@@ -37,15 +47,15 @@ interface Props {
 }
 
 /**
- * Показывает типологию набора KR (AI-Native SAFe): по какой оси работает каждый KR
- * и каких осей в наборе нет. Это подсказка для расширения мышления, не требование.
+ * Показывает ракурс каждого KR (OKR-PI 3.3) и каких ракурсов в наборе нет.
  */
 export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) => {
   if (!perspectives?.length) return null;
 
   const byIndex = new Map<number, KrPerspective>();
   for (const p of perspectives) {
-    if (AXIS_META[p.perspective] && !byIndex.has(p.index)) byIndex.set(p.index, p);
+    const axis = normalizeAxis(p.perspective);
+    if (axis && !byIndex.has(p.index)) byIndex.set(p.index, { ...p, perspective: axis });
   }
   if (byIndex.size === 0) return null;
 
@@ -55,7 +65,7 @@ export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) =>
   return (
     <div data-testid="kr-perspectives" className="mt-4 rounded-lg border border-border bg-background/50 p-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Точки зрения на набор KR
+        Ракурсы KR (К / О / У)
       </p>
       <ul className="space-y-2">
         {keyResults.map((kr, i) => {
@@ -88,7 +98,7 @@ export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) =>
               <span className="font-medium text-foreground">{AXIS_META[a].label}</span> ({EXAMPLES[a]})
             </span>
           ))}
-          . Это подсказка, а не требование — не все оси уместны для каждой цели.
+          . Какие ракурсы обязательны, зависит от типа OKR.
         </p>
       )}
     </div>

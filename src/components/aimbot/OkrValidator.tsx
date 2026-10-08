@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { GeneratedPlan, OkrHorizon, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
+import type { GeneratedPlan, OkrHorizon, OkrStatus, OkrType, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
@@ -66,6 +66,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
   const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
+  const [okrType, setOkrType] = useState<OkrType | undefined>(undefined);
+  const [okrStatus, setOkrStatus] = useState<OkrStatus>("regular");
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
@@ -81,6 +83,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setKrs(draft.key_results.length ? draft.key_results : [""]);
     setKrsFull(draft.key_results_full ?? null);
     if (draft.horizon) setHorizon(draft.horizon);
+    setOkrType(draft.okrType);
+    setOkrStatus(draft.okrStatus ?? "regular");
     setReport(null);
     setSourceOkrId(draft.sourceOkrId);
     setSaveParentLink(null);
@@ -122,7 +126,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model },
+        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model, okr_type: okrType, okr_status: okrStatus },
       });
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
@@ -151,6 +155,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           objective: objective.trim(),
           key_results: cleaned,
           horizon,
+          okr_type: okrType,
+          okr_status: okrStatus,
           failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why })),
           extra_context,
           model,
@@ -235,7 +241,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const saveReplaceExisting = () => {
     if (!sourceOkrId) return;
     const plan = buildPlanFromCurrent();
-    const res = replaceOkr(sourceOkrId, objective.trim(), plan);
+    const res = replaceOkr(sourceOkrId, objective.trim(), plan, { okrType, okrStatus });
     if (res.ok) {
       toast.success("Исправленная версия сохранена (связи с родителем и детьми сохранены)");
     } else {
@@ -250,8 +256,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       return;
     }
     const res = saveParentLink
-      ? saveOkr(objective.trim(), plan, saveParentLink)
-      : saveOkr(objective.trim(), plan);
+      ? saveOkr(objective.trim(), plan, saveParentLink, { okrType, okrStatus })
+      : saveOkr(objective.trim(), plan, undefined, { okrType, okrStatus });
     if (res.ok) {
       toast.success("OKR сохранён как новый");
       setSourceOkrId(res.item.id);
@@ -308,9 +314,39 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           </div>
           {horizon === "quarter_3m" && (
             <p className="text-[11px] text-muted-foreground">
-              Применяю квартальный набор правил: KR-LEADING повышен до critical, плюс Q-FOCUS (2–4 KR), Q-THEME (одна тема), Q-REACH (достижимость за 90 дней).
+              Применяю квартальный набор правил: KR-LEADING повышен до critical, плюс Q-REACH (достижимость за 90 дней).
             </p>
           )}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label htmlFor="okr-type" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
+            <select
+              id="okr-type"
+              data-testid="okr-type-select"
+              value={okrType ?? ""}
+              onChange={(e) => setOkrType((e.target.value || undefined) as OkrType | undefined)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="">не выбран</option>
+              <option value="committed">Обязательный</option>
+              <option value="aspirational">Амбициозный</option>
+              <option value="mixed">Смешанный</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="okr-status" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+            <select
+              id="okr-status"
+              data-testid="okr-status-select"
+              value={okrStatus}
+              onChange={(e) => setOkrStatus(e.target.value as OkrStatus)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="regular">Обычный OKR</option>
+              <option value="direction">Направление</option>
+            </select>
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>

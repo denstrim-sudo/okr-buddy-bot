@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
@@ -15,10 +15,11 @@ Deno.test("validate-okr: requires at least one KR", async () => {
 });
 
 // --- buildSystemPrompt: правила переключаются по горизонту ---
-Deno.test("buildSystemPrompt('quarter_3m') содержит маркеры квартальных правил", () => {
+// Переписано (OKR-PI 3.4): Q-FOCUS и Q-THEME удалены, в квартале остаются KR-LEADING→critical и Q-REACH.
+Deno.test("buildSystemPrompt('quarter_3m') содержит Q-REACH и не содержит Q-FOCUS/Q-THEME (OKR-PI 3.4)", () => {
   const p = buildSystemPrompt("quarter_3m");
-  assert(p.includes("Q-FOCUS"));
-  assert(p.includes("Q-THEME"));
+  assert(!p.includes("Q-FOCUS"));
+  assert(!p.includes("Q-THEME"));
   assert(p.includes("Q-REACH"));
   assert(p.includes("применяй КВАРТАЛЬНЫЙ набор правил"));
 });
@@ -325,7 +326,8 @@ Deno.test("handler: первый ответ suspicious → ровно ОДИН r
     assertEquals(history[1].model, "gpt-4o", "retry должен идти на DEFAULT_MODEL");
     // финальный ответ — из retry, без флага audit_unreliable
     assertEquals(data.audit_unreliable, undefined);
-    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length);
+    // +1: сервер добавляет OKR-TYPE-DECLARED
+    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length + 1);
   } finally {
     _restoreFetch();
   }
@@ -374,7 +376,7 @@ Deno.test("handler: data.model_used проставлен из _meta.used_model, 
 
 // --- isGrounded: чистая логика обоснованности fail-вердикта ---
 import { isGrounded, buildParameters } from "./index.ts";
-import { knownRuleIdsFor } from "../_shared/scoring.ts";
+import { knownRuleIdsFor, modelRuleIdsFor } from "../_shared/scoring.ts";
 
 Deno.test("isGrounded: pass=true → всегда true, evidence не требуется", () => {
   assertEquals(isGrounded({ pass: true }, "obj", ["kr"]), true);
@@ -415,25 +417,29 @@ Deno.test("buildParameters(undefined).rules.items.required включает 'evi
   assert(required.includes("evidence"), `required=${JSON.stringify(required)}`);
 });
 
-Deno.test("buildParameters: minItems === maxItems === knownRuleIdsFor(horizon).length", () => {
+// Переписано (OKR-PI): в схеме модели нет OKR-TYPE-DECLARED — его считает сервер.
+Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).length", () => {
   const p12 = buildParameters("block_12m");
   const p3y = buildParameters("strategic_3y");
   const pq = buildParameters("quarter_3m");
   const pDefault = buildParameters(undefined);
-  assertEquals(p12.properties.rules.minItems, knownRuleIdsFor("block_12m").length);
-  assertEquals(p12.properties.rules.maxItems, knownRuleIdsFor("block_12m").length);
-  assertEquals(pq.properties.rules.minItems, knownRuleIdsFor("quarter_3m").length);
-  assertEquals(pq.properties.rules.maxItems, knownRuleIdsFor("quarter_3m").length);
-  assertEquals(p3y.properties.rules.minItems, 9);
-  assertEquals(pDefault.properties.rules.minItems, 9);
-  assertEquals(pq.properties.rules.minItems, 12);
+  assertEquals(p12.properties.rules.minItems, modelRuleIdsFor("block_12m").length);
+  assertEquals(p12.properties.rules.maxItems, modelRuleIdsFor("block_12m").length);
+  assertEquals(pq.properties.rules.minItems, modelRuleIdsFor("quarter_3m").length);
+  assertEquals(pq.properties.rules.maxItems, modelRuleIdsFor("quarter_3m").length);
+  assertEquals(p3y.properties.rules.minItems, 10);
+  assertEquals(pDefault.properties.rules.minItems, 10);
+  assertEquals(pq.properties.rules.minItems, 11);
 });
 
-Deno.test("buildParameters: rules.items.properties.id.enum === knownRuleIdsFor(horizon)", () => {
+Deno.test("buildParameters: rules.items.properties.id.enum === modelRuleIdsFor(ctx), без OKR-TYPE-DECLARED", () => {
   const p12 = buildParameters("block_12m");
   const pq = buildParameters("quarter_3m");
-  assertEquals(p12.properties.rules.items.properties.id.enum, knownRuleIdsFor("block_12m"));
-  assertEquals(pq.properties.rules.items.properties.id.enum, knownRuleIdsFor("quarter_3m"));
+  const pa = buildParameters({ horizon: "block_12m", okr_type: "aspirational" });
+  assertEquals(p12.properties.rules.items.properties.id.enum, modelRuleIdsFor("block_12m"));
+  assertEquals(pq.properties.rules.items.properties.id.enum, modelRuleIdsFor("quarter_3m"));
+  assert(!(p12.properties.rules.items.properties.id.enum as string[]).includes("OKR-TYPE-DECLARED"));
+  assert((pa.properties.rules.items.properties.id.enum as string[]).includes("OBJ-AMBITIOUS"));
 });
 
 
@@ -444,7 +450,7 @@ const rulesWithEvidence = [
   // evidence реально встречается во втором KR
   { id: "KR-OUTCOME", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "NPS вырастет" },
   // evidence выдумана
-  { id: "KR-BASELINE-TARGET", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "несуществующая фраза zzz" },
+  { id: "KR-QUALITY-PAIR", label: "L", reasoning: "", pass: false, hint: "h", severity: "improve", why: "w", evidence: "несуществующая фраза zzz" },
   { id: "KR-MEASURABLE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
   { id: "KR-LEADING", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
 ];
@@ -479,11 +485,12 @@ Deno.test("handler: добавляет grounded=false для pass=false с вы�
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    const r = data.rules.find((x: any) => x.id === "KR-BASELINE-TARGET");
+    // Переписано: KR-BASELINE-TARGET удалён (OKR-PI 3.4), берём KR-QUALITY-PAIR.
+    const r = data.rules.find((x: any) => x.id === "KR-QUALITY-PAIR");
     assertEquals(r.grounded, false);
     assertEquals(r.pass, false, "pass не должен переопределяться");
-    // severity — канонический (KR-BASELINE-TARGET → critical), даже если модель прислала другое
-    assertEquals(r.severity, "critical");
+    // severity — канонический (KR-QUALITY-PAIR → important), даже если модель прислала другое
+    assertEquals(r.severity, "important");
   } finally {
     _restoreFetch();
   }
@@ -667,9 +674,12 @@ Deno.test("buildEditorPrompt содержит инструкцию 'закрой
   assert(p.includes("KR-BASELINE-TARGET"));
 });
 
-Deno.test("buildEditorPrompt для block_12m включает getFewShotBlock (эталон годового горизонта)", () => {
-  const p = buildEditorPrompt("obj", ["kr"], [], "block_12m");
-  assert(/годовой горизонт/i.test(p), "промпт редактора должен включать годовые эталоны");
+// Переписано: эталоны теперь по типу OKR (эталоны банка OKR-PI), а не по горизонту.
+Deno.test("buildEditorPrompt включает эталон банка по типу OKR и указание про формы удержания", () => {
+  const p = buildEditorPrompt("obj", ["kr"], [], "block_12m", { okr_type: "committed" });
+  assert(p.includes("Надёжность в пиковые дни"), "промпт редактора должен включать эталон обязательного OKR");
+  assert(p.includes("глаголы исполнения допустимы"));
+  assert(p.includes("Не заменяй форму удержания порога"));
 });
 
 Deno.test("buildEditorPrompt для quarter_3m включает квартальный эталон (спринт)", () => {
@@ -860,44 +870,73 @@ Deno.test("handler mode=fix: sanitizeRewrittenObjective по-прежнему п
 
 
 
-// --- kr_perspectives: типология KR (AI-Native SAFe) ---
+// --- kr_perspectives: ракурсы К/О/У (OKR-PI 3.3). Переписано: значения переименованы
+// customer_business→К, feasibility_risk→О, learning→У; KR-PERSPECTIVES заменён на KR-REQUIRED-ANGLES.
 
-Deno.test("buildAuditorParameters содержит kr_perspectives с тремя осями в enum", () => {
+Deno.test("buildAuditorParameters содержит kr_perspectives с ракурсами К/О/У (OKR-PI 3.3)", () => {
   for (const h of [undefined, "strategic_3y", "block_12m", "quarter_3m"]) {
-    const p = buildAuditorParameters(h);
-    const kp = p.properties.kr_perspectives;
+    const kp = buildAuditorParameters(h).properties.kr_perspectives;
     assert(kp, `horizon=${h}: kr_perspectives должен присутствовать`);
-    assertEquals(kp.type, "array");
-    assertEquals(kp.items.properties.perspective.enum, [
-      "customer_business",
-      "feasibility_risk",
-      "learning",
-    ]);
+    assertEquals(kp.items.properties.perspective.enum, ["К", "О", "У"]);
     assertEquals((kp.items.required as string[]).sort(), ["index", "perspective", "rationale"]);
   }
 });
 
 Deno.test("buildAuditorParameters: kr_perspectives входит в required верхнего уровня", () => {
   const req = buildAuditorParameters("block_12m").required as string[];
-  assert(req.includes("kr_perspectives"), "kr_perspectives должен быть обязательным полем ответа аудитора");
+  assert(req.includes("kr_perspectives"));
 });
 
-Deno.test("buildAuditorParameters: rules покрывают KR-PERSPECTIVES (enum id и количество)", () => {
+Deno.test("buildAuditorParameters: enum id содержит KR-REQUIRED-ANGLES, KR-QUALITY-PAIR и не содержит KR-PERSPECTIVES", () => {
   for (const h of ["block_12m", "quarter_3m"]) {
-    const p = buildAuditorParameters(h);
-    const ids = p.properties.rules.items.properties.id.enum as string[];
-    assert(ids.includes("KR-PERSPECTIVES"), `horizon=${h}: KR-PERSPECTIVES должен быть в enum id`);
-    assertEquals(p.properties.rules.minItems, knownRuleIdsFor(h).length);
+    const ids = buildAuditorParameters(h).properties.rules.items.properties.id.enum as string[];
+    assert(ids.includes("KR-REQUIRED-ANGLES") && ids.includes("KR-QUALITY-PAIR"));
+    assert(!ids.includes("KR-PERSPECTIVES"));
   }
 });
 
-Deno.test("промпт аудитора описывает три оси и обе функции оси осуществимости", () => {
-  const prompt = buildSystemPrompt("block_12m");
-  for (const axis of ["customer_business", "feasibility_risk", "learning"]) {
-    assert(prompt.includes(axis), `промпт должен называть ось ${axis}`);
+Deno.test("промпт аудитора: определения ракурсов, строки ТИП/СТАТУС, без старой типологии", () => {
+  const prompt = buildSystemPrompt("block_12m", { okr_type: "aspirational", okr_status: "direction" });
+  assert(prompt.includes("[К] клиент и бизнес") && prompt.includes("[О] осуществимость и риски") && prompt.includes("[У] обучение"));
+  assert(prompt.includes("ТИП OKR: амбициозный") && prompt.includes("СТАТУС: направление"));
+  assert(!prompt.includes("ТИПОЛОГИЯ KEY RESULTS"));
+  assert(!prompt.includes("customer_business"));
+});
+
+Deno.test("DOCS_HEADER: документы подаются как контекст организации, а не как правила", () => {
+  assert(DOCS_HEADER.startsWith("КОНТЕКСТ ОРГАНИЗАЦИИ"));
+  assert(DOCS_HEADER.includes("НЕ правила"));
+  assert(!/дополнительные правила/i.test(DOCS_HEADER));
+});
+
+Deno.test("handler: без okr_type сервер добавляет OKR-TYPE-DECLARED pass=false, KR-REQUIRED-ANGLES неприменимо", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([{ ...cleanReport, rules: [...cleanRules, { id: "KR-REQUIRED-ANGLES", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "" }] }]);
+  try {
+    const { data } = await callHandler(handler, baseBody);
+    const t = data.rules.find((x: any) => x.id === "OKR-TYPE-DECLARED");
+    assertEquals(t.pass, false);
+    assert(t.hint.includes("Объявите тип OKR"));
+    const a = data.rules.find((x: any) => x.id === "KR-REQUIRED-ANGLES");
+    assertEquals(a.applicable, false);
+    assertEquals(a.pass, true);
+  } finally {
+    _restoreFetch();
   }
-  assert(/удерживать/i.test(prompt), "промпт должен содержать грамматику контр-метрики");
-  assert(/не сломать/i.test(prompt), "промпт должен содержать функцию защиты критичного");
+});
+
+Deno.test("handler: okr_type=committed+regular → KR-OUTCOME неприменимо, тип объявлен", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([{ ...cleanReport, rules: cleanRules.map((r) => r.id === "KR-OUTCOME" ? { ...r, pass: false } : r) }]);
+  try {
+    const { data } = await callHandler(handler, { ...baseBody, okr_type: "committed", okr_status: "regular" });
+    const o = data.rules.find((x: any) => x.id === "KR-OUTCOME");
+    assertEquals(o.applicable, false);
+    assertEquals(o.pass, true);
+    assertEquals(data.rules.find((x: any) => x.id === "OKR-TYPE-DECLARED").pass, true);
+  } finally {
+    _restoreFetch();
+  }
 });
 
 // --- Облегчённая схема для не-OpenAI моделей ---
@@ -917,4 +956,79 @@ Deno.test("buildParameters(h) по умолчанию (gpt-4o) сохраняе�
   const full = buildParameters("quarter_3m");
   const required = full.properties.rules.items.required as string[];
   assertEquals(required.includes("reasoning"), true);
+});
+
+// --- Эталоны банка OKR-PI (только с RUN_AI) ---
+const ruleOf = (data: any, id: string) => data.rules.find((r: any) => r.id === id);
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 12 «Надёжность в пиковые дни» (committed) — удержание порога проходит",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Клиент не замечает, что сегодня день зарплаты.",
+      key_results: [
+        "Доступность входа, переводов и оплат через ЕРИП в пиковые дни остаётся не ниже 99,9%",
+        "Восстановление после сбоя остаётся не дольше 30 минут",
+        "Частота релизов остаётся не ниже текущей",
+      ],
+      horizon: "block_12m", okr_type: "committed", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-MEASURABLE").pass, true);
+    assertEquals(ruleOf(data, "KR-REQUIRED-ANGLES").pass, true);
+    const o = ruleOf(data, "KR-OUTCOME");
+    assert(o.applicable === false || o.pass === true);
+  },
+});
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 13 «Регуляторные изменения НБРБ» (committed) — KR-OUTCOME неприменимо",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: "Требования регулятора внедряем спокойно и с запасом.",
+      key_results: [
+        "100% регуляторных изменений в проде не позже чем за 10 рабочих дней до срока",
+        "Ёмкость на регуляторику закладывается при планировании PI, без изъятий внутри PI",
+        "Ноль переносов бизнес-обязательств из-за регуляторных авралов",
+      ],
+      horizon: "block_12m", okr_type: "committed", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-OUTCOME").applicable, false);
+  },
+});
+
+const ANTIFRAUD_O = "Клиент защищён от мошенников и не страдает от защиты.";
+const ANTIFRAUD_KR1 = "Потери от мошенничества на 1 млн операций снижены на 30%";
+const ANTIFRAUD_KR3 = "К концу PI на исторических данных проверены две поведенческие модели, известна точность каждой";
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 14 «Антифрод» без пары — KR-QUALITY-PAIR fail, форма обучения валидна",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: ANTIFRAUD_O,
+      key_results: [ANTIFRAUD_KR1, "Новое правило попадает в прод за 4 часа вместо 5 дней", ANTIFRAUD_KR3],
+      horizon: "block_12m", okr_type: "aspirational", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-QUALITY-PAIR").pass, false);
+    assertEquals(ruleOf(data, "KR-MEASURABLE").pass, true);
+  },
+});
+
+Deno.test({
+  name: "validate-okr [AI]: эталон 15 «Антифрод» с парой ложных блокировок — KR-QUALITY-PAIR pass",
+  ignore: !RUN_AI,
+  async fn() {
+    const { status, data } = await callHandler(handler, {
+      objective: ANTIFRAUD_O,
+      key_results: [ANTIFRAUD_KR1, "Доля ложных блокировок с 2% до 0,8%", ANTIFRAUD_KR3],
+      horizon: "block_12m", okr_type: "aspirational", okr_status: "regular",
+    });
+    assertEquals(status, 200);
+    assertEquals(ruleOf(data, "KR-QUALITY-PAIR").pass, true);
+  },
 });

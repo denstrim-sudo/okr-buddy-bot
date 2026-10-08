@@ -333,3 +333,32 @@ describe("replace", () => {
     spy.mockRestore();
   });
 });
+
+describe("useSavedOkrs — тип и статус OKR (OKR-PI)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("save() и replace() сохраняют okrType и okrStatus", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    act(() => { result.current.save("Цель", makePlan(), undefined, { okrType: "committed", okrStatus: "direction" }); });
+    const id = result.current.items[0].id;
+    expect(result.current.items[0].okrType).toBe("committed");
+    expect(result.current.items[0].okrStatus).toBe("direction");
+    act(() => { result.current.replace(id, "Цель", makePlan(), { okrType: "aspirational", okrStatus: "regular" }); });
+    expect(result.current.items[0].okrType).toBe("aspirational");
+    expect(result.current.items[0].okrStatus).toBe("regular");
+  });
+
+  it("старые записи без типа и статуса импортируются и экспортируются без потерь", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    const payload = JSON.stringify({
+      version: "aimbot.savedOkrs.v1",
+      items: [{ id: "old_1", objective: "old", plan: makePlan(), savedAt: new Date().toISOString() }],
+    });
+    let res!: any;
+    act(() => { res = result.current.importJson(payload, "replace"); });
+    expect(res.ok).toBe(true);
+    expect(result.current.items[0].okrType).toBeUndefined();
+    const exported = JSON.parse(result.current.exportJson());
+    expect(exported.items[0].id).toBe("old_1");
+  });
+});

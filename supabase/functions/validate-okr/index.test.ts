@@ -1150,7 +1150,7 @@ Deno.test("промпт аудитора: разметка каждого KR, с
 });
 
 Deno.test("промпт аудитора: ракурс по смыслу, а не по форме, с примером доступности 99,9%", () => {
-  const p = buildAuditorPromptForTest();
+  const p = buildSystemPrompt("block_12m", { okr_type: "aspirational", okr_status: "regular" });
   assert(p.includes("по тому, ЧТО измеряет KR"));
   assert(p.includes("99,9%"));
 });

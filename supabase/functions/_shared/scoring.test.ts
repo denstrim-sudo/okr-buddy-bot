@@ -135,10 +135,11 @@ Deno.test("severityFor: KR-REQUIRED-ANGLES critical для направлени�
   assertEquals(severityFor("KR-REQUIRED-ANGLES", { okr_status: "regular" }), "important");
 });
 
-Deno.test("severityFor: KR-LEADING critical для квартала или направления, иначе important", () => {
+// Переписано: для обычного годового OKR KR-LEADING — рекомендация (improve), а не important.
+Deno.test("severityFor: KR-LEADING critical для квартала или направления, иначе improve", () => {
   assertEquals(severityFor("KR-LEADING", "quarter_3m"), "critical");
   assertEquals(severityFor("KR-LEADING", { horizon: "block_12m", okr_status: "direction" }), "critical");
-  assertEquals(severityFor("KR-LEADING", "block_12m"), "important");
+  assertEquals(severityFor("KR-LEADING", "block_12m"), "improve");
 });
 
 Deno.test("severityFor: остальные правила OKR-PI → important", () => {
@@ -299,8 +300,9 @@ Deno.test("computeLeading: нет leading → fail; есть → pass; непо�
   assertEquals(computeLeading(L(["К", "range", "leading"], ["О", "threshold", "lagging"]), 2, ctx).pass, true);
   assertEquals(computeLeading(L(["К", "range", "leading"]), 2, ctx).unreliable, true);
 });
-Deno.test("ruleApplicability: KR-LEADING только для направления и квартала (OKR-PI 3.4.2)", () => {
-  assertEquals(ruleApplicability("KR-LEADING", { horizon: "block_12m", okr_status: "regular" }), "not_applicable");
+// Переписано: KR-LEADING применяется всегда; строгость зависит от статуса и горизонта.
+Deno.test("ruleApplicability: KR-LEADING применяется всегда (OKR-PI 3.4.2)", () => {
+  assertEquals(ruleApplicability("KR-LEADING", { horizon: "block_12m", okr_status: "regular" }), "applies");
   assertEquals(ruleApplicability("KR-LEADING", { horizon: "quarter_3m" }), "applies");
   assertEquals(ruleApplicability("KR-LEADING", { horizon: "block_12m", okr_status: "direction" }), "applies");
 });
@@ -332,7 +334,32 @@ Deno.test("эталон P4 (committed): бинарный второй KR → KR-
   assertEquals(rule(rules, "KR-MEASURABLE").pass, true);
   assertEquals(rule(rules, "KR-TIMEBOUND").pass, true);
   assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, true);
-  assertEquals(rule(rules, "KR-LEADING").applicable, false);
+  // Переписано: KR-LEADING теперь применим — рекомендация improve для обычного годового.
+  assertEquals(rule(rules, "KR-LEADING").applicable, true);
+  assertEquals(rule(rules, "KR-LEADING").severity, "improve");
+});
+const P3_KRS = ["Доля клиентов с операцией в первый день с 35% до 60%", "NPS онбординга с 20 до 40", "Отток в первый месяц остаётся ниже 8%"];
+const P3_LABELS = () => L(["К", "range", "lagging"], ["К", "range", "lagging"], ["О", "threshold", "lagging"]);
+Deno.test("KR-LEADING: P3 обычный годовой без опережающих → fail, improve, рекомендация", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" } as any;
+  const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
+  assertEquals(r.pass, false);
+  assertEquals(r.applicable, true);
+  assertEquals(r.severity, "improve");
+  assert(r.hint.startsWith("Рекомендация: добавьте опережающий KR"));
+});
+Deno.test("KR-LEADING: тот же набор со статусом direction → fail, critical", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "direction", horizon: "block_12m" } as any;
+  const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
+  assertEquals(r.pass, false);
+  assertEquals(r.severity, "critical");
+  assert(r.hint.startsWith("Все KR запаздывающие"));
+});
+Deno.test("KR-LEADING: квартальный горизонт → fail, critical", () => {
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "quarter_3m" } as any;
+  const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
+  assertEquals(r.pass, false);
+  assertEquals(r.severity, "critical");
 });
 Deno.test("эталон N6: «Провести исследование…» unmeasurable → KR-MEASURABLE fail", () => {
   const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
@@ -370,7 +397,7 @@ Deno.test("эталон N3: OBJ-NO-NUMBERS fail", () => {
   assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, false);
 });
 Deno.test("addServerRules: вердикты модели по серверным правилам отбрасываются", () => {
-  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" } as any;
   const rules = addServerRules([{ id: "OBJ-NO-NUMBERS", pass: false, evidence: "x" }, { id: "OBJ-QUALITATIVE", pass: true }],
     ["a", "b", "c"], [], ctx, "Цель без цифр");
   assertEquals(rules.filter((r: any) => r.id === "OBJ-NO-NUMBERS").length, 1);

@@ -99,7 +99,8 @@ export function severityFor(ruleId: string, ctxOrHorizon?: string | RuleCtx): Ru
   const ctx = toCtx(ctxOrHorizon);
   if (ruleId === "KR-REQUIRED-ANGLES") return ctx.okr_status === "direction" ? "critical" : "important";
   if (ruleId === "KR-LEADING") {
-    return ctx.horizon === "quarter_3m" || ctx.okr_status === "direction" ? "critical" : "important";
+    // OKR-PI 3.4.2: обязателен для направления и квартала; для обычного годового — рекомендация.
+    return ctx.horizon === "quarter_3m" || ctx.okr_status === "direction" ? "critical" : "improve";
   }
   return SEVERITY_BY_RULE_ID[ruleId] ?? "improve";
 }
@@ -269,10 +270,16 @@ export function computeTimebound(labels: unknown, krCount: number, ctxOrHorizon?
 }
 
 /** OKR-PI 3.4.2: хотя бы один опережающий KR (применимость — ruleApplicability). */
-export function computeLeading(labels: unknown, krCount: number, _ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+export const LEADING_RECOMMENDATION_HINT =
+  "Рекомендация: добавьте опережающий KR, чтобы видеть движение чаще, чем раз в год, например ежемесячно или по каждому PI";
+export function computeLeading(labels: unknown, krCount: number, ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const ctx = toCtx(ctxOrHorizon);
   const timings = labelsByIndex(labels, krCount, "timing");
   if (!timings) return UNRELIABLE("опережающие/запаздывающие");
   if ([...timings.values()].includes("leading")) return { pass: true, hint: "", evidence: "" };
+  if (ctx.okr_status !== "direction" && ctx.horizon !== "quarter_3m") {
+    return { pass: false, evidence: "", hint: LEADING_RECOMMENDATION_HINT };
+  }
   return { pass: false, evidence: "", hint: "Все KR запаздывающие. Добавьте опережающий KR, который сдвигается раньше результата и позволяет скорректироваться внутри периода" };
 }
 
@@ -350,8 +357,6 @@ export function ruleApplicability(id: string, ctxOrHorizon?: string | RuleCtx): 
   const ctx = toCtx(ctxOrHorizon);
   if (id === "KR-REQUIRED-ANGLES" && ctx.okr_type === undefined) return "not_applicable";
   if (id === "KR-OUTCOME" && ctx.okr_type === "committed" && ctx.okr_status === "regular") return "not_applicable";
-  // OKR-PI 3.4.2: опережающий KR обязателен для направления; для квартала — правило помощника.
-  if (id === "KR-LEADING" && ctx.okr_status !== "direction" && ctx.horizon !== "quarter_3m") return "not_applicable";
   return "applies";
 }
 

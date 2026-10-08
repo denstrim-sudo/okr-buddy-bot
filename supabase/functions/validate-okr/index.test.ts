@@ -550,7 +550,8 @@ Deno.test("handler: pass=true правила получают grounded=true ав
 
 // --- handler: серверное переопределение severity по канонической таблице ---
 
-Deno.test("handler: KR-LEADING c severity='critical' от модели для block_12m → серверно исправлен на 'important'", async () => {
+// Переписано: для обычного годового канон KR-LEADING — improve (рекомендация).
+Deno.test("handler: KR-LEADING c severity='critical' от модели для block_12m → серверно исправлен на 'improve'", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const rulesModelWrongSeverity = [
     { id: "OBJ-QUALITATIVE", label: "L", reasoning: "", pass: true, hint: "", severity: "improve", why: "", evidence: "" },
@@ -563,7 +564,7 @@ Deno.test("handler: KR-LEADING c severity='critical' от модели для bl
   try {
     const { data } = await callHandler(handler, { ...baseBody, horizon: "block_12m" });
     const kr = data.rules.find((x: any) => x.id === "KR-LEADING");
-    assertEquals(kr.severity, "important", "severity KR-LEADING должна быть серверно исправлена на important");
+    assertEquals(kr.severity, "improve", "severity KR-LEADING должна быть серверно исправлена на improve");
     // OBJ-NO-NUMBERS canonical = critical → должен быть переопределён из improve в critical
     const noNums = data.rules.find((x: any) => x.id === "OBJ-NO-NUMBERS");
     assertEquals(noNums.severity, "critical");
@@ -1146,4 +1147,10 @@ Deno.test("промпт аудитора: разметка каждого KR, с
   for (const id of ["OBJ-QUALITATIVE", "OBJ-AMBITIOUS", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "Q-REACH"]) {
     assert(p.includes(`- ${id} [`), id);
   }
+});
+
+Deno.test("промпт аудитора: ракурс по смыслу, а не по форме, с примером доступности 99,9%", () => {
+  const p = buildSystemPrompt("block_12m", { okr_type: "aspirational", okr_status: "regular" });
+  assert(p.includes("по тому, ЧТО измеряет KR"));
+  assert(p.includes("99,9%"));
 });

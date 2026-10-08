@@ -81,3 +81,11 @@ describe("RuleList — провал без цитаты (unconfirmed)", () => {
     expect(screen.queryByText("Важно")).not.toBeInTheDocument();
   });
 });
+
+describe("RuleList — неполная разметка ракурсов (unreliable)", () => {
+  it("KR-REQUIRED-ANGLES с unreliable показывает жёлтую пометку", () => {
+    renderWithProviders(<RuleList rules={[baseRule({ id: "KR-REQUIRED-ANGLES", unreliable: true, hint: "" })]} />);
+    expect(screen.getByTestId("rule-unreliable-KR-REQUIRED-ANGLES")).toBeInTheDocument();
+    expect(screen.getByText(/разметка ракурсов неполная/i)).toBeInTheDocument();
+  });
+});

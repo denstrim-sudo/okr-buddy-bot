@@ -109,10 +109,13 @@ Deno.test("knownRuleIdsFor не содержит удалённых и стар�
   }
 });
 
-Deno.test("modelRuleIdsFor: без OKR-TYPE-DECLARED (его считает сервер)", () => {
+// Переписано: модель больше не оценивает KR-COUNT и KR-REQUIRED-ANGLES — их считает сервер.
+Deno.test("modelRuleIdsFor: без серверных OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES", () => {
   const ids = modelRuleIdsFor("block_12m");
-  assert(!ids.includes("OKR-TYPE-DECLARED"));
-  assertEquals(ids.length, BASE_IDS.length - 1);
+  for (const id of ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES"]) assert(!ids.includes(id), id);
+  assertEquals(ids.length, BASE_IDS.length - 3);
+  const known = knownRuleIdsFor("block_12m");
+  assert(known.includes("KR-COUNT") && known.includes("KR-REQUIRED-ANGLES"));
 });
 
 // --- severityFor ---
@@ -188,4 +191,70 @@ Deno.test("applyRuleContext: провал KR-OUTCOME при committed+regular н
   assertEquals(outcome.applicable, false);
   assertEquals(outcome.pass, true);
   assertEquals(recomputeScore(withFail), recomputeScore(withPass));
+});
+
+// --- Правила отсутствия и серверные правила ---
+import { RULE_EVIDENCE_KIND, computeKrCount, computeRequiredAngles, addServerRules } from "./scoring.ts";
+
+Deno.test("RULE_EVIDENCE_KIND: server / absence / quote", () => {
+  for (const id of ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES"]) assertEquals(RULE_EVIDENCE_KIND[id], "server");
+  assertEquals(RULE_EVIDENCE_KIND["KR-LEADING"], "absence");
+  for (const id of ["OBJ-NO-NUMBERS", "KR-MEASURABLE", "KR-QUALITY-PAIR"]) assertEquals(RULE_EVIDENCE_KIND[id], "quote");
+});
+
+const kr = (n: number) => Array.from({ length: n }, (_, i) => `KR ${i}`);
+Deno.test("computeKrCount: regular 6 → fail с подсказкой про перечень работ", () => {
+  const r = computeKrCount(kr(6), { okr_status: "regular" });
+  assertEquals(r.pass, false);
+  assert(r.hint.includes("от 3 до 5 KR, сейчас 6"));
+  assert(r.hint.includes("перечень работ"));
+});
+Deno.test("computeKrCount: regular 3 → pass; пустые KR не считаются", () => {
+  assertEquals(computeKrCount([...kr(3), "  "], { okr_status: "regular" }).pass, true);
+});
+Deno.test("computeKrCount: direction 5 → fail, direction 2 → pass", () => {
+  assertEquals(computeKrCount(kr(5), { okr_status: "direction" }).pass, false);
+  assertEquals(computeKrCount(kr(2), { okr_status: "direction" }).pass, true);
+});
+
+const P = (...a: string[]) => a.map((perspective, index) => ({ index, perspective }));
+Deno.test("computeRequiredAngles: aspirational К,К,О → fail, missing У", () => {
+  const r = computeRequiredAngles(P("К", "К", "О"), 3, { okr_type: "aspirational" });
+  assertEquals(r.pass, false);
+  assertEquals(r.missing, ["У"]);
+  assert(r.hint.includes("[У]"));
+});
+Deno.test("computeRequiredAngles: aspirational К,О,У → pass", () => {
+  assertEquals(computeRequiredAngles(P("К", "О", "У"), 3, { okr_type: "aspirational" }).pass, true);
+});
+Deno.test("computeRequiredAngles: committed К,О,О → pass (эталон «Надёжность в пиковые дни»)", () => {
+  assertEquals(computeRequiredAngles(P("К", "О", "О"), 3, { okr_type: "committed" }).pass, true);
+});
+Deno.test("computeRequiredAngles: mixed К,У → pass; К,К → fail «О или У»", () => {
+  assertEquals(computeRequiredAngles(P("К", "У"), 2, { okr_type: "mixed" }).pass, true);
+  const r = computeRequiredAngles(P("К", "К"), 2, { okr_type: "mixed" });
+  assertEquals(r.pass, false);
+  assertEquals(r.missing, ["О или У"]);
+});
+Deno.test("computeRequiredAngles: разметка неполная (3 из 4) → unreliable", () => {
+  const r = computeRequiredAngles(P("К", "К", "О"), 4, { okr_type: "committed" });
+  assertEquals(r.unreliable, true);
+  assertEquals(r.pass, false);
+});
+Deno.test("computeRequiredAngles: тип не объявлен → applicable=false", () => {
+  assertEquals(computeRequiredAngles(P("К"), 1, {}).applicable, false);
+});
+Deno.test("recomputeScore: unreliable правило не входит в оценку", () => {
+  const base = [{ id: "A", pass: true, severity: "critical" as const }];
+  assertEquals(
+    recomputeScore([...base, { id: "KR-REQUIRED-ANGLES", pass: false, severity: "important", unreliable: true }]),
+    recomputeScore(base),
+  );
+});
+Deno.test("интеграция: амбициозный OKR без [У] получает оценку ниже, чем с [У]", () => {
+  const ctx = { okr_type: "aspirational" as const, okr_status: "regular" as const, horizon: "block_12m" };
+  const modelRules = ["OBJ-NO-NUMBERS", "OBJ-QUALITATIVE", "OBJ-AMBITIOUS", "KR-MEASURABLE", "KR-OUTCOME", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "KR-LEADING", "KR-TIMEBOUND"]
+    .map((id) => ({ id, pass: true }));
+  const score = (p: unknown) => recomputeScore(applyRuleContext(addServerRules(modelRules, kr(3), p, ctx), ctx));
+  assert(score(P("К", "К", "О")) < score(P("К", "К", "У")));
 });

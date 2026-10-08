@@ -20,6 +20,8 @@ export interface ScoringRule {
   applicable?: boolean;
   /** true — провал без цитаты: показывается, но в score не учитывается. */
   unconfirmed?: boolean;
+  /** true — сервер не смог надёжно проверить правило; в score не учитывается. */
+  unreliable?: boolean;
 }
 
 export function normalizeOkrType(v: unknown): OkrType | undefined {
@@ -55,7 +57,7 @@ export function recomputeScore(rules: ScoringRule[]): number {
   let passedWeight = 0;
   let hasCriticalFail = false;
   for (const r of rules) {
-    if (r.applicable === false || r.unconfirmed === true) continue;
+    if (r.applicable === false || r.unconfirmed === true || r.unreliable === true) continue;
     const w = weightOf(r.severity);
     totalWeight += w;
     if (r.pass) passedWeight += w;
@@ -123,7 +125,104 @@ export function knownRuleIdsFor(ctxOrHorizon?: string | RuleCtx): string[] {
 
 /** Правила, которые оценивает модель (без серверного OKR-TYPE-DECLARED). */
 export function modelRuleIdsFor(ctxOrHorizon?: string | RuleCtx): string[] {
-  return knownRuleIdsFor(ctxOrHorizon).filter((id) => id !== "OKR-TYPE-DECLARED");
+  return knownRuleIdsFor(ctxOrHorizon).filter((id) => RULE_EVIDENCE_KIND[id] !== "server");
+}
+
+/**
+ * Вид доказательства провала: quote — дословная цитата из OKR;
+ * absence — провал означает отсутствие нужного KR (цитировать нечего);
+ * server — правило считает сервер.
+ */
+export type EvidenceKind = "quote" | "absence" | "server";
+export const RULE_EVIDENCE_KIND: Record<string, EvidenceKind> = {
+  "OKR-TYPE-DECLARED": "server",
+  "KR-COUNT": "server",
+  "KR-REQUIRED-ANGLES": "server",
+  "KR-LEADING": "absence",
+  "OBJ-NO-NUMBERS": "quote",
+  "OBJ-QUALITATIVE": "quote",
+  "OBJ-AMBITIOUS": "quote",
+  "KR-MEASURABLE": "quote",
+  "KR-OUTCOME": "quote",
+  "KR-QUALITY-PAIR": "quote",
+  "KR-LEARNING-FORM": "quote",
+  "KR-TIMEBOUND": "quote",
+  "Q-REACH": "quote",
+};
+export function evidenceKindOf(id: string): EvidenceKind {
+  return RULE_EVIDENCE_KIND[id] ?? "quote";
+}
+
+/** OKR-PI 3.4.1: число непустых KR в диапазоне статуса. */
+export function computeKrCount(krTexts: string[], ctxOrHorizon?: string | RuleCtx): { pass: boolean; hint: string; evidence: string } {
+  const ctx = toCtx(ctxOrHorizon);
+  const k = (Array.isArray(krTexts) ? krTexts : []).filter((t) => String(t ?? "").trim().length > 0).length;
+  const [min, max] = ctx.okr_status === "direction" ? [2, 4] : [3, 5];
+  if (k >= min && k <= max) return { pass: true, hint: "", evidence: "" };
+  const who = ctx.okr_status === "direction" ? "направления" : "обычного OKR";
+  let hint = `Для ${who} нужно от ${min} до ${max} KR, сейчас ${k}`;
+  if (k > max) hint += ". Пятый и далее — признак того, что в набор попал перечень работ (OKR-PI 3.4.1)";
+  return { pass: false, hint, evidence: "" };
+}
+
+export type AngleMark = "К" | "О" | "У";
+const ANGLE_HINT: Record<string, string> = {
+  "К": "Не хватает ракурса [К] — результат для клиента и банка: «с X до Y»",
+  "О": "Не хватает ракурса [О] — удержание порога: «остаётся выше/ниже X»",
+  "У": "Не хватает ракурса [У] — обучение: «К [дата] известно, [что], с порогом [какой]»",
+  "О или У": "Не хватает ракурса [О] или [У] — удержание порога «остаётся выше/ниже X» или обучение «К [дата] известно, [что], с порогом [какой]»",
+};
+
+/** OKR-PI 3.3: обязательные ракурсы по разметке kr_perspectives от модели. */
+export function computeRequiredAngles(
+  perspectives: unknown,
+  krCount: number,
+  ctxOrHorizon?: string | RuleCtx,
+): { pass: boolean; applicable: boolean; missing: string[]; hint: string; unreliable?: boolean } {
+  const ctx = toCtx(ctxOrHorizon);
+  if (ctx.okr_type === undefined) return { pass: true, applicable: false, missing: [], hint: "" };
+  const list = (Array.isArray(perspectives) ? perspectives : []) as Array<{ index?: number; perspective?: string }>;
+  const byIndex = new Map<number, string>();
+  list.forEach((p, i) => {
+    if (p && (p.perspective === "К" || p.perspective === "О" || p.perspective === "У")) {
+      byIndex.set(typeof p.index === "number" ? p.index : i, p.perspective);
+    }
+  });
+  if (byIndex.size === 0 || byIndex.size < krCount) {
+    return { pass: false, applicable: true, missing: [], unreliable: true, hint: "Не удалось разметить ракурсы всех KR — проверьте вручную" };
+  }
+  const has = new Set(byIndex.values());
+  const missing: string[] = [];
+  if (ctx.okr_type === "aspirational") { for (const a of ["К", "У"]) if (!has.has(a)) missing.push(a); }
+  else if (ctx.okr_type === "committed") { for (const a of ["К", "О"]) if (!has.has(a)) missing.push(a); }
+  else {
+    if (!has.has("К")) missing.push("К");
+    if (!has.has("О") && !has.has("У")) missing.push("О или У");
+  }
+  return { pass: missing.length === 0, applicable: true, missing, hint: missing.map((m) => ANGLE_HINT[m]).join(". ") };
+}
+
+/** Серверные правила KR-COUNT и KR-REQUIRED-ANGLES вместо вердиктов модели. */
+// deno-lint-ignore no-explicit-any
+export function addServerRules(rules: any[], krTexts: string[], perspectives: unknown, ctxOrHorizon?: string | RuleCtx): any[] {
+  const ctx = toCtx(ctxOrHorizon);
+  const list = (Array.isArray(rules) ? rules : []).filter((r) => r?.id !== "KR-COUNT" && r?.id !== "KR-REQUIRED-ANGLES");
+  const krCount = (krTexts ?? []).filter((t) => String(t ?? "").trim()).length;
+  const c = computeKrCount(krTexts, ctx);
+  const a = computeRequiredAngles(perspectives, krCount, ctx);
+  list.push({
+    id: "KR-COUNT", label: "Число KR в допустимом диапазоне", pass: c.pass, hint: c.hint, evidence: "",
+    severity: severityFor("KR-COUNT", ctx), why: c.pass ? "" : "Слишком много или мало KR размывает фокус.",
+    reasoning: "Проверяется сервером по числу KR.",
+  });
+  list.push({
+    id: "KR-REQUIRED-ANGLES", label: "Обязательные ракурсы KR", pass: a.pass, hint: a.hint, evidence: "",
+    severity: severityFor("KR-REQUIRED-ANGLES", ctx), missing: a.missing,
+    ...(a.unreliable ? { unreliable: true } : {}),
+    why: a.pass ? "" : "Без обязательных ракурсов рост достигается за счёт клиента, риска или без проверки гипотез.",
+    reasoning: "Проверяется сервером по разметке ракурсов kr_perspectives.",
+  });
+  return list;
 }
 
 /**

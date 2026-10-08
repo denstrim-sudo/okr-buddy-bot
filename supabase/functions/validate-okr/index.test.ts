@@ -451,7 +451,7 @@ Deno.test("buildParameters(undefined).rules.items.required включает 'evi
   assert(required.includes("evidence"), `required=${JSON.stringify(required)}`);
 });
 
-// Переписано (OKR-PI): в схеме модели нет OKR-TYPE-DECLARED — его считает сервер.
+// Переписано (OKR-PI): в схеме модели нет OKR-TYPE-DECLARED, KR-COUNT и KR-REQUIRED-ANGLES — их считает сервер (было 10/10/11).
 Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).length", () => {
   const p12 = buildParameters("block_12m");
   const p3y = buildParameters("strategic_3y");
@@ -461,9 +461,9 @@ Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).l
   assertEquals(p12.properties.rules.maxItems, modelRuleIdsFor("block_12m").length);
   assertEquals(pq.properties.rules.minItems, modelRuleIdsFor("quarter_3m").length);
   assertEquals(pq.properties.rules.maxItems, modelRuleIdsFor("quarter_3m").length);
-  assertEquals(p3y.properties.rules.minItems, 10);
-  assertEquals(pDefault.properties.rules.minItems, 10);
-  assertEquals(pq.properties.rules.minItems, 11);
+  assertEquals(p3y.properties.rules.minItems, 8);
+  assertEquals(pDefault.properties.rules.minItems, 8);
+  assertEquals(pq.properties.rules.minItems, 9);
 });
 
 Deno.test("buildParameters: rules.items.properties.id.enum === modelRuleIdsFor(ctx), без OKR-TYPE-DECLARED", () => {

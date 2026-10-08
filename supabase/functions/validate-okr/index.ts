@@ -1,20 +1,33 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
-import { getRulesBlock, getFewShotBlock } from "../_shared/okr_rules.ts";
+import { getRulesBlock, getFewShotBlock, ANGLES_DEFINITION, okrTypeLabel, okrStatusLabel } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
-import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
+import {
+  recomputeScore, scoreDiscrepancy, severityFor, modelRuleIdsFor, applyRuleContext, toCtx,
+  normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
+} from "../_shared/scoring.ts";
 
-export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach auditing an OKR using John Doerr's methodology and the OKR-PI framework.
+export const DOCS_HEADER = "КОНТЕКСТ ОРГАНИЗАЦИИ (факты и термины, НЕ правила; при расхождении приоритет у канонических правил выше):";
 
-HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (с overrides KR-LEADING→critical и доп. правилами Q-FOCUS, Q-THEME, Q-REACH)." : ""}
+function withHorizon(horizon: string, ctx?: RuleCtx): RuleCtx {
+  return { ...(ctx ?? {}), horizon };
+}
+
+export const buildSystemPrompt = (horizon: string, ctxIn?: RuleCtx) => {
+  const ctx = toCtx(withHorizon(horizon, ctxIn));
+  return `You are an expert OKR Coach auditing an OKR using the bank OKR-PI methodology.
+
+HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (KR-LEADING→critical и доп. правило Q-REACH)." : ""}
+ТИП OKR: ${okrTypeLabel(ctx.okr_type)}
+СТАТУС: ${okrStatusLabel(ctx.okr_status)}
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 
-${getRulesBlock(horizon)}
+${getRulesBlock(ctx)}
 
 ЭТАЛОНЫ (сравнивай формулировки с этими образцами, а не с абстрактным определением):
 
-${getFewShotBlock(horizon)}
+${getFewShotBlock(ctx)}
 
 For EACH rule you MUST return:
 - "reasoning": СНАЧАЛА рассуждение (2-4 предложения на русском): к какому типу относится KR (outcome/activity, leading/lagging), сверка с ЭТАЛОНОМ выше (какой образец ближе — плохой или отличный и почему), и ТОЛЬКО потом вывод. Заполняется ДО pass. Не выноси вердикт до рассуждения.
@@ -30,16 +43,14 @@ For EACH rule you MUST return:
 
 ТЫ — АУДИТОР. Твоя работа — только вердикты по правилам. НЕ переписывай OKR: переписыванием занимается отдельный проход (РЕДАКТОР).
 
-ТИПОЛОГИЯ KEY RESULTS (три точки зрения, AI-Native SAFe) — заполни поле kr_perspectives:
-- "customer_business" — КЛИЕНТ И БИЗНЕС: приносит ли результат пользу клиенту, который его получает, и бизнесу, который от него зависит. Опережающие сигналы реакции клиентов + запаздывающие показатели прибыли, удержания, влияния. Пример: «Увеличить долю подходящих заказов, выполняемых автономно, с 40% до 70%».
-- "feasibility_risk" — ОСУЩЕСТВИМОСТЬ И РИСКИ, две функции: (а) осуществимость — «подтвердить/получить/доказать, что ... возможно», ранние доказательства жизнеспособности подхода (пример: «Получить нормативное одобрение на всех трёх рынках до запуска»); (б) защита критичного («не сломать») — контр-метрика «удерживать X ниже/выше границы по мере того, как растёт основное» (пример: «Удерживать долю неудачно выполненных заказов ниже 1% по мере удвоения ежедневного объёма»). Оба типа опережают результат.
-- "learning" — ОБУЧЕНИЕ И РАЗВИТИЕ: чему организация научится, добиваясь результата. Тоже опережающие: что показал прототип, что исключил эксперимент, что выявило тестирование на рынке. Пример: «Подтвердить три типа заказов, которые клиенты больше всего хотят автоматизировать».
+${ANGLES_DEFINITION}
 
-Классифицируй КАЖДЫЙ Key Result по одной, наиболее подходящей оси (index — 0-based позиция KR). rationale — одно короткое предложение, почему именно эта ось. Соотношение зависит от горизонта: в годовом наборе балансируются опережающие и запаздывающие, в квартальном предпочтительны опережающие. Это подсказка для расширения мышления, а не требование заполнить все три оси.
+Заполни поле kr_perspectives: отнеси КАЖДЫЙ Key Result к одному ракурсу — "К", "О" или "У" (index — 0-based позиция KR). rationale — одно короткое предложение, почему именно этот ракурс. Правило OKR-TYPE-DECLARED НЕ оценивай — его проверяет сервер.
 
 Return STRICT JSON only via the provided tool.
 
 IMPORTANT: All text fields (label, hint, why, reasoning, summary, suggestion) MUST be in RUSSIAN. Rule ids and enum values stay English.`;
+};
 
 /**
  * Схема РЕДАКТОРА. Второй проход: на входе — OKR + результаты аудита,
@@ -75,7 +86,9 @@ export function buildEditorPrompt(
   keyResults: string[],
   failedRules: Array<{ id: string; label?: string; hint?: string; why?: string; reasoning?: string }>,
   horizon: string,
+  ctxIn?: RuleCtx,
 ): string {
+  const ctx = toCtx(withHorizon(horizon, ctxIn));
   const failedBlock = failedRules.length
     ? failedRules
         .map((r, i) => {
@@ -97,10 +110,12 @@ export function buildEditorPrompt(
 5. ОПОРА НА ЭТАЛОНЫ: сверяйся с образцами ниже, но не копируй их дословно — адаптируй под смысл конкретного KR.
 
 ГОРИЗОНТ: ${horizon}
+ТИП OKR: ${okrTypeLabel(ctx.okr_type)}. СТАТУС: ${okrStatusLabel(ctx.okr_status)}.
+Для обязательных OKR глаголы исполнения допустимы. Не заменяй форму удержания порога на «с X до Y».
 
 ЭТАЛОНЫ (используй как образец качества переписывания):
 
-${getFewShotBlock(horizon)}
+${getFewShotBlock(ctx)}
 
 ИСХОДНЫЙ OBJECTIVE: ${objective}
 
@@ -131,8 +146,8 @@ Return STRICT JSON only via the provided tool.`;
  * Используется для не-OpenAI моделей: генерация reasoning на каждое правило
  * занимает у них в разы больше времени и упирается в дедлайн запроса.
  */
-export function buildAuditorParameters(horizon?: string, opts: { lite?: boolean } = {}) {
-  const ids = knownRuleIdsFor(horizon);
+export function buildAuditorParameters(horizonOrCtx?: string | RuleCtx, opts: { lite?: boolean } = {}) {
+  const ids = modelRuleIdsFor(horizonOrCtx);
   const lite = opts.lite === true;
   // deno-lint-ignore no-explicit-any
   const ruleProps: Record<string, any> = {
@@ -175,13 +190,13 @@ export function buildAuditorParameters(horizon?: string, opts: { lite?: boolean 
       },
       kr_perspectives: {
         type: "array",
-        description: "Классификация КАЖДОГО Key Result по одной наиболее подходящей точке зрения (AI-Native SAFe). Порядок — как в исходном списке KR.",
+        description: "Ракурс КАЖДОГО Key Result (OKR-PI 3.3): К — клиент и бизнес, О — осуществимость и риски, У — обучение. Порядок — как в исходном списке KR.",
         items: {
           type: "object",
           properties: {
             index: { type: "number", description: "0-based индекс Key Result в исходном списке." },
-            perspective: { type: "string", enum: ["customer_business", "feasibility_risk", "learning"] },
-            rationale: { type: "string", description: "Одно короткое предложение на русском: почему именно эта ось." },
+            perspective: { type: "string", enum: ["К", "О", "У"] },
+            rationale: { type: "string", description: "Одно короткое предложение на русском: почему именно этот ракурс." },
           },
           required: ["index", "perspective", "rationale"],
           additionalProperties: false,
@@ -245,6 +260,7 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
   const normalized: ScoringRule[] = data.rules.map((r: any) => ({
     id: typeof r?.id === "string" ? r.id : undefined,
     pass: Boolean(r?.pass),
+    applicable: r?.applicable === false ? false : undefined,
     severity: r?.severity === "critical" || r?.severity === "important" || r?.severity === "improve"
       ? r.severity
       : (typeof r?.id === "string" ? severityFor(r.id, horizon) : "improve"),
@@ -273,7 +289,7 @@ export function isAuditSuspicious(data: any): boolean {
 // ---------------------------------------------------------------------------
 
 async function runFixMode(req: Request, body: any): Promise<Response> {
-  const { objective, key_results, failed_rules, horizon, extra_context, model } = body;
+  const { objective, key_results, failed_rules, horizon, extra_context, model, okr_type, okr_status } = body;
   if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
     return errorJson("Objective is required (min 3 chars)", 400);
   }
@@ -284,10 +300,12 @@ async function runFixMode(req: Request, body: any): Promise<Response> {
   const krTexts = (key_results as string[]).map((t) => String(t));
   const failed = Array.isArray(failed_rules) ? failed_rules : [];
 
-  const systemPrompt = buildEditorPrompt(String(objective), krTexts, failed, h);
+  const systemPrompt = buildEditorPrompt(String(objective), krTexts, failed, h, {
+    okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status),
+  });
   const extraBlock = buildExtraBlock(
     extra_context,
-    "ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ (учти при переписывании):",
+    DOCS_HEADER,
   );
   const userPrompt = `Перепиши OKR по правилам выше.${extraBlock}`;
   const modelArg = typeof model === "string" && model ? model : undefined;
@@ -340,7 +358,7 @@ export const handler = async (req: Request) => {
     }
 
     // === mode = "audit" (дефолт) ===
-    const { objective, key_results, key_results_full, horizon, extra_context, model } = body;
+    const { objective, key_results, key_results_full, horizon, extra_context, model, okr_type, okr_status } = body;
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -348,6 +366,8 @@ export const handler = async (req: Request) => {
       return errorJson("At least one Key Result is required", 400);
     }
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
+
+    const ctx: RuleCtx = { horizon: h, okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status) };
 
     const enriched = Array.isArray(key_results_full) && key_results_full.length
       ? key_results_full
@@ -369,17 +389,17 @@ export const handler = async (req: Request) => {
 
     const extraBlock = buildExtraBlock(
       extra_context,
-      "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (используй как дополнительные правила и контекст при аудите):",
+      DOCS_HEADER,
     );
     const userPrompt = `OBJECTIVE: ${objective.trim()}\n\nKEY RESULTS (с метаданными baseline/target/metric/type, если есть):\n${krList}${extraBlock}\n\nAudit this OKR and return per-rule findings, overall score (0-100), summary. Переписывание OKR НЕ входит в твою задачу — этим займётся отдельный проход РЕДАКТОРА.`;
 
-    const systemPrompt = buildSystemPrompt(h);
+    const systemPrompt = buildSystemPrompt(h, ctx);
     const modelArg = typeof model === "string" && model ? model : undefined;
 
     // Полная схема (с reasoning на каждое правило) для ВСЕХ моделей — качество
     // аудита важнее скорости. Бюджет времени в _shared/ai.ts рассчитан на то,
     // что не-OpenAI модели генерируют её 30-60с.
-    const params = buildAuditorParameters(h);
+    const params = buildAuditorParameters(ctx);
 
     const first = await callAITool({
       systemPrompt,
@@ -435,10 +455,8 @@ export const handler = async (req: Request) => {
     // severityFor(id, horizon), а не то, что вернула модель. Делаем ДО
     // applyScoreRecompute, чтобы пересчёт шёл по каноническим весам.
     if (Array.isArray(finalData.rules)) {
-      finalData.rules = finalData.rules.map((r: any) => ({
-        ...r,
-        severity: severityFor(r?.id, h),
-      }));
+      // Каноническая severity, применимость (OKR-PI 3.4.8) и серверное OKR-TYPE-DECLARED.
+      finalData.rules = applyRuleContext(finalData.rules, ctx);
     }
 
     applyScoreRecompute(finalData, h);
@@ -457,7 +475,8 @@ export const handler = async (req: Request) => {
     if (Array.isArray(finalData.rules)) {
       finalData.rules = finalData.rules.map((r: any) => ({
         ...r,
-        grounded: isGrounded(r, objectiveText, krHaystack),
+        // OKR-TYPE-DECLARED считает сервер — цитата не нужна.
+        grounded: r?.id === "OKR-TYPE-DECLARED" ? true : isGrounded(r, objectiveText, krHaystack),
       }));
     }
 

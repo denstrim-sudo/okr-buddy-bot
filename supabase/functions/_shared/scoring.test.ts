@@ -397,7 +397,7 @@ Deno.test("эталон N3: OBJ-NO-NUMBERS fail", () => {
   assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, false);
 });
 Deno.test("addServerRules: вердикты модели по серверным правилам отбрасываются", () => {
-  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" };
+  const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "block_12m" } as any;
   const rules = addServerRules([{ id: "OBJ-NO-NUMBERS", pass: false, evidence: "x" }, { id: "OBJ-QUALITATIVE", pass: true }],
     ["a", "b", "c"], [], ctx, "Цель без цифр");
   assertEquals(rules.filter((r: any) => r.id === "OBJ-NO-NUMBERS").length, 1);

@@ -137,8 +137,8 @@ describe("OkrValidator (Module 2)", () => {
     await userEvent.click(quarter);
     expect(quarter.className).toMatch(/border-primary/);
     expect(screen.getByText(/квартальный набор правил/i)).toBeInTheDocument();
-    expect(screen.getByText(/Q-FOCUS/)).toBeInTheDocument();
-    expect(screen.getByText(/Q-THEME/)).toBeInTheDocument();
+    // Переписано (OKR-PI 3.4): Q-FOCUS и Q-THEME удалены, остаётся Q-REACH.
+    expect(screen.queryByText(/Q-FOCUS/)).toBeNull();
     expect(screen.getByText(/Q-REACH/)).toBeInTheDocument();
   });
 
@@ -370,5 +370,27 @@ describe("renderWithPlaceholders (unit)", () => {
     const { container } = render(<div>{renderWithPlaceholders("XML и YAML не должны триггериться")}</div>);
     expect(container.querySelectorAll('[data-testid="placeholder-xy"]').length).toBe(0);
   });
-});
 
+  it("передаёт выбранные тип и статус OKR в validate-okr; без выбора тип не передаётся", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Стать лидером", key_results: ["Поднять X с 30 до 50"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.okr_type).toBeUndefined();
+    expect(invokeMock.mock.calls[0][1].body.okr_status).toBe("regular");
+
+    invokeMock.mockClear();
+    await userEvent.selectOptions(screen.getByTestId("okr-type-select"), "committed");
+    await userEvent.selectOptions(screen.getByTestId("okr-status-select"), "direction");
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.okr_type).toBe("committed");
+    expect(invokeMock.mock.calls[0][1].body.okr_status).toBe("direction");
+  });
+
+  it("draft с okrType заполняет селектор типа", () => {
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"], okrType: "aspirational", okrStatus: "direction" }} />);
+    expect((screen.getByTestId("okr-type-select") as HTMLSelectElement).value).toBe("aspirational");
+    expect((screen.getByTestId("okr-status-select") as HTMLSelectElement).value).toBe("direction");
+  });
+});

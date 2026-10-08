@@ -3,7 +3,7 @@ import { getRulesBlock, getFewShotBlock, ANGLES_DEFINITION, okrTypeLabel, okrSta
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
 import {
-  recomputeScore, scoreDiscrepancy, severityFor, modelRuleIdsFor, applyRuleContext, toCtx,
+  recomputeScore, severityFor, modelRuleIdsFor, applyRuleContext, toCtx,
   normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
 } from "../_shared/scoring.ts";
 
@@ -248,9 +248,9 @@ export async function sanitizeRewrittenObjective<T extends { rewritten_objective
 }
 
 /**
- * Серверный пересчёт score: если ответ модели расходится с канонической формулой
- * больше чем на 10 пунктов — подменяем data.score и ставим флаг score_recomputed.
- * Severity берётся из правила, при отсутствии — из severityFor(rule.id, horizon).
+ * Серверный пересчёт score: оценка ВСЕГДА считается сервером по канонической
+ * формуле. score_recomputed = true, если число модели отличалось.
+ * Правила applicable=false и unconfirmed=true в score не учитываются.
  */
 export function applyScoreRecompute<T extends { score?: number; rules?: any[]; score_recomputed?: boolean }>(
   data: T,
@@ -261,23 +261,29 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
     id: typeof r?.id === "string" ? r.id : undefined,
     pass: Boolean(r?.pass),
     applicable: r?.applicable === false ? false : undefined,
+    unconfirmed: r?.unconfirmed === true ? true : undefined,
     severity: r?.severity === "critical" || r?.severity === "important" || r?.severity === "improve"
       ? r.severity
       : (typeof r?.id === "string" ? severityFor(r.id, horizon) : "improve"),
   }));
   const recomputed = recomputeScore(normalized);
-  const modelScore = typeof data.score === "number" ? data.score : 0;
-  if (scoreDiscrepancy(modelScore, recomputed)) {
-    data.score = recomputed;
-    data.score_recomputed = true;
-  }
+  const modelScore = typeof data.score === "number" ? data.score : undefined;
+  if (modelScore !== recomputed) data.score_recomputed = true;
+  data.score = recomputed;
   return data;
+}
+
+/** Провал без цитаты (pass=false, grounded=false) — unconfirmed, в score не идёт. */
+export function markUnconfirmed(rules: any[]): any[] {
+  return rules.map((r: any) =>
+    r && r.pass === false && r.grounded === false && r.applicable !== false ? { ...r, unconfirmed: true } : r
+  );
 }
 
 /**
  * Эвристика: пустой/полностью проваленный rules[] — признак того, что
  * модель не справилась с форматом или вернула мусор. Используется для
- * принудительного retry через DEFAULT_MODEL.
+ * повтора на той же модели.
  */
 export function isAuditSuspicious(data: any): boolean {
   if (!data || !Array.isArray(data.rules) || data.rules.length === 0) return true;
@@ -408,11 +414,12 @@ export const handler = async (req: Request) => {
       toolDescription: "Audit an OKR and return rule-by-rule findings (no rewrites).",
       parameters: params,
       model: modelArg,
+      temperature: 0,
     });
     if (first.status !== 200) return first;
     let firstData = await first.json();
 
-    // Подозрительный ответ (пустой/всё-fail) → один retry на DEFAULT_MODEL.
+    // Подозрительный ответ (пустой/всё-fail) → один retry на ТОЙ ЖЕ модели.
     if (isAuditSuspicious(firstData)) {
       const retryPrompt = `${userPrompt}\n\nВАЖНО: твой предыдущий ответ оказался некорректным (пустой или полностью проваленный список правил). Перепроверь OKR честно: некоторые правила, скорее всего, выполнены. Верни полный набор rules с реалистичной оценкой pass/fail.`;
       const retry = await callAITool({
@@ -421,7 +428,8 @@ export const handler = async (req: Request) => {
         toolName: "audit_okr",
         toolDescription: "Audit an OKR and return rule-by-rule findings (no rewrites).",
         parameters: params,
-        // model не передаём → форсируем DEFAULT_MODEL
+        model: modelArg,
+        temperature: 0,
       });
       if (retry.status === 200) {
         const retryData = await retry.json();
@@ -459,7 +467,6 @@ export const handler = async (req: Request) => {
       finalData.rules = applyRuleContext(finalData.rules, ctx);
     }
 
-    applyScoreRecompute(finalData, h);
 
 
     // Серверная проверка обоснованности: для каждого правила добавляем
@@ -478,7 +485,11 @@ export const handler = async (req: Request) => {
         // OKR-TYPE-DECLARED считает сервер — цитата не нужна.
         grounded: r?.id === "OKR-TYPE-DECLARED" ? true : isGrounded(r, objectiveText, krHaystack),
       }));
+      finalData.rules = markUnconfirmed(finalData.rules);
     }
+
+    // Оценка всегда считается сервером — после контекста правил и проверки цитат.
+    applyScoreRecompute(finalData, h);
 
     return json(finalData);
   } catch (e) {

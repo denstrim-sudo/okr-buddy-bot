@@ -18,6 +18,8 @@ export interface ScoringRule {
   severity?: RuleSeverity | string;
   /** false — правило неприменимо к типу/статусу OKR и в score не учитывается. */
   applicable?: boolean;
+  /** true — провал без цитаты: показывается, но в score не учитывается. */
+  unconfirmed?: boolean;
 }
 
 export function normalizeOkrType(v: unknown): OkrType | undefined {
@@ -53,7 +55,7 @@ export function recomputeScore(rules: ScoringRule[]): number {
   let passedWeight = 0;
   let hasCriticalFail = false;
   for (const r of rules) {
-    if (r.applicable === false) continue;
+    if (r.applicable === false || r.unconfirmed === true) continue;
     const w = weightOf(r.severity);
     totalWeight += w;
     if (r.pass) passedWeight += w;

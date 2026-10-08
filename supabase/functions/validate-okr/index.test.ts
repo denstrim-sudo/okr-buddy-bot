@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, markUnconfirmed, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
@@ -152,7 +152,9 @@ Deno.test("applyScoreRecompute: расхождение >10 → подменяе�
   assertEquals(data.score_recomputed, true);
 });
 
-Deno.test("applyScoreRecompute: расхождение ≤10 → не трогает score, без флага", () => {
+// Переписано (шаг стабильности аудита): оценка ВСЕГДА считается сервером,
+// раньше при расхождении ≤10 число модели оставалось.
+Deno.test("applyScoreRecompute: расхождение ≤10 → score всё равно серверный, флаг true", () => {
   const data: any = {
     score: 85,
     rules: [
@@ -162,8 +164,35 @@ Deno.test("applyScoreRecompute: расхождение ≤10 → не трога
     ],
   };
   applyScoreRecompute(data);
-  assertEquals(data.score, 85);
+  assertEquals(data.score, 83);
+  assertEquals(data.score_recomputed, true);
+});
+
+Deno.test("applyScoreRecompute: число модели совпало → score_recomputed не ставится", () => {
+  const data: any = { score: 100, rules: [{ id: "A", pass: true, severity: "critical" }] };
+  applyScoreRecompute(data);
+  assertEquals(data.score, 100);
   assertEquals(data.score_recomputed, undefined);
+});
+
+Deno.test("markUnconfirmed + applyScoreRecompute: провал KR-QUALITY-PAIR без цитаты не влияет на оценку", () => {
+  const base = [
+    { id: "OBJ-NO-NUMBERS", pass: true, severity: "critical", grounded: true },
+    { id: "KR-MEASURABLE", pass: true, severity: "critical", grounded: true },
+    { id: "KR-LEADING", pass: false, severity: "important", grounded: true },
+  ];
+  const without: any = { score: 0, rules: markUnconfirmed(base) };
+  const withFail: any = {
+    score: 0,
+    rules: markUnconfirmed([...base, { id: "KR-QUALITY-PAIR", pass: false, severity: "important", grounded: false }]),
+  };
+  applyScoreRecompute(without);
+  applyScoreRecompute(withFail);
+  assertEquals(withFail.score, without.score);
+  const qp = withFail.rules.find((r: any) => r.id === "KR-QUALITY-PAIR");
+  assertEquals(qp.unconfirmed, true);
+  assertEquals(withFail.rules.length, 4, "провал остаётся в списке");
+  assertEquals(withFail.rules.find((r: any) => r.id === "KR-LEADING").unconfirmed, undefined);
 });
 
 Deno.test("applyScoreRecompute: severity отсутствует → резолвится из severityFor по id (KR-LEADING для quarter_3m = critical)", () => {
@@ -263,7 +292,7 @@ function _restoreFetch() {
   if (_origKey !== undefined) Deno.env.set("AIAI_API_KEY", _origKey);
 }
 
-interface FetchCall { model: string; userPrompt: string; }
+interface FetchCall { model: string; userPrompt: string; temperature?: number; }
 
 /**
  * Очередь tool-call-ответов в openai-формате. Каждый элемент — payload, который
@@ -275,7 +304,7 @@ function queueAiResponses(payloads: unknown[]): () => FetchCall[] {
   globalThis.fetch = ((_url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}"));
     const userMsg = body.messages?.find((m: any) => m.role === "user")?.content ?? "";
-    history.push({ model: body.model, userPrompt: String(userMsg) });
+    history.push({ model: body.model, userPrompt: String(userMsg), temperature: body.temperature });
     const payload = payloads[Math.min(i, payloads.length - 1)];
     i++;
     const resp = {
@@ -314,7 +343,8 @@ const baseBody = {
   model: "claude-haiku-4.5",
 };
 
-Deno.test("handler: первый ответ suspicious → ровно ОДИН retry без явного model (DEFAULT_MODEL)", async () => {
+// Переписано: раньше retry уходил на gpt-4o; теперь — на ту же модель, что выбрал пользователь.
+Deno.test("handler: первый ответ suspicious → ровно ОДИН retry на ТОЙ ЖЕ модели", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const getHistory = queueAiResponses([suspiciousReport, cleanReport]);
   try {
@@ -323,7 +353,9 @@ Deno.test("handler: первый ответ suspicious → ровно ОДИН r
     assertEquals(status, 200);
     assertEquals(history.length, 2, "должно быть ровно 2 fetch'а (initial + один retry)");
     assertEquals(history[0].model, "claude-haiku-4.5");
-    assertEquals(history[1].model, "gpt-4o", "retry должен идти на DEFAULT_MODEL");
+    assertEquals(history[1].model, "claude-haiku-4.5", "retry идёт на выбранной модели");
+    assertEquals(history[0].temperature, 0);
+    assertEquals(history[1].temperature, 0);
     // финальный ответ — из retry, без флага audit_unreliable
     assertEquals(data.audit_unreliable, undefined);
     // +1: сервер добавляет OKR-TYPE-DECLARED
@@ -340,6 +372,7 @@ Deno.test("handler: retry тоже suspicious → audit_unreliable=true, отв�
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
     assertEquals(getHistory().length, 2);
+    assertEquals(getHistory()[1].model, "claude-haiku-4.5", "без переключения на gpt-4o");
     assertEquals(data.audit_unreliable, true);
   } finally {
     _restoreFetch();
@@ -353,6 +386,7 @@ Deno.test("handler: первый ответ НЕ suspicious → повторно
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
     assertEquals(getHistory().length, 1, "должен быть ровно 1 fetch — никакого retry");
+    assertEquals(getHistory()[0].temperature, 0, "аудит идёт с температурой 0");
     assertEquals(data.audit_unreliable, undefined);
   } finally {
     _restoreFetch();
@@ -365,8 +399,8 @@ Deno.test("handler: data.model_used проставлен из _meta.used_model, 
   try {
     const { status, data } = await callHandler(handler, baseBody);
     assertEquals(status, 200);
-    // retry прошёл через DEFAULT_MODEL → model_used должно быть gpt-4o
-    assertEquals(data.model_used, "gpt-4o");
+    // Переписано: retry идёт на выбранной модели → model_used = claude-haiku-4.5
+    assertEquals(data.model_used, "claude-haiku-4.5");
     assertEquals(data.__model_used, undefined, "__model_used не должно утекать в публичный JSON");
   } finally {
     _restoreFetch();
@@ -1031,4 +1065,15 @@ Deno.test({
     assertEquals(status, 200);
     assertEquals(ruleOf(data, "KR-QUALITY-PAIR").pass, true);
   },
+});
+
+Deno.test("handler: mode=fix — температура по умолчанию 0.4 (не 0)", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const getHistory = queueAiResponses([{ rewritten_objective: "Клиент доволен", rewritten_key_results: ["a", "b"] }]);
+  try {
+    await callHandler(handler, { ...baseBody, mode: "fix", failed_rules: [] });
+    assertEquals(getHistory()[0].temperature, 0.4);
+  } finally {
+    _restoreFetch();
+  }
 });

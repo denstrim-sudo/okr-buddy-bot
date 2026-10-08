@@ -30,7 +30,9 @@ function makeReq() {
 Deno.test("list-ai-models: пересекает CURATED с живым каталогом, отбрасывает лишнее и неподдерживаемое", async () => {
   __resetCacheForTests();
   Deno.env.set("AIAI_API_KEY", "test-key");
-  const someCurated = ["gpt-4o", "gpt-4o-mini", "claude-haiku-4.5"];
+  // Переписано: gpt-4o-mini убран из каталога моделей — третий id берём из CURATED.
+  const third = CURATED.find((c) => c.id !== "gpt-4o" && c.id !== "claude-haiku-4.5")!.id;
+  const someCurated = ["gpt-4o", third, "claude-haiku-4.5"];
   stubModelsResponse([...someCurated, "non-curated-extra-id"]);
   try {
     const res = await handler(makeReq());

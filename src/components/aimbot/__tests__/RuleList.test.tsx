@@ -72,3 +72,12 @@ describe("RuleList — неприменимые правила (OKR-PI)", () => 
     expect(na).toHaveTextContent("не применимо для этого типа");
   });
 });
+
+describe("RuleList — провал без цитаты (unconfirmed)", () => {
+  it("показывает пометку «не влияет на оценку» без иконки провала", () => {
+    renderWithProviders(<RuleList rules={[baseRule({ id: "UC1", grounded: false, unconfirmed: true })]} />);
+    expect(screen.getByTestId("rule-unconfirmed-UC1")).toBeInTheDocument();
+    expect(screen.getByText(/не подтверждено цитатой — не влияет на оценку/i)).toBeInTheDocument();
+    expect(screen.queryByText("Важно")).not.toBeInTheDocument();
+  });
+});

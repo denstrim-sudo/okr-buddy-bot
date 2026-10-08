@@ -1,14 +1,17 @@
 import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_shared/ai.ts";
 import { getRulesBlock } from "../_shared/okr_rules.ts";
-import { recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, type ScoringRule } from "../_shared/scoring.ts";
+import {
+  recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, ruleApplicability, toCtx,
+  normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
+} from "../_shared/scoring.ts";
 
-export const buildSystemPrompt = (horizon: string) => `You are an expert OKR Coach (Doerr methodology) drafting a SINGLE OKR.
+export const buildSystemPrompt = (horizon: string, ctx?: RuleCtx) => `You are an expert OKR Coach (bank OKR-PI methodology) drafting a SINGLE OKR.
 
-${getRulesBlock(horizon)}
+${getRulesBlock({ ...(ctx ?? {}), horizon })}
 
 После составления черновика ОБЯЗАТЕЛЬНО прогони его мысленно по этим же правилам и заполни:
 - "score_hint" — по формуле выше (с учётом потолка ≤60 при критических фейлах).
-- "self_audit.critical_fails" — массив ID правил severity=critical, которые НЕ прошли (например ["OBJ-NO-NUMBERS","KR-BASELINE-TARGET"]). Пустой, если всё ок.
+- "self_audit.critical_fails" — массив ID правил severity=critical, которые НЕ прошли (например ["OBJ-NO-NUMBERS","KR-MEASURABLE"]). Пустой, если всё ок.
 - "self_audit.important_fails" — массив ID правил severity=important, которые НЕ прошли.
 Эти поля должны быть согласованы с score_hint: если в critical_fails что-то есть — score_hint ≤ 60.
 
@@ -144,17 +147,18 @@ export function applyScoreHintRecompute<T extends {
   score_hint?: number;
   self_audit?: { critical_fails?: string[]; important_fails?: string[] };
   score_hint_recomputed?: boolean;
-}>(data: T, horizon?: string): T {
+}>(data: T, horizonOrCtx?: string | RuleCtx): T {
   if (!data || !data.self_audit) return data;
   const critical = Array.isArray(data.self_audit.critical_fails) ? data.self_audit.critical_fails : [];
   const important = Array.isArray(data.self_audit.important_fails) ? data.self_audit.important_fails : [];
   const failed = new Set<string>([...critical, ...important]);
-  const ids = knownRuleIdsFor(horizon);
-  const pseudo: ScoringRule[] = ids.map((id) => ({
-    id,
-    pass: !failed.has(id),
-    severity: severityFor(id, horizon),
-  }));
+  const ctx = toCtx(horizonOrCtx);
+  const ids = knownRuleIdsFor(ctx);
+  const pseudo: ScoringRule[] = ids.map((id) => {
+    const applicable = ruleApplicability(id, ctx) === "applies";
+    const pass = id === "OKR-TYPE-DECLARED" ? ctx.okr_type !== undefined : (!applicable || !failed.has(id));
+    return { id, pass, applicable, severity: severityFor(id, ctx) };
+  });
   const recomputed = recomputeScore(pseudo);
   const modelScore = typeof data.score_hint === "number" ? data.score_hint : 0;
   if (scoreDiscrepancy(modelScore, recomputed)) {
@@ -202,11 +206,13 @@ export const handler = async (req: Request) => {
     const {
       raw_input, horizon, mode, interpretation, clarifying_answers,
       extra_context, model, focus_horizon_fit, prior_horizon_fit, parent_kr_context,
+      okr_type, okr_status,
     } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
     }
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
+    const ctx: RuleCtx = { horizon: h, okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status) };
     const m: string = mode === "rewrite_existing" ? "rewrite_existing" : "from_scratch";
 
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
@@ -217,7 +223,7 @@ export const handler = async (req: Request) => {
 
 
     const res = await callAITool({
-      systemPrompt: buildSystemPrompt(h),
+      systemPrompt: buildSystemPrompt(h, ctx),
       userPrompt,
       toolName: "draft_okr",
       toolDescription: "Draft a single Objective with 1..3 outcome-based Key Results plus horizon-fit self-check.",
@@ -236,7 +242,7 @@ export const handler = async (req: Request) => {
         if (Array.isArray(data.key_results)) {
           capKeyResults(data, h);
         }
-        applyScoreHintRecompute(data, h);
+        applyScoreHintRecompute(data, ctx);
         return json(data);
       }
     } catch { /* pass through */ }

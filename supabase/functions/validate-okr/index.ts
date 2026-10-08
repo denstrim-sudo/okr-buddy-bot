@@ -1,5 +1,5 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
-import { getRulesBlock, getFewShotBlock, ANGLES_DEFINITION, okrTypeLabel, okrStatusLabel } from "../_shared/okr_rules.ts";
+import { getAuditorRulesBlock, getFewShotBlock, ANGLES_DEFINITION, KR_FORM_DEFINITION, okrTypeLabel, okrStatusLabel } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
 import {
@@ -23,7 +23,7 @@ HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применя
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 
-${getRulesBlock(ctx)}
+${getAuditorRulesBlock(ctx)}
 
 ЭТАЛОНЫ (сравнивай формулировки с этими образцами, а не с абстрактным определением):
 
@@ -38,7 +38,6 @@ For EACH rule you MUST return:
   - Для pass=true ставь "improve" (или опускай).
 - "why": ОДНО короткое предложение на русском (≤140 символов), почему это важно. Для pass=true можно оставить пустым.
 - "evidence": для pass=false — СКОПИРУЙ дословно фрагмент текста Objective или конкретного KR (≤80 символов), который стал причиной провала. Не перефразируй, не обобщай — буквальная подстрока. Для правил, которые нарушаются ФОРМУЛИРОВКОЙ: если не можешь найти такую дословную фразу в тексте — значит, основания для fail нет, ставь pass=true вместо этого. Для pass=true — пустая строка.
-- Для KR-LEADING провал означает ОТСУТСТВИЕ опережающего KR в наборе: evidence оставь пустым, в hint напиши, какого KR не хватает. Не ставь pass=true только потому, что нечего процитировать.
 
 ПОРЯДОК ЗАПОЛНЕНИЯ ДЛЯ КАЖДОГО ПРАВИЛА: reasoning → severity → pass → hint/why/evidence. Не переставляй.
 
@@ -46,7 +45,9 @@ For EACH rule you MUST return:
 
 ${ANGLES_DEFINITION}
 
-Заполни поле kr_perspectives: отнеси КАЖДЫЙ Key Result к одному ракурсу — "К", "О" или "У" (index — 0-based позиция KR). rationale — одно короткое предложение, почему именно этот ракурс. Поле kr_perspectives заполняй для КАЖДОГО KR без пропусков: по нему сервер проверяет обязательные ракурсы. Правила OKR-TYPE-DECLARED, KR-COUNT и KR-REQUIRED-ANGLES НЕ оценивай — их проверяет сервер.
+Для КАЖДОГО KR без пропусков заполни kr_perspectives: ракурс, форму и опережающий/запаздывающий (index — 0-based позиция KR, rationale — одно короткое предложение). Это разметка ОДНОГО KR, а не оценка набора.
+${KR_FORM_DEFINITION}
+Правила OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING, KR-COUNT, KR-REQUIRED-ANGLES НЕ оценивай — их вычисляет сервер по твоей разметке. OKR-TYPE-DECLARED тоже проверяет сервер.
 
 Return STRICT JSON only via the provided tool.
 
@@ -197,9 +198,11 @@ export function buildAuditorParameters(horizonOrCtx?: string | RuleCtx, opts: { 
           properties: {
             index: { type: "number", description: "0-based индекс Key Result в исходном списке." },
             perspective: { type: "string", enum: ["К", "О", "У"] },
-            rationale: { type: "string", description: "Одно короткое предложение на русском: почему именно этот ракурс." },
+            form: { type: "string", enum: ["range", "threshold", "learning", "execution", "binary", "unmeasurable"], description: "Форма ЭТОГО KR." },
+            timing: { type: "string", enum: ["leading", "lagging"], description: "Опережающий или запаздывающий ЭТОТ KR." },
+            rationale: { type: "string", description: "Одно короткое предложение на русском: почему такой ракурс, форма и timing." },
           },
-          required: ["index", "perspective", "rationale"],
+          required: ["index", "perspective", "form", "timing", "rationale"],
           additionalProperties: false,
         },
       },
@@ -469,7 +472,7 @@ export const handler = async (req: Request) => {
     if (Array.isArray(finalData.rules)) {
       // Каноническая severity, применимость (OKR-PI 3.4.8) и серверное OKR-TYPE-DECLARED.
       const krTexts = enriched.map((k: any) => String(k?.text ?? ""));
-      finalData.rules = addServerRules(finalData.rules, krTexts, finalData.kr_perspectives, ctx);
+      finalData.rules = addServerRules(finalData.rules, krTexts, finalData.kr_perspectives, ctx, String(objective));
       finalData.rules = applyRuleContext(finalData.rules, ctx);
     }
 

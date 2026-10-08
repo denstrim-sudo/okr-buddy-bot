@@ -96,6 +96,23 @@ export function getRulesBlock(ctxOrHorizon?: string | RuleCtx): string {
   return `${title}\n\n${buildBaseRules(ctx)}\n\n${SCORING_BLOCK}`;
 }
 
+export const KR_FORM_DEFINITION = `form (форма KR): range — «с X до Y» / «с Y до X» / «на N%»; threshold — «остаётся выше/ниже», «не выше/не ниже», «≤», «≥», «ноль …»; learning — «к дате известно, что…, с порогом…»; execution — факт поставки к сроку; binary — выполнено / не выполнено без градиента; unmeasurable — нельзя понять, выполнен ли KR.
+timing: leading — показатель, который меняется раньше результата и позволяет скорректироваться внутри периода; lagging — итоговый результат, видимый в конце периода.`;
+
+export const SERVER_COMPUTED_RULES = ["OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "KR-COUNT", "KR-REQUIRED-ANGLES"];
+
+/**
+ * Свод для АУДИТОРА: только смысловые правила, которые оценивает модель.
+ * Формальные и разметочные правила считает сервер (замер стабильности).
+ * Редактор/генератор по-прежнему получают полный getRulesBlock.
+ */
+export function getAuditorRulesBlock(ctxOrHorizon?: string | RuleCtx): string {
+  const ctx = toCtx(ctxOrHorizon);
+  const full = buildBaseRules(ctx);
+  const kept = full.split("\n").filter((line) => !SERVER_COMPUTED_RULES.some((id) => line.startsWith(`- ${id} [`)));
+  return `OKR AUDIT RULES — ОЦЕНИВАЕШЬ ТОЛЬКО ЭТИ (OKR-PI):\n\n${kept.join("\n")}\n\n${SCORING_BLOCK}`;
+}
+
 /** Совместимость со старым кодом: блоки для «тип не объявлен, обычный OKR». */
 export const OKR_RULES_BLOCK = getRulesBlock("block_12m");
 export const OKR_RULES_BLOCK_QUARTER = getRulesBlock("quarter_3m");

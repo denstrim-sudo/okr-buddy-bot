@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { GeneratedPlan, OkrHorizon, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
+import type { GeneratedPlan, OkrHorizon, OkrStatus, OkrType, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";

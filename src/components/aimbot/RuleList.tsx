@@ -21,6 +21,20 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
   const sev: RuleSeverity | undefined = r.pass ? undefined : (r.severity ?? "important");
   const meta = sev ? severityMeta(sev) : null;
   const hasReasoning = !isSm && !!r.reasoning && r.reasoning.trim().length > 0;
+  if (r.applicable === false) {
+    return (
+      <li data-testid={`rule-na-${r.id}`} className={cn("flex items-start text-muted-foreground/60", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
+        <span className={cn("mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-muted-foreground/30")} aria-hidden />
+        <div className="flex-1">
+          <div className={cn("flex flex-wrap items-baseline", isSm ? "gap-1.5" : "gap-2")}>
+            <span className="font-mono text-[10px] font-bold">[{r.id}]</span>
+            <span>{r.label}</span>
+          </div>
+          <p className="mt-0.5 text-[11px] italic">не применимо для этого типа</p>
+        </div>
+      </li>
+    );
+  }
   return (
     <li className={cn("flex items-start", isSm ? "gap-2 text-xs" : "gap-2.5 text-sm")}>
       {r.pass ? (

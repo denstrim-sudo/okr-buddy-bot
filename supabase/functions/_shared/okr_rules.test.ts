@@ -136,3 +136,10 @@ Deno.test("getFewShotBlock: отрицательный пример про ак�
   assert(b.includes("KR-OUTCOME") && b.includes("KR-LEADING"));
   assert(!/\bKR3\b|\bKR10\b/.test(b));
 });
+
+// OKR-PI 6.1: эталон «Кредит в один клик» взят из методологии банка.
+Deno.test("getFewShotBlock(aspirational): эталон OKR-PI 6.1", () => {
+  const b = getFewShotBlock({ okr_type: "aspirational" });
+  assert(b.includes("быстрее, чем успевает передумать"));
+  assert(b.includes("Просрочка 30+"));
+});

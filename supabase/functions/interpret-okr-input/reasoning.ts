@@ -26,6 +26,7 @@ export interface Variant {
   unknowns: string[];
   solution_in_disguise?: boolean;
   effect_unverified?: boolean;
+  is_boundary?: boolean;
 }
 
 export interface Reasoning {
@@ -49,6 +50,7 @@ export interface ReasoningQuality {
   no_narrowing_ids: string[];
   missing_next_constraint_ids: string[];
   suggested_count?: number;
+  boundary_variant_ids?: string[];
 }
 export type ReasoningWarning = "variants_not_distinct" | "too_few_variants" | "too_many_suggested";
 export interface NormalizedReasoning { reasoning: Reasoning; quality: ReasoningQuality; warning?: ReasoningWarning }
@@ -68,6 +70,7 @@ export const REASONING_RULES = `REASONING (поле reasoning заполняет
 - Сначала разложи целевой показатель на слагаемые формулой с переменными (lever_tree), например «Доход = Клиенты × Проникновение × Доход на продукт». Затем найди ограничения.
 - Ограничение — это СОСТОЯНИЕ РЕАЛЬНОСТИ (клиент не видит, процесс требует, сотрудник не может), а НЕ отсутствие решения. «Нет единого профиля», «не внедрена CRM» — это решения в маске ограничения: вынеси их в reframed_solutions с вопросом, какое состояние клиента или процесса они должны изменить.
 - Ограничения, которые за год не снять (правовые, регуляторные, разные юрлица), вынеси в boundary_conditions с тем, как их обойти. Вариантами они НЕ становятся.
+- Каждое утверждение из ввода попадает РОВНО в одну корзину: вариант (устранимое ограничение), boundary_conditions (неустранимое за год) или reframed_solutions (описывает отсутствие решения). Правовое ограничение — это boundary_condition, а не решение в маске.
 - Для каждого варианта:
   • strike_at — куда бьём: ограничение как состояние реальности;
   • where_it_holds — какой показатель и на каком шаге держит ограничение;
@@ -133,9 +136,47 @@ export function extractNumbers(s: unknown): string[] {
   return out;
 }
 
-function hasUnknownNumber(s: unknown, known: Set<string>): boolean {
-  const nums = extractNumbers(s);
+/** Убирает числа, которые не являются фактами банка: годы, кварталы, PI, номера KR. */
+export function stripNonFactNumbers(s: unknown): string {
+  return String(s ?? "")
+    .replace(/(?<!\d)(?:202\d|203[0-5])(?!\d)/g, " ")
+    .replace(/(?:\bQ|\bPI\s|квартал\s)\s*\d+/giu, " ")
+    .replace(/\d+(?:\s+квартал|\s+PI\b)/giu, " ")
+    .replace(/\bKR\s*(?:№\s*)?[1-4](?!\d)/giu, " ");
+}
+
+export function hasUnknownNumber(s: unknown, known: Set<string>): boolean {
+  const nums = extractNumbers(stripNonFactNumbers(s));
   return nums.length > 0 && nums.some((n) => !known.has(n));
+}
+
+/** Совпадение утверждений: одно содержит другое ИЛИ доля общих слов (≥4 символов) ≥ 0.6 от меньшей строки. */
+export function sameStatement(a: unknown, b: unknown): boolean {
+  const x = normalizeText(a).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const y = normalizeText(b).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  if (!x || !y) return false;
+  if (x.includes(y) || y.includes(x)) return true;
+  const words = (t: string) => new Set(t.split(" ").filter((w) => w.length >= 4));
+  const wx = words(x), wy = words(y);
+  const [small, big] = wx.size <= wy.size ? [wx, wy] : [wy, wx];
+  if (small.size === 0) return false;
+  let common = 0;
+  for (const w of small) if (big.has(w)) common++;
+  return common / small.size >= 0.6;
+}
+
+/** Одно утверждение — одна корзина: boundary_conditions приоритетнее reframed_solutions; варианты-границы помечаются. */
+export function dedupeBuckets(n: NormalizedReasoning): NormalizedReasoning {
+  const bounds = n.reasoning.boundary_conditions.map((b) => b?.statement);
+  const isBound = (t: unknown) => bounds.some((b) => sameStatement(b, t));
+  const reframed = n.reasoning.reframed_solutions.filter((r) => !isBound(r?.original));
+  const variants = n.reasoning.variants.map((v) => (isBound(v?.strike_at) ? { ...v, is_boundary: true } : v));
+  const boundaryIds = variants.filter((v) => v.is_boundary).map((v) => v.id);
+  return {
+    ...n,
+    reasoning: { ...n.reasoning, reframed_solutions: reframed, variants },
+    quality: { ...n.quality, boundary_variant_ids: boundaryIds },
+  };
 }
 
 const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -213,7 +254,7 @@ export function normalizeReasoning(raw: unknown, optsIn?: string[] | NormalizeOp
     ...(suggested_count !== undefined ? { suggested_count } : {}),
   };
 
-  return {
+  return dedupeBuckets({
     reasoning: {
       facts,
       tensions,
@@ -227,7 +268,7 @@ export function normalizeReasoning(raw: unknown, optsIn?: string[] | NormalizeOp
     },
     quality,
     ...(warning ? { warning } : {}),
-  };
+  });
 }
 
 const isGood = (q: ReasoningQuality) => q.distinct_constraints && q.variants_count >= 2;

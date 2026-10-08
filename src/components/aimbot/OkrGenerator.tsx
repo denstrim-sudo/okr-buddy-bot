@@ -107,8 +107,9 @@ export const OkrGenerator = ({ onGenerated }: Props) => {
     setDraft(null);
     try {
       const extra_context = buildContext(["okr_context", "methodology"]);
+      const parent_kr_context = buildParentKrContext();
       const { data, error } = await supabase.functions.invoke("interpret-okr-input", {
-        body: { raw_input: rawInput, horizon, extra_context, model },
+        body: { raw_input: rawInput, horizon, extra_context, model, ...(parent_kr_context ? { parent_kr_context } : {}) },
       });
       if (error || (data as any)?.error) {
         throw new Error(await extractEdgeError(error, data, "Ошибка интерпретации"));

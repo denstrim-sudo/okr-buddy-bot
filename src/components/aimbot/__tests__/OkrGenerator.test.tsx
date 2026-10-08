@@ -87,6 +87,8 @@ describe("OkrGenerator (Module 1)", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
     expect(invokeMock.mock.calls[0][0]).toBe("interpret-okr-input");
+    // без выбранного родительского KR поле не передаётся
+    expect("parent_kr_context" in invokeMock.mock.calls[0][1].body).toBe(false);
     expect(invokeMock.mock.calls[1][0]).toBe("draft-okr");
 
     await screen.findByText(/Соответствие горизонту/i);
@@ -137,6 +139,9 @@ describe("OkrGenerator (Module 1)", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
     const draftBody = invokeMock.mock.calls[1][1].body;
     expect(draftBody.parent_kr_context).toBe("Block OKR родитель → KR: Стать №1 на рынке");
+    // Модуль 1.1: родительский KR доходит и до интерпретации
+    expect(invokeMock.mock.calls[0][0]).toBe("interpret-okr-input");
+    expect(invokeMock.mock.calls[0][1].body.parent_kr_context).toBe("Block OKR родитель → KR: Стать №1 на рынке");
   });
 
   it("saveOkr вызывается с третьим аргументом — выбранным parentLink", async () => {

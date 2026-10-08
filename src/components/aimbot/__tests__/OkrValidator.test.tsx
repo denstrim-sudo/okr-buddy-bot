@@ -372,6 +372,7 @@ describe("renderWithPlaceholders (unit)", () => {
   });
 
   it("передаёт выбранные тип и статус OKR в validate-okr; без выбора тип не передаётся", async () => {
+    invokeMock.mockReset();
     invokeMock.mockResolvedValue({ data: validReport, error: null });
     renderWithProviders(<OkrValidator draft={{ objective: "Стать лидером", key_results: ["Поднять X с 30 до 50"] }} />);
     await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));

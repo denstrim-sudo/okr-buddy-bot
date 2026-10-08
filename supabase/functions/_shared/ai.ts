@@ -45,7 +45,9 @@ interface CallResult {
 // Default base URL: https://vedai.by/api/v1 (overridable via AIAI_BASE_URL secret).
 export const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.4;
-const DEFAULT_MAX_TOKENS = 4000;
+// Reasoning-модели (gpt-5*, o*) тратят часть лимита на внутренние рассуждения,
+// при 4000 ответ обрывается на полуслове → invalid_json → подмена на gpt-4o.
+const DEFAULT_MAX_TOKENS = 16000;
 /** Общий бюджет времени на весь запрос. Edge Function живёт ~150с, браузер
  *  через supabase-js ждёт столько же — поэтому 55с были искусственным
  *  ограничением, из-за которого «медленные, но качественные» модели

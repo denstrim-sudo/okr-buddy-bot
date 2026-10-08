@@ -64,6 +64,9 @@ export const Sidebar = ({ variant = "desktop", onNavigate }: Props) => {
           Улучшить тариф
         </button>
       </div>
+      <a href="/stability" onClick={onNavigate} className="mt-3 px-3 text-[11px] text-muted-foreground hover:text-foreground">
+        Проверка стабильности
+      </a>
     </aside>
   );
 };

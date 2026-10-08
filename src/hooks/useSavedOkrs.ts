@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GeneratedPlan } from "@/types/okr";
+import type { GeneratedPlan, OkrStatus, OkrType } from "@/types/okr";
+
+export interface OkrMeta {
+  okrType?: OkrType;
+  okrStatus?: OkrStatus;
+}
 
 export interface SavedOkr {
   id: string;
@@ -11,6 +16,9 @@ export interface SavedOkr {
   updatedAt?: string;
   parentOkrId?: string;
   parentKrIndex?: number;
+  /** Тип и статус OKR (OKR-PI). Необязательные: старые записи без них валидны. */
+  okrType?: OkrType;
+  okrStatus?: OkrStatus;
 }
 
 export interface OkrExport {
@@ -84,6 +92,7 @@ export function useSavedOkrs() {
       objective: string,
       plan: GeneratedPlan,
       link?: { parentOkrId: string; parentKrIndex: number },
+      meta?: OkrMeta,
     ): { item: SavedOkr; ok: boolean } => {
       const item: SavedOkr = {
         id: `okr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -91,6 +100,8 @@ export function useSavedOkrs() {
         plan,
         savedAt: nextSavedAt(),
         ...(link ? { parentOkrId: link.parentOkrId, parentKrIndex: link.parentKrIndex } : {}),
+        ...(meta?.okrType ? { okrType: meta.okrType } : {}),
+        ...(meta?.okrStatus ? { okrStatus: meta.okrStatus } : {}),
       };
       const ok = commit([item, ...itemsRef.current]);
       return { item, ok };
@@ -103,6 +114,7 @@ export function useSavedOkrs() {
       id: string,
       objective: string,
       plan: GeneratedPlan,
+      meta?: OkrMeta,
     ): { ok: boolean; item?: SavedOkr } => {
       const current = itemsRef.current;
       const idx = current.findIndex((x) => x.id === id);
@@ -113,6 +125,8 @@ export function useSavedOkrs() {
         objective: objective.trim() || plan.objective_refined || prev.objective,
         plan,
         updatedAt: new Date().toISOString(),
+        ...(meta && "okrType" in meta ? { okrType: meta.okrType } : {}),
+        ...(meta && "okrStatus" in meta ? { okrStatus: meta.okrStatus } : {}),
         // id / savedAt / parentOkrId / parentKrIndex — СОХРАНЯЕМ исходные, чтобы:
         // (1) дети продолжали ссылаться на этот id,
         // (2) связь с родителем не терялась,

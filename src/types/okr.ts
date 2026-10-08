@@ -106,10 +106,17 @@ export interface ValidationRule {
   /** Серверный сигнал: подтверждена ли evidence реальным фрагментом текста OKR.
    *  Для pass=true всегда true. Для pass=false: false → правило не подкреплено цитатой. */
   grounded?: boolean;
+  /** false — правило неприменимо к типу/статусу OKR (OKR-PI) и в score не учитывается. */
+  applicable?: boolean;
 }
 
-/** Точка зрения на Key Result (типология AI-Native SAFe). */
-export type KrPerspectiveAxis = "customer_business" | "feasibility_risk" | "learning";
+/** Ракурс Key Result (OKR-PI 3.3): К — клиент и бизнес, О — осуществимость и риски, У — обучение. */
+export type KrPerspectiveAxis = "К" | "О" | "У";
+
+/** Тип OKR (OKR-PI): обязательный / амбициозный / смешанный. */
+export type OkrType = "committed" | "aspirational" | "mixed";
+/** Статус OKR: направление или обычный OKR. */
+export type OkrStatus = "direction" | "regular";
 
 export interface KrPerspective {
   /** 0-based индекс KR в наборе. */
@@ -153,6 +160,8 @@ export interface ValidationDraft {
   key_results: string[];
   key_results_full?: ValidationKR[];
   horizon?: OkrHorizon;
+  okrType?: OkrType;
+  okrStatus?: OkrStatus;
   /** id сохранённой записи, из которой пришёл OKR. Если задан, при сохранении
    *  исправлений будет replace() по этому id (сохранение связей). */
   sourceOkrId?: string;

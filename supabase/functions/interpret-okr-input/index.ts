@@ -1,6 +1,7 @@
-import { handleCors, callAITool, errorJson, buildExtraBlock } from "../_shared/ai.ts";
+import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_shared/ai.ts";
+import { REASONING_RULES, extractDocNames, ensureDistinctVariants, type Reasoning } from "./reasoning.ts";
 
-const SYSTEM_PROMPT = `You are an OKR Intake Coach. The canonical OKR hierarchy in this product is:
+export const SYSTEM_PROMPT = `You are an OKR Intake Analyst. The canonical OKR hierarchy in this product is:
 Strategy -> Strategic OKR (3 years, "strategic_3y") -> Block OKR (12 months, "block_12m") -> Quarter OKR (3 months, "quarter_3m") -> Decisions / Solutions.
 
 Your job: take the user's free-form input (which may be raw context, a goal idea, or a pasted existing OKR), and INTERPRET it BEFORE drafting anything. Decide:
@@ -16,11 +17,60 @@ Your job: take the user's free-form input (which may be raw context, a goal idea
 - assumptions: defaults you would take if user skips clarifications.
 - warnings: red flags (e.g. input describes activities not outcomes, no measurable signals).
 
+${REASONING_RULES}
+
 ALL text fields in RUSSIAN. Enum values stay English. Return STRICT JSON via the tool.`;
 
 const PARAMETERS = {
   type: "object",
   properties: {
+    reasoning: {
+      type: "object",
+      properties: {
+        facts: {
+          type: "array", minItems: 3, maxItems: 10,
+          items: {
+            type: "object",
+            properties: { id: { type: "string" }, statement: { type: "string" }, source: { type: "string" } },
+            required: ["id", "statement", "source"], additionalProperties: false,
+          },
+        },
+        tensions: {
+          type: "array", minItems: 1, maxItems: 4,
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" }, gap: { type: "string" }, who_affected: { type: "string" },
+              evidence_fact_ids: { type: "array", items: { type: "string" } },
+            },
+            required: ["id", "gap", "who_affected", "evidence_fact_ids"], additionalProperties: false,
+          },
+        },
+        variants: {
+          type: "array", minItems: 2, maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              bet_axis: { type: "string", enum: ["customer_business", "feasibility_risk", "learning"] },
+              bet_thesis: { type: "string" },
+              objective_sketch: { type: "string" },
+              kr_directions: { type: "array", items: { type: "string" } },
+              supports_fact_ids: { type: "array", items: { type: "string" } },
+              addresses_tension_ids: { type: "array", items: { type: "string" } },
+              trade_off: { type: "string" },
+              key_risk: { type: "string" },
+              unknowns: { type: "array", items: { type: "string" } },
+            },
+            required: ["id", "bet_axis", "bet_thesis", "objective_sketch", "kr_directions", "supports_fact_ids", "addresses_tension_ids", "trade_off", "key_risk", "unknowns"],
+            additionalProperties: false,
+          },
+        },
+        choice_question: { type: "string" },
+      },
+      required: ["facts", "tensions", "variants", "choice_question"],
+      additionalProperties: false,
+    },
     detected_horizon: { type: "string", enum: ["strategic_3y", "block_12m", "quarter_3m"] },
     detected_mode: { type: "string", enum: ["from_scratch", "rewrite_existing"] },
     topic_summary: { type: "string" },
@@ -39,7 +89,7 @@ const PARAMETERS = {
     warnings: { type: "array", items: { type: "string" } },
   },
   required: [
-    "detected_horizon", "detected_mode", "topic_summary", "has_existing_okr",
+    "reasoning", "detected_horizon", "detected_mode", "topic_summary", "has_existing_okr",
     "missing_info", "clarifying_questions", "assumptions", "warnings",
   ],
   additionalProperties: false,
@@ -50,22 +100,44 @@ export const handler = async (req: Request) => {
   if (cors) return cors;
 
   try {
-    const { raw_input, horizon, extra_context, model } = await req.json();
+    const { raw_input, horizon, extra_context, model, parent_kr_context } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required (min 3 chars)", 400);
     }
     const horizonHint = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");
-    const userPrompt = `USER-SELECTED HORIZON: ${horizonHint}\n\nUSER INPUT:\n${raw_input.trim()}${extraBlock}\n\nInterpret this input. Decide horizon, mode (rewrite_existing if a draft OKR is already pasted), extract any existing objective/KRs, list missing info, and generate at most 3 clarifying questions ONLY if truly needed.`;
+    const parentKrBlock = typeof parent_kr_context === "string" && parent_kr_context.trim()
+      ? `\n\nPARENT KEY RESULT (каждый вариант должен явно продвигать именно этот KR родителя):\n${parent_kr_context.trim()}`
+      : "";
+    const userPrompt = `USER-SELECTED HORIZON: ${horizonHint}\n\nUSER INPUT:\n${raw_input.trim()}${parentKrBlock}${extraBlock}\n\nInterpret this input. Decide horizon, mode (rewrite_existing if a draft OKR is already pasted), extract any existing objective/KRs, list missing info, and generate at most 3 clarifying questions ONLY if truly needed.`;
 
-    return await callAITool({
+    const modelArg = typeof model === "string" && model ? model : undefined;
+    const call = (prompt: string) => callAITool({
       systemPrompt: SYSTEM_PROMPT,
-      userPrompt,
+      userPrompt: prompt,
       toolName: "interpret_okr_input",
       toolDescription: "Interpret free-form user input before drafting an OKR.",
       parameters: PARAMETERS,
-      model: typeof model === "string" && model ? model : undefined,
+      model: modelArg,
     });
+
+    const res = await call(userPrompt);
+    const data = await res.clone().json().catch(() => null);
+    if (!data || data.error) return res;
+
+    const docNames = extractDocNames(extra_context);
+    const out = await ensureDistinctVariants(data.reasoning, async () => {
+      const r2 = await call(`${userPrompt}\n\nПРЕДЫДУЩИЕ ВАРИАНТЫ НЕ РАЗЛИЧАЛИСЬ ПО bet_axis. Дай 2–3 варианта с РАЗНЫМИ осями.`);
+      const d2 = await r2.json().catch(() => null);
+      return d2 && !d2.error ? (d2.reasoning as Reasoning) : null;
+    }, docNames);
+
+    return json({
+      ...data,
+      reasoning: out.reasoning,
+      reasoning_quality: out.quality,
+      ...(out.warning ? { reasoning_warning: out.warning } : {}),
+    }, res.status);
   } catch (e) {
     console.error("interpret-okr-input error", e);
     return errorJson(e instanceof Error ? e.message : "Unknown error", 500);

@@ -1,128 +1,108 @@
-import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER, getFewShotBlock } from "./okr_rules.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  OKR_RULES_BLOCK, OKR_RULES_BLOCK_QUARTER, getFewShotBlock, getRulesBlock, krCountRange, requiredAngles,
+} from "./okr_rules.ts";
 import { containsDigits } from "./textGuards.ts";
 
-// --- OBJ-AMBITIOUS wording (snapshot guard against the old "ограничен по времени"
-//     formulation that conflicted with OBJ-NO-NUMBERS and forced score<=60). ---
-
-Deno.test("BASE_RULES: OBJ-AMBITIOUS не требует явного срока/даты в тексте Objective", () => {
-  const line = OKR_RULES_BLOCK.split("\n").find((l) => l.trim().startsWith("- OBJ-AMBITIOUS")) ?? "";
-  assert(line.length > 0, "Строка OBJ-AMBITIOUS должна присутствовать в правилах");
-  assert(
-    !/ограничен[а-я]*\s+(по\s+)?времени/i.test(line),
-    `OBJ-AMBITIOUS не должна требовать "ограниченности по времени" — конфликтует с OBJ-NO-NUMBERS. Получили: ${line}`,
-  );
-  assert(
-    line.includes("соответствует выбранному горизонту"),
-    `OBJ-AMBITIOUS должна ссылаться на выбранный горизонт. Получили: ${line}`,
-  );
-});
-
-Deno.test("BASE_RULES: OBJ-AMBITIOUS явно говорит, что цифра/дата в Objective НЕ требуется", () => {
-  const line = OKR_RULES_BLOCK.split("\n").find((l) => l.trim().startsWith("- OBJ-AMBITIOUS")) ?? "";
-  assert(
-    /НЕ\s+требует\s+явного\s+срока/i.test(line),
-    `OBJ-AMBITIOUS должна явно снимать требование срока/даты. Получили: ${line}`,
-  );
-});
-
-Deno.test("OKR_RULES_BLOCK_QUARTER унаследовал НОВУЮ редакцию OBJ-AMBITIOUS", () => {
-  assert(
-    OKR_RULES_BLOCK_QUARTER.includes("соответствует выбранному горизонту"),
-    "Квартальный блок должен содержать обновлённую формулировку OBJ-AMBITIOUS",
-  );
-  const line = OKR_RULES_BLOCK_QUARTER
-    .split("\n")
-    .find((l) => l.trim().startsWith("- OBJ-AMBITIOUS")) ?? "";
-  assert(
-    !/ограничен[а-я]*\s+(по\s+)?времени/i.test(line),
-    `OBJ-AMBITIOUS в квартальном блоке не должна требовать срока. Получили: ${line}`,
-  );
-});
-
-// --- KR-BASELINE-TARGET: распознавание baseline→target в тексте ---
-
-Deno.test("BASE_RULES: KR-BASELINE-TARGET явно описывает распознавание baseline→target внутри текста KR", () => {
-  const line = OKR_RULES_BLOCK.split("\n").find((l) => l.trim().startsWith("- KR-BASELINE-TARGET")) ?? "";
-  assert(line.length > 0, "Строка KR-BASELINE-TARGET должна присутствовать");
-  assert(
-    line.includes("с X до Y") && line.includes("baseline→target в самом тексте"),
-    `KR-BASELINE-TARGET должна явно описывать распознавание чисел в тексте. Получили: ${line}`,
-  );
-});
-
-Deno.test("OKR_RULES_BLOCK_QUARTER унаследовал расширенную формулировку KR-BASELINE-TARGET", () => {
-  assert(
-    OKR_RULES_BLOCK_QUARTER.includes("baseline→target в самом тексте"),
-    "Квартальный блок должен содержать расширенную формулировку KR-BASELINE-TARGET",
-  );
-});
-
-// --- Разведение пространств имён: старые id мертвы, новые — единственный источник ---
-
-const NEW_IDS = [
-  "OBJ-QUALITATIVE",
-  "OBJ-AMBITIOUS",
-  "OBJ-NO-NUMBERS",
-  "KR-MEASURABLE",
-  "KR-BASELINE-TARGET",
-  "KR-OUTCOME",
-  "KR-TIMEBOUND",
-  "KR-LEADING",
+const ALL_CTX = [
+  { horizon: "block_12m" },
+  { horizon: "quarter_3m", okr_type: "committed" as const },
+  { horizon: "strategic_3y", okr_type: "aspirational" as const, okr_status: "direction" as const },
+  { horizon: "block_12m", okr_type: "mixed" as const },
 ];
 
-Deno.test("BASE_RULES содержит все базовые новые id как токены в начале строк-правил", () => {
-  for (const id of NEW_IDS) {
-    assert(
-      OKR_RULES_BLOCK.includes(`- ${id} `),
-      `Правило '${id}' должно присутствовать в BASE_RULES как активный токен`,
-    );
+// --- requiredAngles / krCountRange (OKR-PI 3.3) ---
+
+Deno.test("requiredAngles по типу OKR (OKR-PI 3.3)", () => {
+  assertEquals(requiredAngles("aspirational"), ["К", "У"]);
+  assertEquals(requiredAngles("committed"), ["К", "О"]);
+  assertEquals(requiredAngles("mixed"), { must: ["К"], oneOf: ["О", "У"] });
+  assertEquals(requiredAngles(undefined), null);
+});
+
+Deno.test("krCountRange: направление 2..4, обычный OKR 3..5", () => {
+  assertEquals(krCountRange("direction"), [2, 4]);
+  assertEquals(krCountRange("regular"), [3, 5]);
+  assertEquals(krCountRange(undefined), [3, 5]);
+});
+
+// --- getRulesBlock(ctx) ---
+
+Deno.test("getRulesBlock: KR-MEASURABLE принимает формы удержания порога и форму обучения", () => {
+  const b = getRulesBlock({ horizon: "block_12m" });
+  for (const s of ["с X до Y", "с Y до X", "остаётся выше X", "остаётся ниже Y", "к [дата] известно"]) {
+    assert(b.includes(s), `нет формы «${s}»`);
   }
 });
 
-Deno.test("BASE_RULES НЕ содержит старых id-правил как активных токенов (- Xn [)", () => {
+Deno.test("getRulesBlock: KR-OUTCOME перечисляет запрещённые глаголы (рус + англ)", () => {
+  const b = getRulesBlock("block_12m");
+  for (const v of ["запустить", "внедрить", "перевести", "построить", "launch", "implement", "migrate", "build"]) {
+    assert(b.includes(v), `нет глагола ${v}`);
+  }
+});
+
+Deno.test("getRulesBlock: KR-LEARNING-FORM, KR-QUALITY-PAIR, ракурсы, Objective без способа", () => {
+  const b = getRulesBlock({ horizon: "block_12m", okr_type: "mixed" });
+  assert(b.includes("формальный [У]"));
+  assert(b.includes("ложные блокировки с 2% до 0,8%"));
+  assert(b.includes("[К] клиент и бизнес") && b.includes("[О] осуществимость и риски") && b.includes("[У] обучение"));
+  assert(b.includes("через внедрение X"));
+  assert(b.includes("контрольными точками внутри года"));
+});
+
+// Переписано: раньше проверяли KR-BASELINE-TARGET, Q-FOCUS, Q-THEME и KR-PERSPECTIVES.
+// По OKR-PI (3.3, 3.4) они заменены на KR-MEASURABLE (формы), KR-REQUIRED-ANGLES и KR-COUNT.
+Deno.test("getRulesBlock не содержит KR-BASELINE-TARGET, Q-THEME, Q-FOCUS, KR-PERSPECTIVES (OKR-PI 3.3/3.4)", () => {
+  for (const ctx of ALL_CTX) {
+    const b = getRulesBlock(ctx);
+    for (const dead of ["KR-BASELINE-TARGET", "Q-THEME", "Q-FOCUS", "KR-PERSPECTIVES"]) {
+      assert(!b.includes(dead), `${dead} не должно быть в блоке ${JSON.stringify(ctx)}`);
+    }
+  }
+});
+
+Deno.test("getRulesBlock: OBJ-AMBITIOUS только для aspirational/mixed, Q-REACH только для квартала", () => {
+  assert(!getRulesBlock({ horizon: "block_12m", okr_type: "committed" }).includes("OBJ-AMBITIOUS"));
+  assert(getRulesBlock({ horizon: "block_12m", okr_type: "aspirational" }).includes("- OBJ-AMBITIOUS"));
+  assert(getRulesBlock("quarter_3m").includes("- Q-REACH"));
+  assert(!getRulesBlock("block_12m").includes("Q-REACH"));
+});
+
+Deno.test("getRulesBlock: OBJ-AMBITIOUS не требует явного срока в тексте Objective", () => {
+  const line = getRulesBlock({ okr_type: "aspirational" }).split("\n").find((l) => l.startsWith("- OBJ-AMBITIOUS")) ?? "";
+  assert(/НЕ требует явного срока/.test(line), line);
+  assert(line.includes("соответствует выбранному горизонту"));
+});
+
+Deno.test("getRulesBlock: severity KR-LEADING и KR-REQUIRED-ANGLES в тексте зависят от контекста", () => {
+  assert(getRulesBlock("quarter_3m").includes("- KR-LEADING [critical]"));
+  assert(getRulesBlock("block_12m").includes("- KR-LEADING [important]"));
+  assert(getRulesBlock({ okr_status: "direction", okr_type: "aspirational" }).includes("- KR-REQUIRED-ANGLES [critical]"));
+});
+
+Deno.test("getRulesBlock: строки типа и статуса OKR", () => {
+  const b = getRulesBlock({ okr_type: "committed", okr_status: "direction" });
+  assert(b.includes("ТИП OKR: обязательный") && b.includes("СТАТУС: направление"));
+});
+
+Deno.test("Блоки правил содержат сноску про разведение id-правил и номеров KR", () => {
+  assert(/НЕ номера ключевых результатов пользователя/.test(OKR_RULES_BLOCK));
+  assert(/НЕ номера ключевых результатов пользователя/.test(OKR_RULES_BLOCK_QUARTER));
+});
+
+Deno.test("Блоки правил не используют старые id (O1..O3, KR1..KR4, KR10) как токены", () => {
   for (const dead of ["O1", "O2", "O3", "KR1", "KR2", "KR3", "KR4", "KR10"]) {
-    const pattern = new RegExp(`-\\s+${dead}\\s+\\[`);
-    assert(
-      !pattern.test(OKR_RULES_BLOCK),
-      `Старый id-правило '${dead}' не должен использоваться как активный токен в BASE_RULES`,
-    );
-    assert(
-      !pattern.test(OKR_RULES_BLOCK_QUARTER),
-      `Старый id-правило '${dead}' не должен использоваться как активный токен в OKR_RULES_BLOCK_QUARTER`,
-    );
+    const p = new RegExp(`-\\s+${dead}\\s+\\[`);
+    assert(!p.test(OKR_RULES_BLOCK) && !p.test(OKR_RULES_BLOCK_QUARTER), dead);
   }
 });
 
-Deno.test("OKR_RULES_BLOCK_QUARTER использует KR-LEADING в override-правиле, не KR10", () => {
-  const line = OKR_RULES_BLOCK_QUARTER
-    .split("\n")
-    .find((l) => l.trim().startsWith("- KR-LEADING [critical, override]")) ?? "";
-  assert(line.length > 0, `override-правило должно быть под именем KR-LEADING. Строки: ${OKR_RULES_BLOCK_QUARTER}`);
-  assert(!/- KR10 \[/.test(OKR_RULES_BLOCK_QUARTER), "старое имя KR10 не должно присутствовать в override");
-});
-
-Deno.test("OKR_RULES_BLOCK_QUARTER использует Q-FOCUS/Q-THEME/Q-REACH (верхний регистр), не старые Q-Focus", () => {
-  for (const q of ["Q-FOCUS", "Q-THEME", "Q-REACH"]) {
-    assert(OKR_RULES_BLOCK_QUARTER.includes(`- ${q} [`), `${q} должно присутствовать в OKR_RULES_BLOCK_QUARTER`);
+Deno.test("Слово «драйвер» не используется в правилах и эталонах", () => {
+  for (const ctx of ALL_CTX) {
+    assert(!/драйвер/i.test(getRulesBlock(ctx)));
+    assert(!/драйвер/i.test(getFewShotBlock(ctx)));
   }
-  for (const dead of ["Q-Focus", "Q-Theme", "Q-Reach"]) {
-    assert(
-      !new RegExp(`-\\s+${dead}\\s+\\[`).test(OKR_RULES_BLOCK_QUARTER),
-      `Старое имя ${dead} не должно использоваться как активный токен`,
-    );
-  }
-});
-
-Deno.test("BASE_RULES содержит явную сноску про разведение id-правил и номеров KR пользователя", () => {
-  assert(
-    /НЕ номера ключевых результатов пользователя/i.test(OKR_RULES_BLOCK),
-    "OKR_RULES_BLOCK должен содержать сноску про разведение id-правил и номеров KR пользователя",
-  );
-  assert(
-    /НЕ номера ключевых результатов пользователя/i.test(OKR_RULES_BLOCK_QUARTER),
-    "OKR_RULES_BLOCK_QUARTER должен содержать ту же сноску",
-  );
 });
 
 // --- textGuards smoke ---
@@ -130,73 +110,29 @@ Deno.test("BASE_RULES содержит явную сноску про разве
 Deno.test("containsDigits: распознаёт год в тексте Objective", () => {
   assert(containsDigits("Удвоить выручку к 2026 году") === true);
 });
-
 Deno.test("containsDigits: чистый текст без цифр → false", () => {
   assert(containsDigits("Стать предсказуемой опорой роста для команды") === false);
 });
 
-// --- few-shot эталоны по горизонтам ---
+// --- эталоны банка по типу OKR ---
 
-Deno.test("getFewShotBlock упоминает KR-OUTCOME и KR-LEADING вместо KR3/KR10", () => {
-  for (const h of ["quarter_3m", "block_12m", "strategic_3y"]) {
-    const b = getFewShotBlock(h);
-    assert(b.includes("KR-OUTCOME"), `${h}: должен упоминать KR-OUTCOME`);
-    assert(b.includes("KR-LEADING"), `${h}: должен упоминать KR-LEADING`);
-    assert(!/\bKR3\b/.test(b), `${h}: старое имя KR3 не должно встречаться. Получили: ${b}`);
-    assert(!/\bKR10\b/.test(b), `${h}: старое имя KR10 не должно встречаться. Получили: ${b}`);
+Deno.test("getFewShotBlock: эталон по типу OKR, с метками ракурсов и строкой «на разборе»", () => {
+  const cases: Array<[string | undefined, string]> = [
+    ["aspirational", "Кредит в один клик"],
+    ["committed", "Надёжность в пиковые дни"],
+    ["mixed", "Антифрод без лишнего трения"],
+  ];
+  for (const [t, title] of cases) {
+    const b = getFewShotBlock({ horizon: "block_12m", okr_type: t as never });
+    assert(b.includes(title), `${t}: ожидали эталон «${title}»`);
+    assert(b.includes("[К]"), `${t}: нужна метка [К]`);
+    assert(/На разборе/.test(b), `${t}: нужна строка «на разборе»`);
   }
 });
 
-Deno.test("getFewShotBlock('quarter_3m'): KR-OUTCOME замер спринт/месяц, KR-LEADING leading на спринте", () => {
+Deno.test("getFewShotBlock: отрицательный пример про активацию действующих клиентов и тесты KR-OUTCOME/KR-LEADING", () => {
   const b = getFewShotBlock("quarter_3m");
-  assert(/KR-OUTCOME/.test(b) && /помесячно|спринт/i.test(b), `KR-OUTCOME quarter должен содержать спринт/месячный замер: ${b}`);
-  assert(/KR-LEADING/.test(b) && /спринт/i.test(b), `KR-LEADING quarter leading должен упоминать спринт: ${b}`);
-});
-
-Deno.test("getFewShotBlock('block_12m'): KR-OUTCOME содержит квартальный замер", () => {
-  const b = getFewShotBlock("block_12m");
-  assert(/KR-OUTCOME/.test(b) && /поквартально|квартал/i.test(b), `KR-OUTCOME 12m должен содержать квартальный замер: ${b}`);
-});
-
-Deno.test("getFewShotBlock('strategic_3y'): KR-OUTCOME содержит годовой/полугодовой замер", () => {
-  const b = getFewShotBlock("strategic_3y");
-  assert(/KR-OUTCOME/.test(b) && /полугодие|год/i.test(b), `KR-OUTCOME 3y должен содержать годовой/полугодовой замер: ${b}`);
-});
-
-Deno.test("getFewShotBlock: симметрия — в каждом блоке ≥2 ПЛОХО и ≥2 ОТЛИЧНО (KR-OUTCOME + KR-LEADING)", () => {
-  for (const h of ["quarter_3m", "block_12m", "strategic_3y"]) {
-    const b = getFewShotBlock(h);
-    const bad = (b.match(/ПЛОХО/g) ?? []).length;
-    const good = (b.match(/ОТЛИЧНО/g) ?? []).length;
-    assert(bad >= 2, `${h}: ожидали ≥2 маркера ПЛОХО, получили ${bad}`);
-    assert(good >= 2, `${h}: ожидали ≥2 маркера ОТЛИЧНО, получили ${good}`);
-  }
-});
-
-// --- KR-PERSPECTIVES: типология KR из AI-Native SAFe ---
-
-Deno.test("BASE_RULES содержит правило KR-PERSPECTIVES с описанием трёх осей", () => {
-  assert(OKR_RULES_BLOCK.includes("- KR-PERSPECTIVES "), "правило KR-PERSPECTIVES должно быть активным токеном");
-  for (const axis of ["КЛИЕНТ И БИЗНЕС", "ОСУЩЕСТВИМОСТЬ И РИСКИ", "ОБУЧЕНИЕ И РАЗВИТИЕ"]) {
-    assert(OKR_RULES_BLOCK.includes(axis), `ось '${axis}' должна быть описана в правиле`);
-  }
-});
-
-Deno.test("текст правила KR-PERSPECTIVES подчёркивает, что это подсказка, а не требование", () => {
-  assert(/ПОДСКАЗКА/i.test(OKR_RULES_BLOCK), "должен быть маркер 'подсказка'");
-  assert(/не все оси применимы/i.test(OKR_RULES_BLOCK), "должен быть маркер 'не все оси применимы'");
-  assert(/НЕ требуй механически/i.test(OKR_RULES_BLOCK), "должен быть запрет механического дописывания KR");
-});
-
-Deno.test("описание оси feasibility_risk содержит обе функции — осуществимость и защиту критичного", () => {
-  assert(/осуществимость/i.test(OKR_RULES_BLOCK), "должна быть функция осуществимости");
-  assert(/не сломать/i.test(OKR_RULES_BLOCK), "должна быть функция защиты критичного ('не сломать')");
-  assert(/удерживать/i.test(OKR_RULES_BLOCK), "должна быть грамматика контр-метрики 'удерживать'");
-});
-
-Deno.test("квартальный блок упоминает предпочтение опережающих KR", () => {
-  assert(
-    /предпочтительны опережающие/i.test(OKR_RULES_BLOCK_QUARTER),
-    "OKR_RULES_BLOCK_QUARTER должен указывать предпочтение опережающих показателей",
-  );
+  assert(b.includes("Активация действующих клиентов другими продуктами и сервисами"));
+  assert(b.includes("KR-OUTCOME") && b.includes("KR-LEADING"));
+  assert(!/\bKR3\b|\bKR10\b/.test(b));
 });

@@ -358,8 +358,8 @@ Deno.test("handler: первый ответ suspicious → ровно ОДИН r
     assertEquals(history[1].temperature, 0);
     // финальный ответ — из retry, без флага audit_unreliable
     assertEquals(data.audit_unreliable, undefined);
-    // +1: сервер добавляет OKR-TYPE-DECLARED
-    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length + 1);
+    // Переписано: +3 — сервер добавляет OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES
+    assert(Array.isArray(data.rules) && data.rules.length === cleanRules.length + 3);
   } finally {
     _restoreFetch();
   }
@@ -921,10 +921,12 @@ Deno.test("buildAuditorParameters: kr_perspectives входит в required ве
   assert(req.includes("kr_perspectives"));
 });
 
-Deno.test("buildAuditorParameters: enum id содержит KR-REQUIRED-ANGLES, KR-QUALITY-PAIR и не содержит KR-PERSPECTIVES", () => {
+// Переписано: KR-REQUIRED-ANGLES и KR-COUNT считает сервер — в enum модели их нет.
+Deno.test("buildAuditorParameters: enum id содержит KR-QUALITY-PAIR, не содержит KR-REQUIRED-ANGLES, KR-COUNT, KR-PERSPECTIVES", () => {
   for (const h of ["block_12m", "quarter_3m"]) {
     const ids = buildAuditorParameters(h).properties.rules.items.properties.id.enum as string[];
-    assert(ids.includes("KR-REQUIRED-ANGLES") && ids.includes("KR-QUALITY-PAIR"));
+    assert(ids.includes("KR-QUALITY-PAIR"));
+    assert(!ids.includes("KR-REQUIRED-ANGLES") && !ids.includes("KR-COUNT"));
     assert(!ids.includes("KR-PERSPECTIVES"));
   }
 });
@@ -1076,4 +1078,55 @@ Deno.test("handler: mode=fix — температура по умолчанию 
   } finally {
     _restoreFetch();
   }
+});
+
+// --- Серверные KR-COUNT / KR-REQUIRED-ANGLES и правило отсутствия KR-LEADING ---
+Deno.test("markUnconfirmed: KR-LEADING без цитаты не помечается и входит в оценку", () => {
+  const rules = markUnconfirmed([
+    { id: "KR-LEADING", pass: false, severity: "important", grounded: false, evidence: "" },
+    { id: "KR-MEASURABLE", pass: true, severity: "critical", grounded: true },
+  ]);
+  assertEquals(rules[0].unconfirmed, undefined);
+  const d: any = { rules };
+  applyScoreRecompute(d);
+  assert(d.score < 100);
+});
+
+Deno.test("handler: aspirational без [У] → KR-REQUIRED-ANGLES fail от сервера, вердикт модели заменён", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([{
+    ...cleanReport,
+    rules: [...cleanRules, { id: "KR-REQUIRED-ANGLES", label: "L", reasoning: "", pass: true, hint: "", severity: "important", why: "", evidence: "" }],
+    kr_perspectives: [{ index: 0, perspective: "К", rationale: "" }, { index: 1, perspective: "О", rationale: "" }],
+  }]);
+  try {
+    const { data } = await callHandler(handler, { ...baseBody, okr_type: "aspirational" });
+    const a = data.rules.filter((x: any) => x.id === "KR-REQUIRED-ANGLES");
+    assertEquals(a.length, 1);
+    assertEquals(a[0].pass, false);
+    assertEquals(a[0].missing, ["У"]);
+    assertEquals(a[0].unconfirmed, undefined);
+    const c = data.rules.find((x: any) => x.id === "KR-COUNT");
+    assertEquals(c.pass, false, "2 KR в обычном OKR — меньше 3");
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("handler: неполная разметка ракурсов → unreliable, не влияет на оценку", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  queueAiResponses([{ ...cleanReport, kr_perspectives: [] }]);
+  try {
+    const { data } = await callHandler(handler, { ...baseBody, okr_type: "aspirational" });
+    const a = data.rules.find((x: any) => x.id === "KR-REQUIRED-ANGLES");
+    assertEquals(a.unreliable, true);
+  } finally {
+    _restoreFetch();
+  }
+});
+
+Deno.test("промпт аудитора: правила отсутствия не требуют pass=true, kr_perspectives для каждого KR", () => {
+  const p = buildSystemPrompt("block_12m", { okr_type: "aspirational" });
+  assert(p.includes("Не ставь pass=true только потому, что нечего процитировать"));
+  assert(p.includes("kr_perspectives заполняй для КАЖДОГО KR"));
 });

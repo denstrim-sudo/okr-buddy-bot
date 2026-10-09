@@ -103,6 +103,8 @@ export function useStabilityRun(cases: GoldenCase[] = GOLDEN_SET) {
           update((s) => ({ ...s, done: s.done + 1, runs: { ...s.runs, [c.id]: [...(s.runs[c.id] ?? []), data as AuditRun] } }));
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
+          // Отказ AI-провайдера касается всех вызовов — не тратим остальные.
+          if (/AI-провайдер|non-2xx|502/i.test(message)) stopRef.current = true;
           update((s) => ({ ...s, done: s.done + 1, errors: [...s.errors, { caseId: c.id, repeat, message }] }));
         }
       }

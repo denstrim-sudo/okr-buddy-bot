@@ -40,3 +40,16 @@ describe("useStabilityRun", () => {
     expect(sessionStorage.getItem(STABILITY_STORAGE_KEY)).toBeTruthy();
   });
 });
+
+describe("useStabilityRun — отказ провайдера", () => {
+  it("после ошибки AI-провайдера прогон останавливается, страница не падает", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue({ data: null, error: { message: "Edge function returned 502: AI-провайдер вернул ошибку" } });
+    const ids = GOLDEN_SET.slice(0, 3).map((c) => c.id);
+    const { result } = renderHook(() => useStabilityRun());
+    await act(async () => { await result.current.run({ caseIds: ids, repeats: 2, model: "m", concurrency: 1 }); });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state!.errors).toHaveLength(1);
+    expect(result.current.state!.finished).toBe(true);
+  });
+});

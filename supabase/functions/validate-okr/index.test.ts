@@ -469,7 +469,7 @@ Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).l
   // Переписано (О1–О17): модель оценивает 4 смысловых правила (с OBJ-END-STATE) + Q-REACH в квартале.
   assertEquals(p3y.properties.rules.minItems, 4);
   assertEquals(pDefault.properties.rules.minItems, 4);
-  assertEquals(pq.properties.rules.minItems, 4);
+  assertEquals(pq.properties.rules.minItems, 5);
 });
 
 Deno.test("buildParameters: rules.items.properties.id.enum === modelRuleIdsFor(ctx), без OKR-TYPE-DECLARED", () => {

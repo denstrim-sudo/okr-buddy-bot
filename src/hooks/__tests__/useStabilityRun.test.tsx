@@ -29,7 +29,9 @@ describe("useStabilityRun", () => {
     expect(invokeMock).toHaveBeenCalledTimes(4);
     const [name, opts] = invokeMock.mock.calls[0];
     expect(name).toBe("validate-okr");
-    expect(opts.body).toMatchObject({ mode: "audit", objective: a.objective, key_results: a.key_results, horizon: a.horizon, okr_status: a.okr_status, model: "m1" });
+    expect(opts.body).toMatchObject({ mode: "audit", objective: a.objective, key_results: a.key_results, horizon: a.horizon, okr_origin: a.okr_origin, owner: a.owner, model: "m1" });
+    // Переписано (О1–О17): вместо okr_status передаются okr_origin, owner, way_known.
+    expect(opts.body.okr_status).toBeUndefined();
     const s = result.current.state!;
     expect(s.done).toBe(4);
     expect(s.errors).toHaveLength(1);

@@ -81,9 +81,12 @@ Deno.test("getRulesBlock: severity KR-LEADING и KR-REQUIRED-ANGLES в текс�
   assert(getRulesBlock({ okr_status: "direction", okr_type: "aspirational" }).includes("- KR-REQUIRED-ANGLES [critical]"));
 });
 
-Deno.test("getRulesBlock: строки типа и статуса OKR", () => {
+// Переписано (О1–О17): «СТАТУС» заменён на «ПРОИСХОЖДЕНИЕ»; для направления тип принудительно амбициозный.
+Deno.test("getRulesBlock: строки типа и происхождения OKR", () => {
   const b = getRulesBlock({ okr_type: "committed", okr_status: "direction" });
-  assert(b.includes("ТИП OKR: обязательный") && b.includes("СТАТУС: направление"));
+  assert(b.includes("ТИП OKR: амбициозный") && b.includes("ПРОИСХОЖДЕНИЕ: из направления роста"));
+  assert(getRulesBlock({ okr_origin: "protection_direction" }).includes("ПРОИСХОЖДЕНИЕ: из защитного направления"));
+  assert(getRulesBlock({ okr_type: "committed" }).includes("ТИП OKR: обязательный. ПРОИСХОЖДЕНИЕ: обычный OKR"));
 });
 
 Deno.test("Блоки правил содержат сноску про разведение id-правил и номеров KR", () => {

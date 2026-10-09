@@ -8,6 +8,13 @@ const BASE_IDS = [
   "OKR-TYPE-DECLARED", "OBJ-NO-NUMBERS", "OBJ-QUALITATIVE", "KR-COUNT", "KR-MEASURABLE", "KR-OUTCOME",
   "KR-REQUIRED-ANGLES", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "KR-LEADING", "KR-TIMEBOUND",
 ];
+// Переписано (чек-лист О1–О17, 09.10.2026): добавлены OBJ-END-STATE (О3), OKR-OWNER (О9),
+// OKR-WAY-KNOWN (О17), KR-RISK-NAMED (О7).
+const BASE_IDS_V2 = [
+  "OKR-TYPE-DECLARED", "OBJ-NO-NUMBERS", "OBJ-QUALITATIVE", "OBJ-END-STATE", "OKR-OWNER", "OKR-WAY-KNOWN",
+  "KR-COUNT", "KR-MEASURABLE", "KR-OUTCOME", "KR-REQUIRED-ANGLES", "KR-QUALITY-PAIR", "KR-LEARNING-FORM",
+  "KR-LEADING", "KR-TIMEBOUND", "KR-RISK-NAMED",
+];
 
 // --- recomputeScore ---
 
@@ -79,7 +86,8 @@ Deno.test("scoreDiscrepancy: >10 → true, ≤10 → false", () => {
 // По OKR-PI 3.3/3.4 свод заменён на ракурсы, пару количество/качество и форму обучения.
 
 Deno.test("knownRuleIdsFor(ctx): базовый набор OKR-PI", () => {
-  assertEquals(knownRuleIdsFor({ horizon: "block_12m", okr_type: "committed", okr_status: "regular" }), BASE_IDS);
+  assertEquals(knownRuleIdsFor({ horizon: "block_12m", okr_type: "committed", okr_status: "regular" }), BASE_IDS_V2);
+  assert(BASE_IDS.every((id) => BASE_IDS_V2.includes(id)));
 });
 
 Deno.test("knownRuleIdsFor: OBJ-AMBITIOUS только для aspirational/mixed", () => {
@@ -90,13 +98,13 @@ Deno.test("knownRuleIdsFor: OBJ-AMBITIOUS только для aspirational/mixed
 });
 
 Deno.test("knownRuleIdsFor: Q-REACH только для квартала (Q-FOCUS/Q-THEME удалены, OKR-PI 3.4)", () => {
-  assertEquals(knownRuleIdsFor("quarter_3m"), [...BASE_IDS, "Q-REACH"]);
+  assertEquals(knownRuleIdsFor("quarter_3m"), [...BASE_IDS_V2, "Q-REACH"]);
   assert(!knownRuleIdsFor("block_12m").includes("Q-REACH"));
 });
 
 Deno.test("knownRuleIdsFor: старая сигнатура (horizon) = тип не объявлен, обычный OKR", () => {
-  assertEquals(knownRuleIdsFor("block_12m"), BASE_IDS);
-  assertEquals(knownRuleIdsFor(undefined), BASE_IDS);
+  assertEquals(knownRuleIdsFor("block_12m"), BASE_IDS_V2);
+  assertEquals(knownRuleIdsFor(undefined), BASE_IDS_V2);
 });
 
 Deno.test("knownRuleIdsFor не содержит удалённых и старых id", () => {
@@ -111,13 +119,14 @@ Deno.test("knownRuleIdsFor не содержит удалённых и стар�
 
 // Переписано (замер стабильности 2026-10-08): модель оценивает только смысловые правила,
 // формальные и разметочные считает сервер.
-const SERVER_IDS = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING"];
+// Переписано (О1–О17): добавлены серверные OKR-OWNER, OKR-WAY-KNOWN, KR-RISK-NAMED и модельное OBJ-END-STATE.
+const SERVER_IDS = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "OKR-OWNER", "OKR-WAY-KNOWN", "KR-RISK-NAMED"];
 Deno.test("modelRuleIdsFor: без серверных правил — только смысловые", () => {
   const ids = modelRuleIdsFor("block_12m");
   for (const id of SERVER_IDS) assert(!ids.includes(id), id);
-  assertEquals(ids, ["OBJ-QUALITATIVE", "KR-QUALITY-PAIR", "KR-LEARNING-FORM"]);
+  assertEquals(ids, ["OBJ-QUALITATIVE", "OBJ-END-STATE", "KR-QUALITY-PAIR", "KR-LEARNING-FORM"]);
   assertEquals(modelRuleIdsFor({ horizon: "quarter_3m", okr_type: "aspirational" }).sort(),
-    ["KR-LEARNING-FORM", "KR-QUALITY-PAIR", "OBJ-AMBITIOUS", "OBJ-QUALITATIVE", "Q-REACH"]);
+    ["KR-LEARNING-FORM", "KR-QUALITY-PAIR", "OBJ-AMBITIOUS", "OBJ-END-STATE", "OBJ-QUALITATIVE", "Q-REACH"]);
   const known = knownRuleIdsFor("block_12m");
   assert(known.includes("KR-COUNT") && known.includes("KR-REQUIRED-ANGLES"));
 });
@@ -156,8 +165,9 @@ Deno.test("severityFor: старые и неизвестные id → improve", 
 
 // --- ruleApplicability (OKR-PI 3.4.8) ---
 
-Deno.test("ruleApplicability: KR-REQUIRED-ANGLES без типа → not_applicable", () => {
-  assertEquals(ruleApplicability("KR-REQUIRED-ANGLES", {}), "not_applicable");
+// Переписано (О1–О17): ракурсы зависят от происхождения, а не от типа — правило применяется всегда.
+Deno.test("ruleApplicability: KR-REQUIRED-ANGLES без типа → applies", () => {
+  assertEquals(ruleApplicability("KR-REQUIRED-ANGLES", {}), "applies");
   assertEquals(ruleApplicability("KR-REQUIRED-ANGLES", { okr_type: "aspirational" }), "applies");
 });
 
@@ -223,8 +233,9 @@ Deno.test("computeKrCount: direction 5 → fail, direction 2 → pass", () => {
 });
 
 const P = (...a: string[]) => a.map((perspective, index) => ({ index, perspective }));
-Deno.test("computeRequiredAngles: aspirational К,К,О → fail, missing У", () => {
-  const r = computeRequiredAngles(P("К", "К", "О"), 3, { okr_type: "aspirational" });
+// Переписано (О1–О17): ракурсы по происхождению. Раньше «aspirational К,К,О → missing У»; теперь это growth_direction.
+Deno.test("computeRequiredAngles: growth_direction К,К,О → fail, missing У (N1 v2)", () => {
+  const r = computeRequiredAngles(P("К", "К", "О"), 3, { okr_origin: "growth_direction" });
   assertEquals(r.pass, false);
   assertEquals(r.missing, ["У"]);
   assert(r.hint.includes("[У]"));
@@ -235,19 +246,26 @@ Deno.test("computeRequiredAngles: aspirational К,О,У → pass", () => {
 Deno.test("computeRequiredAngles: committed К,О,О → pass (эталон «Надёжность в пиковые дни»)", () => {
   assertEquals(computeRequiredAngles(P("К", "О", "О"), 3, { okr_type: "committed" }).pass, true);
 });
-Deno.test("computeRequiredAngles: mixed К,У → pass; К,К → fail «О или У»", () => {
-  assertEquals(computeRequiredAngles(P("К", "У"), 2, { okr_type: "mixed" }).pass, true);
-  const r = computeRequiredAngles(P("К", "К"), 2, { okr_type: "mixed" });
+// Переписано (О1–О17): смешанный тип больше не даёт «О или У» — тип на ракурсы не влияет.
+Deno.test("computeRequiredAngles: тип mixed не влияет — regular К,У → fail, missing О (N11)", () => {
+  const r = computeRequiredAngles(P("К", "К", "У"), 3, { okr_type: "mixed" });
   assertEquals(r.pass, false);
-  assertEquals(r.missing, ["О или У"]);
+  assertEquals(r.missing, ["О"]);
+});
+Deno.test("computeRequiredAngles: protection_direction К,К,У → fail, missing О (N10)", () => {
+  const r = computeRequiredAngles(P("К", "К", "У"), 3, { okr_origin: "protection_direction" });
+  assertEquals(r.missing, ["О"]);
 });
 Deno.test("computeRequiredAngles: разметка неполная (3 из 4) → unreliable", () => {
   const r = computeRequiredAngles(P("К", "К", "О"), 4, { okr_type: "committed" });
   assertEquals(r.unreliable, true);
   assertEquals(r.pass, false);
 });
-Deno.test("computeRequiredAngles: тип не объявлен → applicable=false", () => {
-  assertEquals(computeRequiredAngles(P("К"), 1, {}).applicable, false);
+// Переписано (О1–О17): неприменимость при неизвестном типе убрана.
+Deno.test("computeRequiredAngles: тип не объявлен, regular К,К,О,У → pass (N9 v2)", () => {
+  const r = computeRequiredAngles(P("К", "К", "О", "У"), 4, {});
+  assertEquals(r.applicable, true);
+  assertEquals(r.pass, true);
 });
 Deno.test("recomputeScore: unreliable правило не входит в оценку", () => {
   const base = [{ id: "A", pass: true, severity: "critical" as const }];
@@ -256,8 +274,9 @@ Deno.test("recomputeScore: unreliable правило не входит в оце
     recomputeScore(base),
   );
 });
-Deno.test("интеграция: амбициозный OKR без [У] получает оценку ниже, чем с [У]", () => {
-  const ctx = { okr_type: "aspirational" as const, okr_status: "regular" as const, horizon: "block_12m" };
+// Переписано (О1–О17): [У] обязателен по происхождению (рост), а не по типу.
+Deno.test("интеграция: OKR из направления роста без [У] получает оценку ниже, чем с [У]", () => {
+  const ctx = { okr_origin: "growth_direction" as const, horizon: "block_12m" };
   const modelRules = ["OBJ-NO-NUMBERS", "OBJ-QUALITATIVE", "OBJ-AMBITIOUS", "KR-MEASURABLE", "KR-OUTCOME", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "KR-LEADING", "KR-TIMEBOUND"]
     .map((id) => ({ id, pass: true }));
   const score = (p: unknown) => recomputeScore(applyRuleContext(addServerRules(modelRules, kr(3), p, ctx), ctx));
@@ -348,12 +367,13 @@ Deno.test("KR-LEADING: P3 обычный годовой без опережаю�
   assertEquals(r.severity, "improve");
   assert(r.hint.startsWith("Рекомендация: добавьте опережающий KR"));
 });
-Deno.test("KR-LEADING: тот же набор со статусом direction → fail, critical", () => {
+// Переписано (О13): для OKR из направления hint требует опережающий именно [К].
+Deno.test("KR-LEADING: тот же набор со старым статусом direction → fail, critical, О13", () => {
   const ctx = { okr_type: "aspirational", okr_status: "direction", horizon: "block_12m" } as any;
   const r = rule(audit("Новый клиент быстро становится активным.", P3_KRS, P3_LABELS(), ctx), "KR-LEADING");
   assertEquals(r.pass, false);
   assertEquals(r.severity, "critical");
-  assert(r.hint.startsWith("Все KR запаздывающие"));
+  assert(r.hint.startsWith("О13: нужен опережающий [К]"));
 });
 Deno.test("KR-LEADING: квартальный горизонт → fail, critical", () => {
   const ctx = { okr_type: "aspirational", okr_status: "regular", horizon: "quarter_3m" } as any;
@@ -403,4 +423,106 @@ Deno.test("addServerRules: вердикты модели по серверным
   assertEquals(rules.filter((r: any) => r.id === "OBJ-NO-NUMBERS").length, 1);
   assertEquals(rule(rules, "OBJ-NO-NUMBERS").pass, true);
   assertEquals(rule(rules, "OBJ-QUALITATIVE").pass, true);
+});
+
+// --- Чек-лист О1–О17 (обновление OKR-PI 09.10.2026) ---
+import {
+  toCtx as toCtxV2, requiredAnglesFor, checklistRef, computeOwner, computeWayKnown, computeRiskNamed,
+} from "./scoring.ts";
+import { GOLDEN_SET } from "../../../src/lib/goldenSet.ts";
+
+Deno.test("toCtx: okr_origin, owner, way_known; совместимость со старым okr_status", () => {
+  assertEquals(toCtxV2({ okr_status: "direction" }).okr_origin, "growth_direction");
+  assertEquals(toCtxV2({ okr_status: "regular" }).okr_origin, "regular");
+  assertEquals(toCtxV2({}).okr_origin, "regular");
+  const c = toCtxV2({ okr_origin: "protection_direction", owner: "  Иванов ", way_known: false, okr_type: "committed" });
+  assertEquals(c.okr_origin, "protection_direction");
+  assertEquals(c.owner, "Иванов");
+  assertEquals(c.way_known, false);
+  assertEquals(c.okr_type, "aspirational", "для OKR из направления тип принудительно амбициозный");
+  assertEquals(toCtxV2({}).way_known, true);
+});
+Deno.test("OKR-TYPE-DECLARED: для OKR из направления pass без объявленного типа", () => {
+  const r = applyRuleContext([], { okr_origin: "growth_direction" }).find((x: any) => x.id === "OKR-TYPE-DECLARED");
+  assertEquals(r.pass, true);
+});
+Deno.test("requiredAnglesFor по происхождению", () => {
+  assertEquals(requiredAnglesFor("growth_direction"), ["К", "У"]);
+  assertEquals(requiredAnglesFor("protection_direction"), ["К", "О", "У"]);
+  assertEquals(requiredAnglesFor("regular"), ["К", "О"]);
+});
+Deno.test("KR-COUNT: growth/protection 2–4 (О11), regular 3–5 (О15)", () => {
+  assertEquals(computeKrCount(kr(2), { okr_origin: "protection_direction" }).pass, true);
+  assertEquals(computeKrCount(kr(5), { okr_origin: "growth_direction" }).pass, false);
+  assertEquals(computeKrCount(kr(2), { okr_origin: "regular" }).pass, false);
+  assertEquals(computeKrCount(kr(5), { okr_origin: "regular" }).pass, true);
+});
+Deno.test("KR-LEADING (О13): из направления нужен опережающий именно [К]", () => {
+  const onlyO = L(["К", "range", "lagging"], ["О", "threshold", "leading"]);
+  const r = computeLeading(onlyO, 2, { okr_origin: "growth_direction" });
+  assertEquals(r.pass, false);
+  assertEquals(r.hint, "О13: нужен опережающий [К] — драйвер с контрольными точками внутри года");
+  assertEquals(computeLeading(L(["К", "range", "leading"], ["О", "threshold", "lagging"]), 2, { okr_origin: "protection_direction" }).pass, true);
+  assertEquals(severityFor("KR-LEADING", { okr_origin: "protection_direction" }), "critical");
+  // квартал и обычный годовой — как раньше: любой опережающий
+  assertEquals(computeLeading(onlyO, 2, { horizon: "quarter_3m" }).pass, true);
+  assertEquals(severityFor("KR-LEADING", { okr_origin: "regular", horizon: "block_12m" }), "improve");
+});
+Deno.test("KR-REQUIRED-ANGLES severity: направление → critical, regular → important", () => {
+  assertEquals(severityFor("KR-REQUIRED-ANGLES", { okr_origin: "growth_direction" }), "critical");
+  assertEquals(severityFor("KR-REQUIRED-ANGLES", { okr_origin: "protection_direction" }), "critical");
+  assertEquals(severityFor("KR-REQUIRED-ANGLES", { okr_origin: "regular" }), "important");
+});
+Deno.test("Исключение для обязательных — только committed+regular (P4 «Регуляторные изменения НБРБ»)", () => {
+  const p4 = GOLDEN_SET.find((c) => c.id === "P4")!;
+  assertEquals(p4.okr_type, "committed");
+  const ctx = { okr_type: "committed" as const, okr_origin: "regular" as const, horizon: "block_12m" };
+  const labels = L(["К", "execution", "lagging"], ["К", "binary", "lagging"], ["О", "threshold", "lagging"]);
+  assertEquals(computeMeasurable(labels, 3, ctx).pass, true);
+  assertEquals(computeTimebound(labels, 3, ctx).pass, true);
+  assertEquals(ruleApplicability("KR-OUTCOME", ctx), "not_applicable");
+  // OKR из направления обязательным не бывает
+  const dir = { okr_type: "committed" as const, okr_origin: "growth_direction" as const };
+  assertEquals(computeMeasurable(labels, 3, dir).pass, false);
+  assertEquals(ruleApplicability("KR-OUTCOME", dir), "applies");
+});
+Deno.test("OKR-OWNER (О9): pass, если владелец назван", () => {
+  assertEquals(computeOwner({ owner: "  " }).pass, false);
+  assertEquals(computeOwner({ owner: "  " }).hint, "О9: назовите владельца поимённо");
+  assertEquals(computeOwner({ owner: "Петров" }).pass, true);
+});
+Deno.test("OKR-WAY-KNOWN (О17): только regular; pass, если way_known !== false", () => {
+  assertEquals(computeWayKnown({ way_known: false }).pass, false);
+  assert(computeWayKnown({ way_known: false }).hint.startsWith("О17: способ неизвестен"));
+  assertEquals(computeWayKnown({}).pass, true);
+  assertEquals(ruleApplicability("OKR-WAY-KNOWN", { okr_origin: "growth_direction" }), "not_applicable");
+  assertEquals(ruleApplicability("OKR-WAY-KNOWN", { okr_origin: "regular" }), "applies");
+});
+Deno.test("KR-RISK-NAMED (О7): каждый [О] с guards_against; без [О] — pass; неполная разметка — unreliable", () => {
+  const lab = (a: Array<[string, string]>) => a.map(([perspective, guards_against], index) => ({ index, perspective, guards_against }));
+  const r = computeRiskNamed(lab([["К", ""], ["О", ""], ["О", "заморозка релизов"]]), 3);
+  assertEquals(r.pass, false);
+  assert(r.hint.includes("KR №2") && !r.hint.includes("KR №3"));
+  assertEquals(computeRiskNamed(lab([["К", ""], ["У", ""]]), 2).pass, true);
+  assertEquals(computeRiskNamed(lab([["К", ""]]), 2).unreliable, true);
+});
+Deno.test("RULE_EVIDENCE_KIND: новые серверные правила и OBJ-END-STATE по цитате", () => {
+  for (const id of ["OKR-OWNER", "OKR-WAY-KNOWN", "KR-RISK-NAMED"]) assertEquals(RULE_EVIDENCE_KIND[id], "server");
+  assertEquals(RULE_EVIDENCE_KIND["OBJ-END-STATE"], "quote");
+  assertEquals(severityFor("OBJ-END-STATE", {}), "important");
+});
+Deno.test("checklist_ref: есть у каждого правила; KR-COUNT и ракурсы зависят от происхождения", () => {
+  for (const ctx of [{ horizon: "quarter_3m", okr_type: "mixed" as const }, { okr_origin: "growth_direction" as const }]) {
+    const rules = applyRuleContext(knownRuleIdsFor(ctx).filter((id) => id !== "OKR-TYPE-DECLARED").map((id) => ({ id, pass: true })), ctx);
+    for (const id of knownRuleIdsFor(ctx)) {
+      const r = rules.find((x: any) => x.id === id);
+      assert(r && typeof r.checklist_ref === "string" && r.checklist_ref.length > 0, id);
+    }
+  }
+  assertEquals(checklistRef("KR-COUNT", { okr_origin: "growth_direction" }), "О11");
+  assertEquals(checklistRef("KR-COUNT", {}), "О15");
+  assertEquals(checklistRef("KR-REQUIRED-ANGLES", { okr_origin: "protection_direction" }), "5.2");
+  assertEquals(checklistRef("KR-REQUIRED-ANGLES", {}), "О16");
+  assertEquals(checklistRef("OBJ-END-STATE", {}), "О3");
+  assertEquals(checklistRef("Q-REACH", {}), "доп.");
 });

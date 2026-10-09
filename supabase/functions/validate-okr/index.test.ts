@@ -361,9 +361,10 @@ Deno.test("handler: первый ответ suspicious → ровно ОДИН r
     // Переписано (замер стабильности): сервер отбрасывает вердикты модели по своим правилам
     // и добавляет 8 серверных: OKR-TYPE-DECLARED, KR-COUNT, KR-REQUIRED-ANGLES,
     // OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING.
-    const serverIds = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING"];
+    // Переписано (О1–О17): + OKR-OWNER, OKR-WAY-KNOWN, KR-RISK-NAMED → 11 серверных.
+    const serverIds = ["OKR-TYPE-DECLARED", "KR-COUNT", "KR-REQUIRED-ANGLES", "OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "OKR-OWNER", "OKR-WAY-KNOWN", "KR-RISK-NAMED"];
     const modelOnly = cleanRules.filter((r) => !serverIds.includes(r.id)).length;
-    assert(Array.isArray(data.rules) && data.rules.length === modelOnly + 8);
+    assert(Array.isArray(data.rules) && data.rules.length === modelOnly + 11);
   } finally {
     _restoreFetch();
   }
@@ -465,9 +466,9 @@ Deno.test("buildParameters: minItems === maxItems === modelRuleIdsFor(horizon).l
   assertEquals(p12.properties.rules.maxItems, modelRuleIdsFor("block_12m").length);
   assertEquals(pq.properties.rules.minItems, modelRuleIdsFor("quarter_3m").length);
   assertEquals(pq.properties.rules.maxItems, modelRuleIdsFor("quarter_3m").length);
-  // Переписано: модель оценивает только смысловые правила (3 базовых + Q-REACH в квартале).
-  assertEquals(p3y.properties.rules.minItems, 3);
-  assertEquals(pDefault.properties.rules.minItems, 3);
+  // Переписано (О1–О17): модель оценивает 4 смысловых правила (с OBJ-END-STATE) + Q-REACH в квартале.
+  assertEquals(p3y.properties.rules.minItems, 4);
+  assertEquals(pDefault.properties.rules.minItems, 4);
   assertEquals(pq.properties.rules.minItems, 4);
 });
 
@@ -920,7 +921,8 @@ Deno.test("buildAuditorParameters содержит kr_perspectives с ракур
     assert(kp, `horizon=${h}: kr_perspectives должен присутствовать`);
     assertEquals(kp.items.properties.perspective.enum, ["К", "О", "У"]);
     // Переписано: разметка каждого KR дополнена формой и timing.
-    assertEquals((kp.items.required as string[]).sort(), ["form", "index", "perspective", "rationale", "timing"]);
+    // Переписано (О7): добавлено guards_against.
+    assertEquals((kp.items.required as string[]).sort(), ["form", "guards_against", "index", "perspective", "rationale", "timing"]);
     assertEquals(kp.items.properties.form.enum, ["range", "threshold", "learning", "execution", "binary", "unmeasurable"]);
     assertEquals(kp.items.properties.timing.enum, ["leading", "lagging"]);
   }
@@ -941,10 +943,14 @@ Deno.test("buildAuditorParameters: enum id содержит KR-QUALITY-PAIR, н�
   }
 });
 
-Deno.test("промпт аудитора: определения ракурсов, строки ТИП/СТАТУС, без старой типологии", () => {
+// Переписано (О1–О17): «СТАТУС» → «ПРОИСХОЖДЕНИЕ», добавлены guards_against и О3.
+Deno.test("промпт аудитора: определения ракурсов, строки ТИП/ПРОИСХОЖДЕНИЕ, guards_against, О3", () => {
   const prompt = buildSystemPrompt("block_12m", { okr_type: "aspirational", okr_status: "direction" });
   assert(prompt.includes("[К] клиент и бизнес") && prompt.includes("[О] осуществимость и риски") && prompt.includes("[У] обучение"));
-  assert(prompt.includes("ТИП OKR: амбициозный") && prompt.includes("СТАТУС: направление"));
+  assert(prompt.includes("ТИП OKR: амбициозный") && prompt.includes("ПРОИСХОЖДЕНИЕ: из направления роста"));
+  assert(!prompt.includes("СТАТУС:"));
+  assert(prompt.includes("guards_against") && prompt.includes("О3") && prompt.includes("надёжность через заморозку релизов"));
+  assert(prompt.includes("О1: Objective описывает изменение состояния, а не область"));
   assert(!prompt.includes("ТИПОЛОГИЯ KEY RESULTS"));
   assert(!prompt.includes("customer_business"));
 });
@@ -955,7 +961,8 @@ Deno.test("DOCS_HEADER: документы подаются как контек�
   assert(!/дополнительные правила/i.test(DOCS_HEADER));
 });
 
-Deno.test("handler: без okr_type сервер добавляет OKR-TYPE-DECLARED pass=false, KR-REQUIRED-ANGLES неприменимо", async () => {
+// Переписано (О1–О17): KR-REQUIRED-ANGLES применяется и без типа — сервер считает его по разметке.
+Deno.test("handler: без okr_type сервер добавляет OKR-TYPE-DECLARED pass=false, KR-REQUIRED-ANGLES применяется", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   queueAiResponses([{ ...cleanReport, rules: [...cleanRules, { id: "KR-REQUIRED-ANGLES", label: "L", reasoning: "", pass: false, hint: "h", severity: "important", why: "w", evidence: "" }] }]);
   try {
@@ -964,8 +971,8 @@ Deno.test("handler: без okr_type сервер добавляет OKR-TYPE-DEC
     assertEquals(t.pass, false);
     assert(t.hint.includes("Объявите тип OKR"));
     const a = data.rules.find((x: any) => x.id === "KR-REQUIRED-ANGLES");
-    assertEquals(a.applicable, false);
-    assertEquals(a.pass, true);
+    assertEquals(a.applicable, true);
+    assertEquals(a.checklist_ref, "О16");
   } finally {
     _restoreFetch();
   }
@@ -1102,7 +1109,8 @@ Deno.test("markUnconfirmed: KR-LEADING без цитаты не помечает
   assert(d.score < 100);
 });
 
-Deno.test("handler: aspirational без [У] → KR-REQUIRED-ANGLES fail от сервера, вердикт модели заменён", async () => {
+// Переписано (О1–О17): [У] обязателен для OKR из направления роста (раньше — для aspirational).
+Deno.test("handler: growth_direction без [У] → KR-REQUIRED-ANGLES fail от сервера, вердикт модели заменён", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   queueAiResponses([{
     ...cleanReport,
@@ -1110,14 +1118,15 @@ Deno.test("handler: aspirational без [У] → KR-REQUIRED-ANGLES fail от с
     kr_perspectives: [{ index: 0, perspective: "К", rationale: "" }, { index: 1, perspective: "О", rationale: "" }],
   }]);
   try {
-    const { data } = await callHandler(handler, { ...baseBody, okr_type: "aspirational" });
+    const { data } = await callHandler(handler, { ...baseBody, okr_origin: "growth_direction" });
     const a = data.rules.filter((x: any) => x.id === "KR-REQUIRED-ANGLES");
     assertEquals(a.length, 1);
     assertEquals(a[0].pass, false);
     assertEquals(a[0].missing, ["У"]);
     assertEquals(a[0].unconfirmed, undefined);
     const c = data.rules.find((x: any) => x.id === "KR-COUNT");
-    assertEquals(c.pass, false, "2 KR в обычном OKR — меньше 3");
+    assertEquals(c.pass, true, "2 KR в OKR из направления — в диапазоне 2–4 (О11)");
+    assertEquals(c.checklist_ref, "О11");
   } finally {
     _restoreFetch();
   }

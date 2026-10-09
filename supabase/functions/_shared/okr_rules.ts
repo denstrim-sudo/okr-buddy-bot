@@ -70,7 +70,7 @@ function buildBaseRules(ctx: ReturnType<typeof toCtx>): string {
     lines.push(`- OBJ-AMBITIOUS [important]  Objective амбициозный, запоминающийся, по масштабу соответствует выбранному горизонту (НЕ требует явного срока или даты в тексте).`);
   }
   lines.push(
-    `- KR-COUNT [important]  Число KR от ${minKr} до ${maxKr} (${okrStatusLabel(ctx.okr_status)}).`,
+    `- KR-COUNT [important]  Число KR от ${minKr} до ${maxKr} (${okrOriginLabel(ctx.okr_origin)})`,
     `- KR-MEASURABLE [critical]  Каждый KR измерим в одной из форм: «с X до Y», «с Y до X», «остаётся выше X», «остаётся ниже Y», либо форма обучения «к [дата] известно, [что], с порогом [какой]». Любая из этих форм = pass. Числа распознавай и внутри текста KR.`,
     `- KR-OUTCOME [critical]  KR описывают исходы, а не задачи. Запрещённые глаголы: «запустить», «внедрить», «перевести», «построить» (launch, implement, migrate, build). ${outcomeLine}`,
     `- KR-REQUIRED-ANGLES [${dir ? "critical" : "important"}]  ${anglesLine(ctx.okr_origin)} В hint назови, какого ракурса не хватает, и предложи KR этого ракурса под данный Objective.`,

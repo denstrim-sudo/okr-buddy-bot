@@ -94,7 +94,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setOkrType(draft.okrType);
     const { origin, needsCheck } = originFromLegacy(draft);
     setOkrOrigin(origin);
-    if (needsCheck) toast.info("Проверьте происхождение OKR: рост или защита");
+    if (needsCheck) toast.message("Проверьте происхождение OKR: рост или защита");
     setOwner(draft.owner ?? "");
     setWayKnown(draft.wayKnown !== false);
     setReport(null);

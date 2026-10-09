@@ -6,6 +6,7 @@ const invokeMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...a: any[]) => invokeMock(...a) } },
 }));
+import { toast } from "sonner";
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
@@ -409,5 +410,6 @@ describe("renderWithPlaceholders (unit)", () => {
     renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"], okrType: "committed", okrStatus: "direction" }} />);
     expect((screen.getByTestId("okr-origin-select") as HTMLSelectElement).value).toBe("growth_direction");
     expect((screen.getByTestId("okr-type-select") as HTMLSelectElement).value).toBe("aspirational");
+    expect(vi.mocked(toast.message)).toHaveBeenCalledWith("Проверьте происхождение OKR: рост или защита");
   });
 });

@@ -7,11 +7,17 @@ import { findExecutionVerb, hasDigitsInObjective } from "./textGuards.ts";
 export type RuleSeverity = "critical" | "important" | "improve";
 export type OkrType = "committed" | "aspirational" | "mixed";
 export type OkrStatus = "direction" | "regular";
+/** Происхождение OKR (обновление OKR-PI от 09.10.2026). */
+export type OkrOrigin = "growth_direction" | "protection_direction" | "regular";
 
 export interface RuleCtx {
   horizon?: string;
   okr_type?: OkrType;
+  /** Устарело: используется только для совместимости, если okr_origin не передан. */
   okr_status?: OkrStatus;
+  okr_origin?: OkrOrigin;
+  owner?: string;
+  way_known?: boolean;
 }
 
 export interface ScoringRule {
@@ -33,12 +39,77 @@ export function normalizeOkrStatus(v: unknown): OkrStatus {
   return v === "direction" ? "direction" : "regular";
 }
 
-/** Совместимость: старая сигнатура (horizon) и новая (ctx). */
-export function toCtx(x?: string | RuleCtx): Required<Pick<RuleCtx, "okr_status">> & RuleCtx {
+export function normalizeOkrOrigin(v: unknown, legacyStatus?: unknown): OkrOrigin {
+  if (v === "growth_direction" || v === "protection_direction" || v === "regular") return v;
+  return legacyStatus === "direction" ? "growth_direction" : "regular";
+}
+export function isDirectionOrigin(o?: OkrOrigin): boolean {
+  return o === "growth_direction" || o === "protection_direction";
+}
+
+export type NormalizedCtx = RuleCtx & { okr_status: OkrStatus; okr_origin: OkrOrigin; owner: string; way_known: boolean };
+
+/**
+ * Совместимость: старая сигнатура (horizon) и новая (ctx).
+ * okr_status выводится из okr_origin (direction ⇔ OKR из направления).
+ * Для OKR из направления тип принудительно «амбициозный» (обновление OKR-PI, таблица 5.2).
+ */
+export function toCtx(x?: string | RuleCtx): NormalizedCtx {
   if (x && typeof x === "object") {
-    return { horizon: x.horizon, okr_type: normalizeOkrType(x.okr_type), okr_status: normalizeOkrStatus(x.okr_status) };
+    const okr_origin = normalizeOkrOrigin(x.okr_origin, x.okr_status);
+    const dir = isDirectionOrigin(okr_origin);
+    return {
+      horizon: x.horizon,
+      okr_type: dir ? "aspirational" : normalizeOkrType(x.okr_type),
+      okr_status: dir ? "direction" : "regular",
+      okr_origin,
+      owner: typeof x.owner === "string" ? x.owner.trim() : "",
+      way_known: x.way_known !== false,
+    };
   }
-  return { horizon: typeof x === "string" ? x : undefined, okr_type: undefined, okr_status: "regular" };
+  return { horizon: typeof x === "string" ? x : undefined, okr_type: undefined, okr_status: "regular", okr_origin: "regular", owner: "", way_known: true };
+}
+
+/** Обязательные ракурсы по происхождению OKR (тип на них не влияет). */
+export function requiredAnglesFor(origin?: OkrOrigin): AngleMark[] {
+  if (origin === "growth_direction") return ["К", "У"];
+  if (origin === "protection_direction") return ["К", "О", "У"];
+  return ["К", "О"];
+}
+
+/** Номер пункта чек-листа О1–О17 (обновление OKR-PI 09.10.2026). */
+export const CHECKLIST_REF: Record<string, string> = {
+  "OBJ-QUALITATIVE": "О1, О2",
+  "OBJ-NO-NUMBERS": "О2",
+  "OBJ-END-STATE": "О3",
+  "KR-OUTCOME": "О4",
+  "KR-MEASURABLE": "О4, О5",
+  "KR-TIMEBOUND": "О5",
+  "KR-QUALITY-PAIR": "О6",
+  "KR-RISK-NAMED": "О7",
+  "OKR-TYPE-DECLARED": "О8",
+  "OKR-OWNER": "О9",
+  "KR-COUNT": "О15",
+  "KR-LEADING": "О13",
+  "KR-LEARNING-FORM": "О14",
+  "KR-REQUIRED-ANGLES": "О16",
+  "OKR-WAY-KNOWN": "О17",
+  "OBJ-AMBITIOUS": "доп.",
+  "Q-REACH": "доп.",
+};
+export function checklistRef(id: string, ctxOrHorizon?: string | RuleCtx): string {
+  const ctx = toCtx(ctxOrHorizon);
+  const dir = isDirectionOrigin(ctx.okr_origin);
+  if (id === "KR-COUNT") return dir ? "О11" : "О15";
+  if (id === "KR-REQUIRED-ANGLES") return dir ? "5.2" : "О16";
+  return CHECKLIST_REF[id] ?? "доп.";
+}
+/** Ключ сортировки: О1…О17, затем «5.2», затем «доп.». */
+export function checklistOrder(ref: string | undefined): number {
+  const m = String(ref ?? "").match(/^О(\d+)/);
+  if (m) return Number(m[1]);
+  if (String(ref).startsWith("5.2")) return 100;
+  return 200;
 }
 
 const WEIGHTS: Record<RuleSeverity, number> = { critical: 3, important: 2, improve: 1 };
@@ -93,6 +164,10 @@ export const SEVERITY_BY_RULE_ID: Record<string, RuleSeverity> = {
   "KR-LEADING": "important",
   "KR-TIMEBOUND": "important",
   "Q-REACH": "important",
+  "OBJ-END-STATE": "important",
+  "OKR-OWNER": "important",
+  "OKR-WAY-KNOWN": "important",
+  "KR-RISK-NAMED": "important",
 };
 
 export function severityFor(ruleId: string, ctxOrHorizon?: string | RuleCtx): RuleSeverity {
@@ -112,6 +187,9 @@ export function knownRuleIdsFor(ctxOrHorizon?: string | RuleCtx): string[] {
     "OKR-TYPE-DECLARED",
     "OBJ-NO-NUMBERS",
     "OBJ-QUALITATIVE",
+    "OBJ-END-STATE",
+    "OKR-OWNER",
+    "OKR-WAY-KNOWN",
     "KR-COUNT",
     "KR-MEASURABLE",
     "KR-OUTCOME",
@@ -120,6 +198,7 @@ export function knownRuleIdsFor(ctxOrHorizon?: string | RuleCtx): string[] {
     "KR-LEARNING-FORM",
     "KR-LEADING",
     "KR-TIMEBOUND",
+    "KR-RISK-NAMED",
   ];
   if (ctx.okr_type === "aspirational" || ctx.okr_type === "mixed") ids.push("OBJ-AMBITIOUS");
   if (ctx.horizon === "quarter_3m") ids.push("Q-REACH");
@@ -148,7 +227,11 @@ export const RULE_EVIDENCE_KIND: Record<string, EvidenceKind> = {
   "KR-MEASURABLE": "server",
   "KR-TIMEBOUND": "server",
   "KR-LEADING": "server",
+  "OKR-OWNER": "server",
+  "OKR-WAY-KNOWN": "server",
+  "KR-RISK-NAMED": "server",
   "OBJ-QUALITATIVE": "quote",
+  "OBJ-END-STATE": "quote",
   "OBJ-AMBITIOUS": "quote",
   "KR-QUALITY-PAIR": "quote",
   "KR-LEARNING-FORM": "quote",
@@ -185,7 +268,6 @@ export function computeRequiredAngles(
   ctxOrHorizon?: string | RuleCtx,
 ): { pass: boolean; applicable: boolean; missing: string[]; hint: string; unreliable?: boolean } {
   const ctx = toCtx(ctxOrHorizon);
-  if (ctx.okr_type === undefined) return { pass: true, applicable: false, missing: [], hint: "" };
   const list = (Array.isArray(perspectives) ? perspectives : []) as Array<{ index?: number; perspective?: string }>;
   const byIndex = new Map<number, string>();
   list.forEach((p, i) => {
@@ -198,12 +280,7 @@ export function computeRequiredAngles(
   }
   const has = new Set(byIndex.values());
   const missing: string[] = [];
-  if (ctx.okr_type === "aspirational") { for (const a of ["К", "У"]) if (!has.has(a)) missing.push(a); }
-  else if (ctx.okr_type === "committed") { for (const a of ["К", "О"]) if (!has.has(a)) missing.push(a); }
-  else {
-    if (!has.has("К")) missing.push("К");
-    if (!has.has("О") && !has.has("У")) missing.push("О или У");
-  }
+  for (const a of requiredAnglesFor(ctx.okr_origin)) if (!has.has(a)) missing.push(a);
   return { pass: missing.length === 0, applicable: true, missing, hint: missing.map((m) => ANGLE_HINT[m]).join(". ") };
 }
 
@@ -243,6 +320,11 @@ const FORM_REASON: Record<string, string> = {
   binary: "выполнено / не выполнено без градиента",
 };
 
+/** Исключение OKR-PI 3.4.8: обязательный обычный OKR (OKR из направления обязательным не бывает). */
+export function isCommittedRegular(ctx: NormalizedCtx): boolean {
+  return ctx.okr_type === "committed" && ctx.okr_origin === "regular";
+}
+
 /** OKR-PI 3.4.3/3.4.8: измеримость по форме каждого KR; исполнение и бинарность — только в committed. */
 export function computeMeasurable(labels: unknown, krCount: number, ctxOrHorizon?: string | RuleCtx): ServerVerdict {
   const ctx = toCtx(ctxOrHorizon);
@@ -250,7 +332,7 @@ export function computeMeasurable(labels: unknown, krCount: number, ctxOrHorizon
   if (!forms) return UNRELIABLE("форму");
   const bad: string[] = [];
   for (const [i, f] of [...forms.entries()].sort((a, b) => a[0] - b[0])) {
-    if (f === "unmeasurable" || ((f === "execution" || f === "binary") && ctx.okr_type !== "committed")) {
+    if (f === "unmeasurable" || ((f === "execution" || f === "binary") && !isCommittedRegular(ctx))) {
       bad.push(`KR №${i + 1} — ${FORM_REASON[f]}`);
     }
   }
@@ -263,7 +345,7 @@ export function computeTimebound(labels: unknown, krCount: number, ctxOrHorizon?
   const ctx = toCtx(ctxOrHorizon);
   const forms = labelsByIndex(labels, krCount, "form");
   if (!forms) return UNRELIABLE("форму");
-  if (ctx.okr_type === "committed") return { pass: true, hint: "", evidence: "" };
+  if (isCommittedRegular(ctx)) return { pass: true, hint: "", evidence: "" };
   const bin = [...forms.entries()].filter(([, f]) => f === "binary").map(([i]) => `KR №${i + 1}`).sort();
   if (!bin.length) return { pass: true, hint: "", evidence: "" };
   return { pass: false, evidence: "", hint: `${bin.join(", ")} — бинарный: добавьте градиент прогресса («с X до Y»)` };
@@ -272,10 +354,21 @@ export function computeTimebound(labels: unknown, krCount: number, ctxOrHorizon?
 /** OKR-PI 3.4.2: хотя бы один опережающий KR (применимость — ruleApplicability). */
 export const LEADING_RECOMMENDATION_HINT =
   "Рекомендация: добавьте опережающий KR, чтобы видеть движение чаще, чем раз в год, например ежемесячно или по каждому PI";
+export const DIRECTION_LEADING_HINT = "О13: нужен опережающий [К] — драйвер с контрольными точками внутри года";
 export function computeLeading(labels: unknown, krCount: number, ctxOrHorizon?: string | RuleCtx): ServerVerdict {
   const ctx = toCtx(ctxOrHorizon);
   const timings = labelsByIndex(labels, krCount, "timing");
   if (!timings) return UNRELIABLE("опережающие/запаздывающие");
+  if (isDirectionOrigin(ctx.okr_origin)) {
+    // О13: для OKR из направления нужен опережающий именно [К].
+    const angles = new Map<number, string>();
+    (Array.isArray(labels) ? labels : []).forEach((l: KrLabel, i: number) => {
+      if (l && typeof l.perspective === "string") angles.set(typeof l.index === "number" ? l.index : i, l.perspective);
+    });
+    if (angles.size < krCount) return UNRELIABLE("ракурсы");
+    const ok = [...timings.entries()].some(([i, t]) => t === "leading" && angles.get(i) === "К");
+    return ok ? { pass: true, hint: "", evidence: "" } : { pass: false, evidence: "", hint: DIRECTION_LEADING_HINT };
+  }
   if ([...timings.values()].includes("leading")) return { pass: true, hint: "", evidence: "" };
   if (ctx.okr_status !== "direction" && ctx.horizon !== "quarter_3m") {
     return { pass: false, evidence: "", hint: LEADING_RECOMMENDATION_HINT };
@@ -307,9 +400,40 @@ const SERVER_RULE_META: Record<string, { label: string; why: string; basis: stri
   "KR-OUTCOME": { label: "KR — исходы, а не задачи", why: "Выполненная работа не гарантирует изменения у клиента или банка.", basis: "по глаголам исполнения в тексте KR" },
   "KR-MEASURABLE": { label: "Каждый KR измерим", why: "Без измеримой формы нельзя понять, достигнут ли KR.", basis: "по форме каждого KR (kr_perspectives.form)" },
   "KR-TIMEBOUND": { label: "KR с градиентом прогресса", why: "Бинарный KR не показывает степень достижения.", basis: "по форме каждого KR (kr_perspectives.form)" },
+  "OKR-OWNER": { label: "Владелец OKR назван", why: "Без владельца OKR некому отвечать за результат.", basis: "по полю «Владелец»" },
+  "OKR-WAY-KNOWN": { label: "Способ достижения известен", why: "Обычный OKR без известного способа — это защитное направление.", basis: "по признаку «Способ достижения известен»" },
+  "KR-RISK-NAMED": { label: "Для каждого [О] назван риск", why: "Порог без названного риска не защищает ни от чего конкретного.", basis: "по разметке kr_perspectives.guards_against" },
   "KR-LEADING": { label: "Есть опережающий KR", why: "Без опережающего KR нельзя скорректироваться внутри периода.", basis: "по разметке опережающий/запаздывающий (kr_perspectives.timing)" },
 };
-const COMPUTED_IDS = ["KR-COUNT", "KR-REQUIRED-ANGLES", ...Object.keys(SERVER_RULE_META)];
+const COMPUTED_IDS = ["KR-COUNT", "KR-REQUIRED-ANGLES", "OKR-OWNER", "OKR-WAY-KNOWN", "KR-RISK-NAMED", ...Object.keys(SERVER_RULE_META)];
+
+export const OWNER_HINT = "О9: назовите владельца поимённо";
+export const WAY_UNKNOWN_HINT = "О17: способ неизвестен — кандидат возвращается на проверку как защитное направление";
+
+/** О9: владелец назван. */
+export function computeOwner(ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const ctx = toCtx(ctxOrHorizon);
+  return ctx.owner ? { pass: true, hint: "", evidence: "" } : { pass: false, hint: OWNER_HINT, evidence: "" };
+}
+/** О17: способ достижения известен (применимость — только regular, см. ruleApplicability). */
+export function computeWayKnown(ctxOrHorizon?: string | RuleCtx): ServerVerdict {
+  const ctx = toCtx(ctxOrHorizon);
+  return ctx.way_known ? { pass: true, hint: "", evidence: "" } : { pass: false, hint: WAY_UNKNOWN_HINT, evidence: "" };
+}
+/** О7: у каждого KR с ракурсом [О] назван риск (guards_against). */
+export function computeRiskNamed(labels: unknown, krCount: number): ServerVerdict {
+  const list = (Array.isArray(labels) ? labels : []) as Array<KrLabel & { guards_against?: unknown }>;
+  const byIndex = new Map<number, KrLabel & { guards_against?: unknown }>();
+  list.forEach((l, i) => {
+    if (l && (l.perspective === "К" || l.perspective === "О" || l.perspective === "У")) byIndex.set(typeof l.index === "number" ? l.index : i, l);
+  });
+  if (krCount <= 0 || byIndex.size < krCount) return UNRELIABLE("ракурсы");
+  const bad = [...byIndex.entries()]
+    .filter(([, l]) => l.perspective === "О" && !(typeof l.guards_against === "string" && l.guards_against.trim()))
+    .map(([i]) => i).sort((a, b) => a - b).map((i) => `KR №${i + 1}`);
+  if (!bad.length) return { pass: true, hint: "", evidence: "" };
+  return { pass: false, evidence: "", hint: `О7: для ${bad.join(", ")} не назван риск — от какого конкретного ухудшения защищает этот [О]` };
+}
 
 /** Все серверные правила вместо вердиктов модели (вердикты модели по этим id отбрасываются). */
 // deno-lint-ignore no-explicit-any
@@ -337,6 +461,9 @@ export function addServerRules(rules: any[], krTexts: string[], perspectives: un
     "KR-MEASURABLE": computeMeasurable(perspectives, krCount, ctx),
     "KR-TIMEBOUND": computeTimebound(perspectives, krCount, ctx),
     "KR-LEADING": computeLeading(perspectives, krCount, ctx),
+    "OKR-OWNER": computeOwner(ctx),
+    "OKR-WAY-KNOWN": computeWayKnown(ctx),
+    "KR-RISK-NAMED": computeRiskNamed(perspectives, krCount),
   };
   for (const [id, v] of Object.entries(verdicts)) {
     const m = SERVER_RULE_META[id];
@@ -355,8 +482,8 @@ export function addServerRules(rules: any[], krTexts: string[], perspectives: un
  */
 export function ruleApplicability(id: string, ctxOrHorizon?: string | RuleCtx): "applies" | "not_applicable" {
   const ctx = toCtx(ctxOrHorizon);
-  if (id === "KR-REQUIRED-ANGLES" && ctx.okr_type === undefined) return "not_applicable";
-  if (id === "KR-OUTCOME" && ctx.okr_type === "committed" && ctx.okr_status === "regular") return "not_applicable";
+  if (id === "KR-OUTCOME" && isCommittedRegular(ctx)) return "not_applicable";
+  if (id === "OKR-WAY-KNOWN" && ctx.okr_origin !== "regular") return "not_applicable";
   return "applies";
 }
 
@@ -375,9 +502,9 @@ export function applyRuleContext(rules: any[], ctxOrHorizon?: string | RuleCtx):
     const id = typeof r?.id === "string" ? r.id : "";
     const severity = severityFor(id, ctx);
     if (ruleApplicability(id, ctx) === "not_applicable") {
-      return { ...r, severity, pass: true, applicable: false };
+      return { ...r, severity, pass: true, applicable: false, checklist_ref: checklistRef(id, ctx) };
     }
-    return { ...r, severity, applicable: true };
+    return { ...r, severity, applicable: true, checklist_ref: checklistRef(id, ctx) };
   });
   const declared = ctx.okr_type !== undefined;
   out.unshift({
@@ -390,6 +517,7 @@ export function applyRuleContext(rules: any[], ctxOrHorizon?: string | RuleCtx):
     why: declared ? "" : "От типа зависят обязательные ракурсы и допустимость KR исполнения.",
     evidence: "",
     reasoning: "Проверяется сервером по объявленному типу OKR.",
+    checklist_ref: checklistRef("OKR-TYPE-DECLARED", ctx),
   });
   return out;
 }

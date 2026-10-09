@@ -1,10 +1,10 @@
 import { handleCors, callAITool, errorJson, json } from "../_shared/ai.ts";
-import { getAuditorRulesBlock, getFewShotBlock, ANGLES_DEFINITION, KR_FORM_DEFINITION, okrTypeLabel, okrStatusLabel } from "../_shared/okr_rules.ts";
+import { getAuditorRulesBlock, getFewShotBlock, ANGLES_DEFINITION, KR_FORM_DEFINITION, okrTypeLabel, okrOriginLabel } from "../_shared/okr_rules.ts";
 import { buildExtraBlock } from "../_shared/ai.ts";
 import { containsDigits, isGrounded } from "../_shared/textGuards.ts";
 import {
   recomputeScore, severityFor, modelRuleIdsFor, evidenceKindOf, addServerRules, applyRuleContext, toCtx,
-  normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
+  normalizeOkrType, normalizeOkrOrigin, type ScoringRule, type RuleCtx,
 } from "../_shared/scoring.ts";
 
 export const DOCS_HEADER = "КОНТЕКСТ ОРГАНИЗАЦИИ (факты и термины, НЕ правила; при расхождении приоритет у канонических правил выше):";
@@ -19,7 +19,7 @@ export const buildSystemPrompt = (horizon: string, ctxIn?: RuleCtx) => {
 
 HORIZON OF THIS OKR: ${horizon}${horizon === "quarter_3m" ? " — применяй КВАРТАЛЬНЫЙ набор правил (KR-LEADING→critical и доп. правило Q-REACH)." : ""}
 ТИП OKR: ${okrTypeLabel(ctx.okr_type)}
-СТАТУС: ${okrStatusLabel(ctx.okr_status)}
+ПРОИСХОЖДЕНИЕ: ${okrOriginLabel(ctx.okr_origin)}
 
 Given an Objective and a list of Key Results, evaluate them against these RULES (canonical, identical to those used by the drafter):
 
@@ -45,7 +45,7 @@ For EACH rule you MUST return:
 
 ${ANGLES_DEFINITION}
 
-Для КАЖДОГО KR без пропусков заполни kr_perspectives: ракурс, форму и опережающий/запаздывающий (index — 0-based позиция KR, rationale — одно короткое предложение). Это разметка ОДНОГО KR, а не оценка набора.
+Для КАЖДОГО KR без пропусков заполни kr_perspectives: ракурс, форму, опережающий/запаздывающий и guards_against (index — 0-based позиция KR, rationale — одно короткое предложение). Это разметка ОДНОГО KR, а не оценка набора.
 ${KR_FORM_DEFINITION}
 Ракурс определяй по тому, ЧТО измеряет KR, а НЕ по его форме:
 - [К] — польза для клиента или банка, ради которой существует цель: скорость, доступность, конверсия, доход, качество сервиса. Может быть записан и как рост («с X до Y»), и как порог («остаётся не ниже X»).
@@ -53,7 +53,8 @@ ${KR_FORM_DEFINITION}
 - [У] — что станет известно к дате.
 Проверка: если KR убрать, исчезнет ли сама польза для клиента (тогда [К]) или только защита от побочного эффекта (тогда [О])?
 Пример: «Доступность входа и оплат в пиковые дни остаётся не ниже 99,9%» — это [К]: доступность и есть польза для клиента. «Частота релизов остаётся не ниже текущей» — это [О]: защищает от надёжности через заморозку релизов.
-Правила OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING, KR-COUNT, KR-REQUIRED-ANGLES НЕ оценивай — их вычисляет сервер по твоей разметке. OKR-TYPE-DECLARED тоже проверяет сервер.
+guards_against — для KR с ракурсом [О]: от какого конкретного ухудшения защищает KR (одна фраза); для [К] и [У] — пустая строка. Пример: «Частота релизов остаётся не ниже текущей» → guards_against «надёжность через заморозку релизов».
+Правила OBJ-NO-NUMBERS, KR-OUTCOME, KR-MEASURABLE, KR-TIMEBOUND, KR-LEADING, KR-COUNT, KR-REQUIRED-ANGLES, OKR-OWNER, OKR-WAY-KNOWN, KR-RISK-NAMED НЕ оценивай — их вычисляет сервер по твоей разметке. OKR-TYPE-DECLARED тоже проверяет сервер.
 
 Return STRICT JSON only via the provided tool.
 
@@ -118,8 +119,8 @@ export function buildEditorPrompt(
 5. ОПОРА НА ЭТАЛОНЫ: сверяйся с образцами ниже, но не копируй их дословно — адаптируй под смысл конкретного KR.
 
 ГОРИЗОНТ: ${horizon}
-ТИП OKR: ${okrTypeLabel(ctx.okr_type)}. СТАТУС: ${okrStatusLabel(ctx.okr_status)}.
-Для обязательных OKR глаголы исполнения допустимы. Не заменяй форму удержания порога на «с X до Y».
+ТИП OKR: ${okrTypeLabel(ctx.okr_type)}. ПРОИСХОЖДЕНИЕ: ${okrOriginLabel(ctx.okr_origin)}.
+Для OKR из направления не добавляй KR исполнения; для обязательного обычного — глаголы исполнения допустимы. Не заменяй форму удержания порога на «с X до Y».
 
 ЭТАЛОНЫ (используй как образец качества переписывания):
 
@@ -207,8 +208,9 @@ export function buildAuditorParameters(horizonOrCtx?: string | RuleCtx, opts: { 
             form: { type: "string", enum: ["range", "threshold", "learning", "execution", "binary", "unmeasurable"], description: "Форма ЭТОГО KR." },
             timing: { type: "string", enum: ["leading", "lagging"], description: "Опережающий или запаздывающий ЭТОТ KR." },
             rationale: { type: "string", description: "Одно короткое предложение на русском: почему такой ракурс, форма и timing." },
+            guards_against: { type: "string", description: "Для KR с ракурсом О: от какого конкретного ухудшения защищает (одна фраза). Для остальных — пустая строка." },
           },
-          required: ["index", "perspective", "form", "timing", "rationale"],
+          required: ["index", "perspective", "form", "timing", "rationale", "guards_against"],
           additionalProperties: false,
         },
       },
@@ -308,7 +310,7 @@ export function isAuditSuspicious(data: any): boolean {
 // ---------------------------------------------------------------------------
 
 async function runFixMode(req: Request, body: any): Promise<Response> {
-  const { objective, key_results, failed_rules, horizon, extra_context, model, okr_type, okr_status } = body;
+  const { objective, key_results, failed_rules, horizon, extra_context, model, okr_type, okr_status, okr_origin, owner, way_known } = body;
   if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
     return errorJson("Objective is required (min 3 chars)", 400);
   }
@@ -320,7 +322,8 @@ async function runFixMode(req: Request, body: any): Promise<Response> {
   const failed = Array.isArray(failed_rules) ? failed_rules : [];
 
   const systemPrompt = buildEditorPrompt(String(objective), krTexts, failed, h, {
-    okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status),
+    okr_type: normalizeOkrType(okr_type), okr_origin: normalizeOkrOrigin(okr_origin, okr_status),
+    owner: typeof owner === "string" ? owner : undefined, way_known: way_known === false ? false : undefined,
   });
   const extraBlock = buildExtraBlock(
     extra_context,
@@ -377,7 +380,7 @@ export const handler = async (req: Request) => {
     }
 
     // === mode = "audit" (дефолт) ===
-    const { objective, key_results, key_results_full, horizon, extra_context, model, okr_type, okr_status } = body;
+    const { objective, key_results, key_results_full, horizon, extra_context, model, okr_type, okr_status, okr_origin, owner, way_known } = body;
     if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
       return errorJson("Objective is required (min 3 chars)", 400);
     }
@@ -386,7 +389,10 @@ export const handler = async (req: Request) => {
     }
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
 
-    const ctx: RuleCtx = { horizon: h, okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status) };
+    const ctx: RuleCtx = {
+      horizon: h, okr_type: normalizeOkrType(okr_type), okr_origin: normalizeOkrOrigin(okr_origin, okr_status),
+      owner: typeof owner === "string" ? owner : undefined, way_known: way_known === false ? false : undefined,
+    };
 
     const enriched = Array.isArray(key_results_full) && key_results_full.length
       ? key_results_full

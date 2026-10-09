@@ -2,7 +2,7 @@ import { handleCors, callAITool, errorJson, buildExtraBlock, json } from "../_sh
 import { getRulesBlock } from "../_shared/okr_rules.ts";
 import {
   recomputeScore, scoreDiscrepancy, severityFor, knownRuleIdsFor, ruleApplicability, toCtx,
-  normalizeOkrType, normalizeOkrStatus, type ScoringRule, type RuleCtx,
+  normalizeOkrType, normalizeOkrOrigin, type ScoringRule, type RuleCtx,
 } from "../_shared/scoring.ts";
 
 export const buildSystemPrompt = (horizon: string, ctx?: RuleCtx) => `You are an expert OKR Coach (bank OKR-PI methodology) drafting a SINGLE OKR.
@@ -206,13 +206,16 @@ export const handler = async (req: Request) => {
     const {
       raw_input, horizon, mode, interpretation, clarifying_answers,
       extra_context, model, focus_horizon_fit, prior_horizon_fit, parent_kr_context,
-      okr_type, okr_status,
+      okr_type, okr_status, okr_origin, owner, way_known,
     } = await req.json();
     if (!raw_input || typeof raw_input !== "string" || raw_input.trim().length < 3) {
       return errorJson("raw_input is required", 400);
     }
     const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
-    const ctx: RuleCtx = { horizon: h, okr_type: normalizeOkrType(okr_type), okr_status: normalizeOkrStatus(okr_status) };
+    const ctx: RuleCtx = {
+      horizon: h, okr_type: normalizeOkrType(okr_type), okr_origin: normalizeOkrOrigin(okr_origin, okr_status),
+      owner: typeof owner === "string" ? owner : undefined, way_known: way_known === false ? false : undefined,
+    };
     const m: string = mode === "rewrite_existing" ? "rewrite_existing" : "from_scratch";
 
     const extraBlock = buildExtraBlock(extra_context, "ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ (методология / контекст):");

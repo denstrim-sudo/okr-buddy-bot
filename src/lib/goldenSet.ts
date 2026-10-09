@@ -1,7 +1,8 @@
 /**
  * Эталонный набор для проверки стабильности аудита (validate-okr).
  *
- * Источник: методология банка OKR-PI, раздел 6.1 «Восемь эталонных OKR».
+ * Источник: методология банка OKR-PI, раздел 6.1 «Восемь эталонных OKR»,
+ * правила — по обновлению OKR-PI от 09.10.2026 (чек-лист О1–О17).
  * Цифры иллюстративные, взяты из методологии как есть.
  *
  * P* — эталоны, которые должны проходить по указанным правилам.
@@ -13,7 +14,11 @@
  */
 
 export type GoldenOkrType = "committed" | "aspirational" | "mixed";
-export type GoldenOkrStatus = "direction" | "regular";
+/** Происхождение OKR (обновление OKR-PI от 09.10.2026, раздел 5). */
+export type GoldenOkrOrigin = "growth_direction" | "protection_direction" | "regular";
+
+/** Условный владелец для эталонов: правило О9 проверяет только, что владелец назван. */
+export const TEST_OWNER = "Тестовый владелец";
 
 export interface GoldenCase {
   id: string;
@@ -24,7 +29,11 @@ export interface GoldenCase {
   key_results: string[];
   horizon: "strategic_3y" | "block_12m" | "quarter_3m";
   okr_type?: GoldenOkrType;
-  okr_status: GoldenOkrStatus;
+  okr_origin: GoldenOkrOrigin;
+  /** Владелец OKR (О9). Пустая строка — не назван. */
+  owner: string;
+  /** Способ достижения известен (О17, только для обычного OKR). По умолчанию true. */
+  way_known?: boolean;
   expect: {
     pass?: string[];
     fail?: string[];
@@ -98,6 +107,17 @@ const P8_KR = [
   "К концу первого квартала на одном домене проверены два способа (обёртка через API или вынос модуля), известно время изменения в каждом",
 ];
 
+// Условный пример защитного направления из обновления OKR-PI 09.10 (раздел 2).
+// Objective взят из обновления; KR составлены помощником по правилам раздела 5.2,
+// цифр банка нет — только X / Y.
+const P9_OBJ = "Доход корпоративного блока перестаёт зависеть от пяти крупнейших клиентов.";
+const P9_KR = [
+  "Доля дохода блока от пяти крупнейших клиентов с X% до Y%",
+  "Число клиентов блока с доходом выше порога Z с X до Y, контрольные точки по каждому PI",
+  "Маржа по новым корпоративным клиентам остаётся не ниже текущей, пока растёт их число",
+  "К концу первого PI известно, какой из двух каналов привлечения — отраслевые партнёрства или переход клиентов малого бизнеса в корпоративный сегмент — даёт больше клиентов с доходом выше порога Z",
+];
+
 // ---------------------------------------------------------------------------
 // Набор
 // ---------------------------------------------------------------------------
@@ -112,9 +132,10 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P1_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
-      pass: ["OKR-TYPE-DECLARED", "OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME", "KR-QUALITY-PAIR", "KR-LEARNING-FORM"],
+      pass: ["OKR-TYPE-DECLARED", "OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME", "KR-QUALITY-PAIR", "KR-LEARNING-FORM", "OKR-OWNER", "OKR-WAY-KNOWN"],
     },
   },
   {
@@ -125,7 +146,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P2_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME"],
     },
@@ -138,7 +160,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P3_KR,
     horizon: "block_12m",
     okr_type: "committed",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-MEASURABLE"],
       notApplicable: ["KR-OUTCOME"],
@@ -152,7 +175,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P4_KR,
     horizon: "block_12m",
     okr_type: "committed",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT"],
       notApplicable: ["KR-OUTCOME"],
@@ -166,7 +190,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P5_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME", "KR-QUALITY-PAIR"],
     },
@@ -179,7 +204,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P6_KR,
     horizon: "block_12m",
     okr_type: "mixed",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-QUALITY-PAIR"],
     },
@@ -192,7 +218,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P7_KR,
     horizon: "block_12m",
     okr_type: "committed",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES"],
     },
@@ -205,9 +232,25 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P8_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       pass: ["OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME", "KR-LEARNING-FORM"],
+    },
+  },
+
+  {
+    id: "P9",
+    title: "Зависимость от пяти клиентов (защитное направление)",
+    source: "Обновление OKR-PI 09.10, раздел 2 (условный пример); KR составлены помощником",
+    objective: P9_OBJ,
+    key_results: P9_KR,
+    horizon: "block_12m",
+    okr_type: "aspirational",
+    okr_origin: "protection_direction",
+    owner: TEST_OWNER,
+    expect: {
+      pass: ["OKR-TYPE-DECLARED", "OBJ-NO-NUMBERS", "KR-COUNT", "KR-REQUIRED-ANGLES", "KR-OUTCOME", "OKR-OWNER"],
     },
   },
 
@@ -215,12 +258,13 @@ export const GOLDEN_SET: GoldenCase[] = [
   {
     id: "N1",
     title: "Кредит в один клик без KR обучения",
-    source: "P1, убран KR [У]",
+    source: "P1 как OKR из направления роста, убран KR [У] (нужны [К] + [У], О-таблица 5.2)",
     objective: P1_OBJ,
     key_results: P1_KR.slice(0, 3),
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "growth_direction",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-REQUIRED-ANGLES"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -234,7 +278,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: [P6_KR[0], P6_KR[2], P6_KR[3]],
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-QUALITY-PAIR"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -248,7 +293,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P5_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["OBJ-NO-NUMBERS"],
       pass: ["KR-COUNT"],
@@ -262,7 +308,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: ["Внедрить новую версию ядра АБС до конца года", P8_KR[1], P8_KR[2], P8_KR[3]],
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "direction",
+    okr_origin: "growth_direction",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-OUTCOME"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -270,13 +317,14 @@ export const GOLDEN_SET: GoldenCase[] = [
   },
   {
     id: "N5",
-    title: "Надёжность, объявленная амбициозной",
-    source: "P3, тип сменён на амбициозный (нет KR [У])",
+    title: "Надёжность как OKR из направления роста",
+    source: "P3 как OKR из направления роста (нет KR [У], нужны [К] + [У])",
     objective: P3_OBJ,
     key_results: P3_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "growth_direction",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-REQUIRED-ANGLES"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -290,7 +338,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: [P1_KR[0], P1_KR[1], P1_KR[2], "Провести исследование клиентского пути заёмщика в мобильном приложении"],
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-LEARNING-FORM"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -308,7 +357,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     ],
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["KR-COUNT", "KR-OUTCOME"],
       pass: ["OBJ-NO-NUMBERS"],
@@ -322,7 +372,8 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P1_KR,
     horizon: "block_12m",
     okr_type: "aspirational",
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["OBJ-QUALITATIVE"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
@@ -336,10 +387,71 @@ export const GOLDEN_SET: GoldenCase[] = [
     key_results: P1_KR,
     horizon: "block_12m",
     okr_type: undefined,
-    okr_status: "regular",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
     expect: {
       fail: ["OKR-TYPE-DECLARED"],
-      notApplicable: ["KR-REQUIRED-ANGLES"],
+      pass: ["KR-COUNT", "OBJ-NO-NUMBERS", "KR-REQUIRED-ANGLES"],
+    },
+  },
+  {
+    id: "N10",
+    title: "Защитное направление без KR [О]",
+    source: "P9, убран KR [О] (для защитного направления нужны [К] + [О] + [У])",
+    objective: P9_OBJ,
+    key_results: [P9_KR[0], P9_KR[1], P9_KR[3]],
+    horizon: "block_12m",
+    okr_type: "aspirational",
+    okr_origin: "protection_direction",
+    owner: TEST_OWNER,
+    expect: {
+      fail: ["KR-REQUIRED-ANGLES"],
+      pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
+    },
+  },
+  {
+    id: "N11",
+    title: "Обычный OKR без KR [О]",
+    source: "P1, убран KR [О] (для обычного OKR нужны [К] + [О], О16)",
+    objective: P1_OBJ,
+    key_results: [P1_KR[0], P1_KR[1], P1_KR[3]],
+    horizon: "block_12m",
+    okr_type: "aspirational",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
+    expect: {
+      fail: ["KR-REQUIRED-ANGLES"],
+      pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
+    },
+  },
+  {
+    id: "N12",
+    title: "Предсказуемость без владельца",
+    source: "P7, владелец не назван (О9)",
+    objective: P7_OBJ,
+    key_results: P7_KR,
+    horizon: "block_12m",
+    okr_type: "committed",
+    okr_origin: "regular",
+    owner: "",
+    expect: {
+      fail: ["OKR-OWNER"],
+      pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
+    },
+  },
+  {
+    id: "N13",
+    title: "Платформа поставки: способ неизвестен",
+    source: "P2 как обычный OKR, способ достижения неизвестен (О17: кандидат в защитное направление)",
+    objective: P2_OBJ,
+    key_results: P2_KR,
+    horizon: "block_12m",
+    okr_type: "aspirational",
+    okr_origin: "regular",
+    owner: TEST_OWNER,
+    way_known: false,
+    expect: {
+      fail: ["OKR-WAY-KNOWN"],
       pass: ["KR-COUNT", "OBJ-NO-NUMBERS"],
     },
   },

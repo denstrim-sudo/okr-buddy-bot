@@ -93,6 +93,8 @@ export type RuleSeverity = "critical" | "important" | "improve";
 
 export interface ValidationRule {
   id: string;
+  /** Пункт чек-листа О1–О17 («О5», «5.2», «доп.»). */
+  checklist_ref?: string;
   label: string;
   pass: boolean;
   hint: string;

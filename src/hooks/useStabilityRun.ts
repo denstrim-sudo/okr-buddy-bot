@@ -91,7 +91,9 @@ export function useStabilityRun(cases: GoldenCase[] = GOLDEN_SET) {
               key_results: c.key_results,
               horizon: c.horizon,
               okr_type: c.okr_type,
-              okr_status: c.okr_status,
+              okr_origin: c.okr_origin,
+              owner: c.owner,
+              way_known: c.way_known,
               model: opts.model,
             },
           });

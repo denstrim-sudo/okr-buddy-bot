@@ -10,6 +10,27 @@ interface Props {
 
 const SEVERITY_ORDER: Record<RuleSeverity, number> = { critical: 0, important: 1, improve: 2 };
 
+/** Ключ сортировки по чек-листу: О1…О17, затем «5.2», затем «доп.»; без номера — в конец. */
+export const checklistOrder = (ref?: string): number => {
+  if (!ref) return 300;
+  const m = ref.match(/^О(\d+)/);
+  if (m) return Number(m[1]);
+  if (ref.startsWith("5.2")) return 100;
+  return 200;
+};
+
+const RuleTitle = ({ r }: { r: ValidationRule }) => (
+  <span>
+    {r.checklist_ref && (
+      <span data-testid={`rule-ref-${r.id}`} className="mr-1 text-[10px] font-bold text-muted-foreground">
+        {r.checklist_ref === "доп." ? "доп." : r.checklist_ref} ·
+      </span>
+    )}
+    {r.label}
+    {r.checklist_ref === "доп." && <span className="ml-1 text-[10px] italic text-muted-foreground">правило помощника</span>}
+  </span>
+);
+
 const severityMeta = (s: RuleSeverity) => {
   if (s === "critical") return { label: "Критично", cls: "bg-destructive/10 text-destructive", Icon: XCircle, dot: "bg-destructive" };
   if (s === "important") return { label: "Важно", cls: "bg-warning-soft text-warning", Icon: AlertTriangle, dot: "bg-warning" };
@@ -28,7 +49,7 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
         <div className="flex-1">
           <div className={cn("flex flex-wrap items-baseline", isSm ? "gap-1.5" : "gap-2")}>
             <span className="font-mono text-[10px] font-bold">[{r.id}]</span>
-            <span>{r.label}</span>
+            <RuleTitle r={r} />
           </div>
           {r.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{r.hint}</p>}
           <p className="mt-0.5 text-[11px] italic">
@@ -45,7 +66,7 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
         <div className="flex-1">
           <div className={cn("flex flex-wrap items-baseline", isSm ? "gap-1.5" : "gap-2")}>
             <span className="font-mono text-[10px] font-bold">[{r.id}]</span>
-            <span>{r.label}</span>
+            <RuleTitle r={r} />
           </div>
           <p className="mt-0.5 text-[11px] italic">не применимо для этого типа</p>
         </div>
@@ -71,7 +92,7 @@ const RuleItem = ({ r, isSm }: { r: ValidationRule; isSm: boolean }) => {
             </span>
           )}
           <span className="font-mono text-[10px] font-bold text-muted-foreground">[{r.id}]</span>
-          <span>{r.label}</span>
+          <RuleTitle r={r} />
         </div>
         {!r.pass && r.hint && (
           <p className={cn("mt-0.5 flex items-start gap-1 text-muted-foreground", isSm ? "text-[11px]" : "text-xs")}>
@@ -130,8 +151,10 @@ export const RuleList = ({ rules, size = "md" }: Props) => {
     const failed = rules
       .filter((r) => !r.pass)
       .slice()
-      .sort((a, b) => (SEVERITY_ORDER[a.severity ?? "important"] ?? 1) - (SEVERITY_ORDER[b.severity ?? "important"] ?? 1));
-    const passed = rules.filter((r) => r.pass);
+      .sort((a, b) =>
+        checklistOrder(a.checklist_ref) - checklistOrder(b.checklist_ref) ||
+        (SEVERITY_ORDER[a.severity ?? "important"] ?? 1) - (SEVERITY_ORDER[b.severity ?? "important"] ?? 1));
+    const passed = rules.filter((r) => r.pass).slice().sort((a, b) => checklistOrder(a.checklist_ref) - checklistOrder(b.checklist_ref));
     return { failed, passed };
   }, [rules]);
 

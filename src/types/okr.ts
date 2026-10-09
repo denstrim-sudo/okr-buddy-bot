@@ -121,6 +121,8 @@ export type KrPerspectiveAxis = "К" | "О" | "У";
 export type OkrType = "committed" | "aspirational" | "mixed";
 /** Статус OKR: направление или обычный OKR. */
 export type OkrStatus = "direction" | "regular";
+/** Происхождение OKR (обновление OKR-PI 09.10.2026). Заменяет OkrStatus. */
+export type OkrOrigin = "growth_direction" | "protection_direction" | "regular";
 
 export interface KrPerspective {
   /** 0-based индекс KR в наборе. */
@@ -130,6 +132,8 @@ export interface KrPerspective {
   form?: "range" | "threshold" | "learning" | "execution" | "binary" | "unmeasurable";
   /** Опережающий / запаздывающий. */
   timing?: "leading" | "lagging";
+  /** Для KR с ракурсом О: от какого ухудшения защищает (О7). */
+  guards_against?: string;
   rationale: string;
 }
 
@@ -169,7 +173,11 @@ export interface ValidationDraft {
   key_results_full?: ValidationKR[];
   horizon?: OkrHorizon;
   okrType?: OkrType;
+  /** Устарело: старые записи. Переводится в okrOrigin через originFromLegacy. */
   okrStatus?: OkrStatus;
+  okrOrigin?: OkrOrigin;
+  owner?: string;
+  wayKnown?: boolean;
   /** id сохранённой записи, из которой пришёл OKR. Если задан, при сохранении
    *  исправлений будет replace() по этому id (сохранение связей). */
   sourceOkrId?: string;

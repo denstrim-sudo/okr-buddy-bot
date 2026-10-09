@@ -58,7 +58,7 @@ const Index = () => {
     obj: string,
     horizon?: import("@/types/okr").OkrHorizon,
     sourceOkrId?: string,
-    meta?: { okrType?: import("@/types/okr").OkrType; okrStatus?: import("@/types/okr").OkrStatus },
+    meta?: { okrType?: import("@/types/okr").OkrType; okrStatus?: import("@/types/okr").OkrStatus; okrOrigin?: import("@/types/okr").OkrOrigin; owner?: string; wayKnown?: boolean },
   ): ValidationDraft => ({
     objective: p.objective_refined || obj,
     key_results: p.key_results.map((k) => k.text),
@@ -73,6 +73,9 @@ const Index = () => {
     sourceOkrId,
     ...(meta?.okrType ? { okrType: meta.okrType } : {}),
     ...(meta?.okrStatus ? { okrStatus: meta.okrStatus } : {}),
+    ...(meta?.okrOrigin ? { okrOrigin: meta.okrOrigin } : {}),
+    ...(meta?.owner ? { owner: meta.owner } : {}),
+    ...(meta?.wayKnown === false ? { wayKnown: false } : {}),
   });
 
   const handleGenerated = useCallback((p: GeneratedPlan, obj: string, horizon?: import("@/types/okr").OkrHorizon) => {
@@ -92,7 +95,7 @@ const Index = () => {
   }, []);
 
   const handleSendToAudit = useCallback((okr: import("@/hooks/useSavedOkrs").SavedOkr) => {
-    setValidatorDraft(buildDraft(okr.plan, okr.objective, okr.plan.horizon, okr.id, { okrType: okr.okrType, okrStatus: okr.okrStatus }));
+    setValidatorDraft(buildDraft(okr.plan, okr.objective, okr.plan.horizon, okr.id, { okrType: okr.okrType, okrStatus: okr.okrStatus, okrOrigin: okr.okrOrigin, owner: okr.owner, wayKnown: okr.wayKnown }));
     requestAnimationFrame(() => {
       document.querySelector('[data-testid="okr-validator"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     });

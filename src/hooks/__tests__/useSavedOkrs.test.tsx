@@ -362,3 +362,31 @@ describe("useSavedOkrs — тип и статус OKR (OKR-PI)", () => {
     expect(exported.items[0].id).toBe("old_1");
   });
 });
+
+describe("useSavedOkrs — происхождение, владелец, способ (О1–О17)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("save() и replace() сохраняют okrOrigin, owner, wayKnown", () => {
+    const { result } = renderHook(() => useSavedOkrs());
+    act(() => { result.current.save("Цель", makePlan(), undefined, { okrOrigin: "protection_direction", owner: "Иванов", wayKnown: false }); });
+    const it0 = result.current.items[0];
+    expect(it0).toMatchObject({ okrOrigin: "protection_direction", owner: "Иванов", wayKnown: false });
+    act(() => { result.current.replace(it0.id, "Цель", makePlan(), { okrOrigin: "regular", owner: "Петров", wayKnown: true }); });
+    expect(result.current.items[0]).toMatchObject({ okrOrigin: "regular", owner: "Петров", wayKnown: true });
+  });
+
+  it("старый файл экспорта с okrStatus=direction импортируется и переводится в «рост» с проверкой", async () => {
+    const { originFromLegacy } = await import("@/lib/okrOrigin");
+    const { result } = renderHook(() => useSavedOkrs());
+    const payload = JSON.stringify({
+      version: "aimbot.savedOkrs.v1",
+      items: [{ id: "legacy_1", objective: "old", plan: makePlan(), savedAt: new Date().toISOString(), okrStatus: "direction" }],
+    });
+    let res!: any;
+    act(() => { res = result.current.importJson(payload, "replace"); });
+    expect(res.ok).toBe(true);
+    expect(originFromLegacy(result.current.items[0])).toEqual({ origin: "growth_direction", needsCheck: true });
+    expect(originFromLegacy({ okrStatus: "regular" })).toEqual({ origin: "regular", needsCheck: false });
+    expect(JSON.parse(result.current.exportJson()).items[0].id).toBe("legacy_1");
+  });
+});

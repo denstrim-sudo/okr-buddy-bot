@@ -8,13 +8,14 @@ import { cn } from "@/lib/utils";
 import { describeInvokeError } from "@/lib/invokeError";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { GeneratedPlan, OkrHorizon, OkrStatus, OkrType, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
+import type { GeneratedPlan, OkrHorizon, OkrOrigin, OkrType, ValidationDraft, ValidationKR, ValidationReport, ValidationRule } from "@/types/okr";
 import { useDocs } from "@/contexts/DocsContext";
 import { useAiModel, notifyModelFallback } from "@/contexts/ModelContext";
 import { useSavedOkrs } from "@/hooks/useSavedOkrs";
 import { RuleList, scoreBadgeClass } from "./RuleList";
 import { ParentKrPicker } from "./ParentKrPicker";
 import { KrPerspectives } from "./KrPerspectives";
+import { ORIGIN_LABELS, isDirectionOrigin, originFromLegacy } from "@/lib/okrOrigin";
 
 const HORIZON_LABELS: Record<OkrHorizon, string> = {
   strategic_3y: "Стратегия · 3 года",
@@ -67,7 +68,14 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [krsFull, setKrsFull] = useState<ValidationKR[] | null>(null);
   const [horizon, setHorizon] = useState<OkrHorizon>("block_12m");
   const [okrType, setOkrType] = useState<OkrType | undefined>(undefined);
-  const [okrStatus, setOkrStatus] = useState<OkrStatus>("regular");
+  const [okrOrigin, setOkrOrigin] = useState<OkrOrigin>("regular");
+  const [owner, setOwner] = useState("");
+  const [wayKnown, setWayKnown] = useState(true);
+  const fromDirection = isDirectionOrigin(okrOrigin);
+  // Для OKR из направления тип задан методикой (обновление OKR-PI 09.10.2026, таблица 5.2).
+  const effectiveType: OkrType | undefined = fromDirection ? "aspirational" : okrType;
+  const ctxBody = { okr_type: effectiveType, okr_origin: okrOrigin, owner: owner.trim(), way_known: okrOrigin === "regular" ? wayKnown : undefined };
+  const metaToSave = { okrType: effectiveType, okrOrigin, owner: owner.trim() || undefined, wayKnown: okrOrigin === "regular" ? wayKnown : undefined };
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
@@ -84,7 +92,11 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setKrsFull(draft.key_results_full ?? null);
     if (draft.horizon) setHorizon(draft.horizon);
     setOkrType(draft.okrType);
-    setOkrStatus(draft.okrStatus ?? "regular");
+    const { origin, needsCheck } = originFromLegacy(draft);
+    setOkrOrigin(origin);
+    if (needsCheck) toast.message("Проверьте происхождение OKR: рост или защита");
+    setOwner(draft.owner ?? "");
+    setWayKnown(draft.wayKnown !== false);
     setReport(null);
     setSourceOkrId(draft.sourceOkrId);
     setSaveParentLink(null);
@@ -126,7 +138,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     try {
       const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model, okr_type: okrType, okr_status: okrStatus },
+        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model, ...ctxBody },
       });
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
@@ -155,8 +167,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           objective: objective.trim(),
           key_results: cleaned,
           horizon,
-          okr_type: okrType,
-          okr_status: okrStatus,
+          ...ctxBody,
           failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why })),
           extra_context,
           model,
@@ -241,7 +252,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const saveReplaceExisting = () => {
     if (!sourceOkrId) return;
     const plan = buildPlanFromCurrent();
-    const res = replaceOkr(sourceOkrId, objective.trim(), plan, { okrType, okrStatus });
+    const res = replaceOkr(sourceOkrId, objective.trim(), plan, metaToSave);
     if (res.ok) {
       toast.success("Исправленная версия сохранена (связи с родителем и детьми сохранены)");
     } else {
@@ -256,8 +267,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       return;
     }
     const res = saveParentLink
-      ? saveOkr(objective.trim(), plan, saveParentLink, { okrType, okrStatus })
-      : saveOkr(objective.trim(), plan, undefined, { okrType, okrStatus });
+      ? saveOkr(objective.trim(), plan, saveParentLink, metaToSave)
+      : saveOkr(objective.trim(), plan, undefined, metaToSave);
     if (res.ok) {
       toast.success("OKR сохранён как новый");
       setSourceOkrId(res.item.id);
@@ -320,33 +331,52 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="space-y-1">
+            <label htmlFor="okr-origin" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Происхождение</label>
+            <select
+              id="okr-origin"
+              data-testid="okr-origin-select"
+              value={okrOrigin}
+              onChange={(e) => setOkrOrigin(e.target.value as OkrOrigin)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              {(["regular", "growth_direction", "protection_direction"] as OkrOrigin[]).map((o) => (
+                <option key={o} value={o}>{ORIGIN_LABELS[o]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
             <label htmlFor="okr-type" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
             <select
               id="okr-type"
               data-testid="okr-type-select"
-              value={okrType ?? ""}
+              value={effectiveType ?? ""}
+              disabled={fromDirection}
               onChange={(e) => setOkrType((e.target.value || undefined) as OkrType | undefined)}
-              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-70"
             >
               <option value="">не выбран</option>
               <option value="committed">Обязательный</option>
               <option value="aspirational">Амбициозный</option>
               <option value="mixed">Смешанный</option>
             </select>
+            {fromDirection && <p className="text-[11px] text-muted-foreground">для OKR из направления тип задан методикой</p>}
           </div>
           <div className="space-y-1">
-            <label htmlFor="okr-status" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <select
-              id="okr-status"
-              data-testid="okr-status-select"
-              value={okrStatus}
-              onChange={(e) => setOkrStatus(e.target.value as OkrStatus)}
-              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-            >
-              <option value="regular">Обычный OKR</option>
-              <option value="direction">Направление</option>
-            </select>
+            <label htmlFor="okr-owner" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Владелец</label>
+            <Input id="okr-owner" data-testid="okr-owner-input" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя и фамилия" className="h-9" />
           </div>
+          {okrOrigin === "regular" && (
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                data-testid="okr-way-known"
+                checked={wayKnown}
+                onChange={(e) => setWayKnown(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              Способ достижения известен
+            </label>
+          )}
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</label>

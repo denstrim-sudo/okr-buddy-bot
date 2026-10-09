@@ -99,7 +99,12 @@ export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) =>
                   {[p.form && FORM_LABEL[p.form], p.timing && TIMING_LABEL[p.timing]].filter(Boolean).join(" · ")}
                 </span>
               )}
-              <span className="flex-1 text-xs text-muted-foreground">{kr}</span>
+              <span className="flex-1 text-xs text-muted-foreground">
+                {kr}
+                {p.perspective === "О" && p.guards_against?.trim() && (
+                  <span data-testid={`kr-guards-${i}`} className="block text-[10px] text-muted-foreground/80">защищает от: {p.guards_against}</span>
+                )}
+              </span>
             </li>
           );
         })}

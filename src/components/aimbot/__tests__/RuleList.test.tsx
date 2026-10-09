@@ -89,3 +89,19 @@ describe("RuleList — неполная разметка ракурсов (unrel
     expect(screen.getByText(/разметка ракурсов неполная/i)).toBeInTheDocument();
   });
 });
+
+describe("RuleList — номера пунктов чек-листа О1–О17", async () => {
+  const { render, screen } = await import("@testing-library/react");
+  const { RuleList, checklistOrder } = await import("../RuleList");
+  it("сортирует по номеру пункта и подписывает «доп.» как правило помощника", () => {
+    expect([checklistOrder("доп."), checklistOrder("5.2"), checklistOrder("О13"), checklistOrder("О2")]).toEqual([200, 100, 13, 2]);
+    render(<RuleList rules={[
+      { id: "Q-REACH", label: "Достижимо", pass: false, hint: "", checklist_ref: "доп." },
+      { id: "KR-LEADING", label: "Опережающий", pass: false, hint: "", checklist_ref: "О13" },
+      { id: "OBJ-NO-NUMBERS", label: "Без цифр", pass: false, hint: "", checklist_ref: "О2" },
+    ] as any} />);
+    const refs = screen.getAllByTestId(/^rule-ref-/).map((e) => e.getAttribute("data-testid"));
+    expect(refs).toEqual(["rule-ref-OBJ-NO-NUMBERS", "rule-ref-KR-LEADING", "rule-ref-Q-REACH"]);
+    expect(screen.getByText("правило помощника")).toBeInTheDocument();
+  });
+});

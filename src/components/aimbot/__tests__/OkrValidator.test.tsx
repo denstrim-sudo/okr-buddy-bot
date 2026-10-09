@@ -6,6 +6,7 @@ const invokeMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...a: any[]) => invokeMock(...a) } },
 }));
+import { toast } from "sonner";
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
@@ -371,27 +372,44 @@ describe("renderWithPlaceholders (unit)", () => {
     expect(container.querySelectorAll('[data-testid="placeholder-xy"]').length).toBe(0);
   });
 
-  it("передаёт выбранные тип и статус OKR в validate-okr; без выбора тип не передаётся", async () => {
+  // Переписано (чек-лист О1–О17, 09.10.2026): «Статус» заменён на «Происхождение», добавлены владелец и способ.
+  it("передаёт тип, происхождение, владельца и способ в validate-okr; без выбора тип не передаётся", async () => {
     invokeMock.mockReset();
     invokeMock.mockResolvedValue({ data: validReport, error: null });
     renderWithProviders(<OkrValidator draft={{ objective: "Стать лидером", key_results: ["Поднять X с 30 до 50"] }} />);
     await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
-    expect(invokeMock.mock.calls[0][1].body.okr_type).toBeUndefined();
-    expect(invokeMock.mock.calls[0][1].body.okr_status).toBe("regular");
+    let body = invokeMock.mock.calls[0][1].body;
+    expect(body.okr_type).toBeUndefined();
+    expect(body.okr_origin).toBe("regular");
+    expect(body.way_known).toBe(true);
+    expect(body.okr_status).toBeUndefined();
 
     invokeMock.mockClear();
     await userEvent.selectOptions(screen.getByTestId("okr-type-select"), "committed");
-    await userEvent.selectOptions(screen.getByTestId("okr-status-select"), "direction");
+    await userEvent.type(screen.getByTestId("okr-owner-input"), "Иванов");
+    await userEvent.click(screen.getByTestId("okr-way-known"));
     await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
-    expect(invokeMock.mock.calls[0][1].body.okr_type).toBe("committed");
-    expect(invokeMock.mock.calls[0][1].body.okr_status).toBe("direction");
+    body = invokeMock.mock.calls[0][1].body;
+    expect(body).toMatchObject({ okr_type: "committed", okr_origin: "regular", owner: "Иванов", way_known: false });
+
+    invokeMock.mockClear();
+    await userEvent.selectOptions(screen.getByTestId("okr-origin-select"), "protection_direction");
+    expect(screen.getByTestId("okr-type-select")).toBeDisabled();
+    expect((screen.getByTestId("okr-type-select") as HTMLSelectElement).value).toBe("aspirational");
+    expect(screen.getByText(/тип задан методикой/)).toBeInTheDocument();
+    expect(screen.queryByTestId("okr-way-known")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body).toMatchObject({ okr_type: "aspirational", okr_origin: "protection_direction" });
   });
 
-  it("draft с okrType заполняет селектор типа", () => {
-    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"], okrType: "aspirational", okrStatus: "direction" }} />);
+  // Переписано: старая запись со статусом «направление» открывается как «из направления роста».
+  it("draft со старым okrStatus=direction → происхождение «рост», тип амбициозный", () => {
+    renderWithProviders(<OkrValidator draft={{ objective: "Тест", key_results: ["KR1"], okrType: "committed", okrStatus: "direction" }} />);
+    expect((screen.getByTestId("okr-origin-select") as HTMLSelectElement).value).toBe("growth_direction");
     expect((screen.getByTestId("okr-type-select") as HTMLSelectElement).value).toBe("aspirational");
-    expect((screen.getByTestId("okr-status-select") as HTMLSelectElement).value).toBe("direction");
+    expect(vi.mocked(toast.message)).toHaveBeenCalledWith("Проверьте происхождение OKR: рост или защита");
   });
 });

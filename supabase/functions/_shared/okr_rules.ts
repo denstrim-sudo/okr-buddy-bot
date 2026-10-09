@@ -3,7 +3,7 @@
 // Зависит от типа OKR (обязательный / амбициозный / смешанный) и статуса
 // (направление / обычный OKR). Без них работает как «тип не объявлен, обычный OKR».
 
-import { toCtx, type OkrStatus, type OkrType, type RuleCtx } from "./scoring.ts";
+import { toCtx, requiredAnglesFor, isDirectionOrigin, type OkrOrigin, type OkrStatus, type OkrType, type RuleCtx } from "./scoring.ts";
 
 export type Angle = "К" | "О" | "У";
 
@@ -34,12 +34,17 @@ export function okrTypeLabel(t?: OkrType): string {
 export function okrStatusLabel(s?: OkrStatus): string {
   return s === "direction" ? "направление" : "обычный OKR";
 }
+const ORIGIN_LABEL: Record<OkrOrigin, string> = {
+  growth_direction: "из направления роста",
+  protection_direction: "из защитного направления",
+  regular: "обычный OKR",
+};
+export function okrOriginLabel(o?: OkrOrigin): string {
+  return ORIGIN_LABEL[o ?? "regular"];
+}
 
-function anglesLine(t?: OkrType): string {
-  const r = requiredAngles(t);
-  if (r === null) return "Тип OKR не объявлен — правило не применяется (сервер пометит его как неприменимое).";
-  if (Array.isArray(r)) return `Для типа «${okrTypeLabel(t)}» обязательны ракурсы: ${r.map((a) => `[${a}]`).join(" и ")}.`;
-  return `Для смешанного OKR обязателен [${r.must.join("]")}] и хотя бы один из ${r.oneOf.map((a) => `[${a}]`).join(" / ")}.`;
+function anglesLine(o?: OkrOrigin): string {
+  return `Для OKR «${okrOriginLabel(o)}» обязательны ракурсы: ${requiredAnglesFor(o).map((a) => `[${a}]`).join(" и ")} (тип OKR на ракурсы не влияет).`;
 }
 
 const ID_NOTE = `ВАЖНО: идентификаторы правил ниже (OBJ-*, KR-*) — это ИМЕНА ПРАВИЛ АУДИТА, а НЕ номера ключевых результатов пользователя. Когда ссылаешься на конкретный KR пользователя в hint/reasoning — указывай его по позиции ("второй KR", "KR №2"), а имя правила пиши как есть (KR-OUTCOME, KR-LEADING).`;
@@ -51,30 +56,35 @@ export const ANGLES_DEFINITION = `РАКУРСЫ KR (OKR-PI 3.3) — метки 
 
 function buildBaseRules(ctx: ReturnType<typeof toCtx>): string {
   const [minKr, maxKr] = krCountRange(ctx.okr_status);
+  const dir = isDirectionOrigin(ctx.okr_origin);
   const outcomeLine = ctx.okr_type === "committed" && ctx.okr_status === "regular"
     ? "Для обязательного обычного OKR глаголы исполнения ДОПУСТИМЫ (OKR-PI 3.4.8) — сервер пометит правило как неприменимое."
     : "В направлениях исполнение запрещено всегда.";
   const lines = [
     `- OBJ-NO-NUMBERS [critical]  В Objective НЕТ KPI, процентов и цифр.`,
-    `- OBJ-QUALITATIVE [important]  Objective описывает изменение у клиентов или банка, без цифр и БЕЗ способа («через внедрение X», «за счёт запуска Y» = fail).`,
+    `- OBJ-QUALITATIVE [important]  О1: Objective описывает изменение состояния, а не область. О2: без способа («через внедрение X», «за счёт запуска Y» = fail).`,
+    `- OBJ-END-STATE [important]  О3: из Objective понятно, чем конец периода будет отличаться от сегодня. Провал — Objective описывает область или направление работы («развитие цифровых каналов», «работа с корпоративными клиентами»); evidence — цитата из Objective.`,
+    `- OKR-OWNER [important]  О9: владелец OKR назван поимённо.`,
   ];
   if (ctx.okr_type === "aspirational" || ctx.okr_type === "mixed") {
     lines.push(`- OBJ-AMBITIOUS [important]  Objective амбициозный, запоминающийся, по масштабу соответствует выбранному горизонту (НЕ требует явного срока или даты в тексте).`);
   }
   lines.push(
-    `- KR-COUNT [important]  Число KR от ${minKr} до ${maxKr} (${okrStatusLabel(ctx.okr_status)}).`,
+    `- KR-COUNT [important]  Число KR от ${minKr} до ${maxKr} (${okrOriginLabel(ctx.okr_origin)})`,
     `- KR-MEASURABLE [critical]  Каждый KR измерим в одной из форм: «с X до Y», «с Y до X», «остаётся выше X», «остаётся ниже Y», либо форма обучения «к [дата] известно, [что], с порогом [какой]». Любая из этих форм = pass. Числа распознавай и внутри текста KR.`,
     `- KR-OUTCOME [critical]  KR описывают исходы, а не задачи. Запрещённые глаголы: «запустить», «внедрить», «перевести», «построить» (launch, implement, migrate, build). ${outcomeLine}`,
-    `- KR-REQUIRED-ANGLES [${ctx.okr_status === "direction" ? "critical" : "important"}]  ${anglesLine(ctx.okr_type)} В hint назови, какого ракурса не хватает, и предложи KR этого ракурса под данный Objective.`,
+    `- KR-REQUIRED-ANGLES [${dir ? "critical" : "important"}]  ${anglesLine(ctx.okr_origin)} В hint назови, какого ракурса не хватает, и предложи KR этого ракурса под данный Objective.`,
     `- KR-QUALITY-PAIR [important]  Каждый KR на рост количества (выдачи, охват, скорость, объём) имеет в наборе KR качества, который не даёт выполнить первый за счёт клиента, риска или людей. Пример пары: «потери от мошенничества −30%» + «ложные блокировки с 2% до 0,8%».`,
     `- KR-LEARNING-FORM [important]  KR обучения содержит вопрос и порог. «Провести исследование / анализ» без вопроса и порога = fail (антипаттерн «формальный [У]»). Если в наборе нет KR обучения — pass (наличие проверяет KR-REQUIRED-ANGLES).`,
-    `- KR-LEADING [${ctx.horizon === "quarter_3m" || ctx.okr_status === "direction" ? "critical" : "important"}]  Хотя бы один KR — опережающий. Для направления — хотя бы один [К] опережающий, с контрольными точками внутри года.`,
+    `- KR-LEADING [${ctx.horizon === "quarter_3m" || dir ? "critical" : "important"}]  О13: хотя бы один KR — опережающий. Для OKR из направления — хотя бы один [К] опережающий, с контрольными точками внутри года.`,
     `- KR-TIMEBOUND [important]  KR ограничены по времени и имеют градиент прогресса (не бинарные).`,
+    `- KR-RISK-NAMED [important]  О7: для каждого KR с ракурсом [О] назван конкретный риск, от которого он защищает.`,
   );
+  if (!dir) lines.push(`- OKR-WAY-KNOWN [important]  О17: способ достижения известен; иначе кандидат возвращается на проверку как защитное направление.`);
   if (ctx.horizon === "quarter_3m") {
     lines.push(`- Q-REACH [important]  Сдвиг достижим за 90 дней от текущей точки. Если цель явно требует больше квартала — fail с подсказкой «разбейте на кварталы».`);
   }
-  return `${ID_NOTE}\n\nТИП OKR: ${okrTypeLabel(ctx.okr_type)}. СТАТУС: ${okrStatusLabel(ctx.okr_status)}.\n\n${lines.join("\n")}\n\n${ANGLES_DEFINITION}`;
+  return `${ID_NOTE}\n\nТИП OKR: ${okrTypeLabel(ctx.okr_type)}. ПРОИСХОЖДЕНИЕ: ${okrOriginLabel(ctx.okr_origin)}.\n\n${lines.join("\n")}\n\n${ANGLES_DEFINITION}`;
 }
 
 const SCORING_BLOCK = `SEVERITY:
@@ -99,7 +109,7 @@ export function getRulesBlock(ctxOrHorizon?: string | RuleCtx): string {
 export const KR_FORM_DEFINITION = `form (форма KR): range — «с X до Y» / «с Y до X» / «на N%»; threshold — «остаётся выше/ниже», «не выше/не ниже», «≤», «≥», «ноль …»; learning — «к дате известно, что…, с порогом…»; execution — факт поставки к сроку; binary — выполнено / не выполнено без градиента; unmeasurable — нельзя понять, выполнен ли KR.
 timing: leading — показатель, который меняется раньше результата и позволяет скорректироваться внутри периода; lagging — итоговый результат, видимый в конце периода.`;
 
-export const SERVER_COMPUTED_RULES = ["OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "KR-COUNT", "KR-REQUIRED-ANGLES"];
+export const SERVER_COMPUTED_RULES = ["OBJ-NO-NUMBERS", "KR-OUTCOME", "KR-MEASURABLE", "KR-TIMEBOUND", "KR-LEADING", "KR-COUNT", "KR-REQUIRED-ANGLES", "OKR-OWNER", "OKR-WAY-KNOWN", "KR-RISK-NAMED"];
 
 /**
  * Свод для АУДИТОРА: только смысловые правила, которые оценивает модель.

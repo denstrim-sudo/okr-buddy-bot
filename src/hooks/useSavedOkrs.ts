@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GeneratedPlan, OkrStatus, OkrType } from "@/types/okr";
+import type { GeneratedPlan, OkrOrigin, OkrStatus, OkrType } from "@/types/okr";
 
 export interface OkrMeta {
   okrType?: OkrType;
   okrStatus?: OkrStatus;
+  okrOrigin?: OkrOrigin;
+  owner?: string;
+  wayKnown?: boolean;
 }
 
 export interface SavedOkr {
@@ -18,7 +21,11 @@ export interface SavedOkr {
   parentKrIndex?: number;
   /** Тип и статус OKR (OKR-PI). Необязательные: старые записи без них валидны. */
   okrType?: OkrType;
+  /** Устарело (до 09.10.2026). Новые записи пишут okrOrigin. */
   okrStatus?: OkrStatus;
+  okrOrigin?: OkrOrigin;
+  owner?: string;
+  wayKnown?: boolean;
 }
 
 export interface OkrExport {
@@ -102,6 +109,9 @@ export function useSavedOkrs() {
         ...(link ? { parentOkrId: link.parentOkrId, parentKrIndex: link.parentKrIndex } : {}),
         ...(meta?.okrType ? { okrType: meta.okrType } : {}),
         ...(meta?.okrStatus ? { okrStatus: meta.okrStatus } : {}),
+        ...(meta?.okrOrigin ? { okrOrigin: meta.okrOrigin } : {}),
+        ...(meta?.owner ? { owner: meta.owner } : {}),
+        ...(meta?.wayKnown === false ? { wayKnown: false } : {}),
       };
       const ok = commit([item, ...itemsRef.current]);
       return { item, ok };
@@ -127,6 +137,9 @@ export function useSavedOkrs() {
         updatedAt: new Date().toISOString(),
         ...(meta && "okrType" in meta ? { okrType: meta.okrType } : {}),
         ...(meta && "okrStatus" in meta ? { okrStatus: meta.okrStatus } : {}),
+        ...(meta && "okrOrigin" in meta ? { okrOrigin: meta.okrOrigin, okrStatus: undefined } : {}),
+        ...(meta && "owner" in meta ? { owner: meta.owner } : {}),
+        ...(meta && "wayKnown" in meta ? { wayKnown: meta.wayKnown } : {}),
         // id / savedAt / parentOkrId / parentKrIndex — СОХРАНЯЕМ исходные, чтобы:
         // (1) дети продолжали ссылаться на этот id,
         // (2) связь с родителем не терялась,

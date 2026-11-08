@@ -1176,6 +1176,9 @@ Deno.test("handler: growth_direction без [У] → KR-REQUIRED-ANGLES fail о�
     assertEquals(a[0].pass, false);
     assertEquals(a[0].missing, ["У"]);
     assertEquals(a[0].unconfirmed, undefined);
+    assertEquals(data.status, "fail", "server must override the model's pass verdict");
+    assert(data.summary.includes("KR-REQUIRED-ANGLES"));
+    assert(!data.summary.includes("корректировки не требуются"));
     const c = data.rules.find((x: any) => x.id === "KR-COUNT");
     assertEquals(c.pass, true, "2 KR в OKR из направления — в диапазоне 2–4 (О11)");
     assertEquals(c.checklist_ref, "О11");

@@ -60,6 +60,8 @@ export const PRIMARY_ATTEMPT_MS = 100_000;
 /** Минимум времени, при котором есть смысл начинать ещё одну попытку. */
 export const MIN_ATTEMPT_MS = 15_000;
 
+import { primaryAttemptMsFor } from "./models.ts";
+
 const AIAI_BASE_URL = (Deno.env.get("AIAI_BASE_URL") ?? "https://vedai.by/api/v1").replace(/\/+$/, "");
 
 const getProviderError = (txt: string) => {
@@ -251,7 +253,7 @@ async function runWithFallback(args: CallArgs): Promise<{ res: CallResult; meta:
   let res = await openaiToolCall(
     args,
     "",
-    Math.max(MIN_ATTEMPT_MS, Math.min(PRIMARY_ATTEMPT_MS, remaining())),
+    Math.max(MIN_ATTEMPT_MS, Math.min(primaryAttemptMsFor(requested), remaining())),
   );
 
   if (shouldFallbackToDefault(res, requested)) {

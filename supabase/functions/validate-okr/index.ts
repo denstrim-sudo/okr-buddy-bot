@@ -286,6 +286,35 @@ export function applyScoreRecompute<T extends { score?: number; rules?: any[]; s
   return data;
 }
 
+/**
+ * A model's prose verdict may contradict server-derived rules and score.
+ * Keep a single authoritative conclusion after server classification/scoring.
+ * Unconfirmed, unreliable and inapplicable rules do not count as violations.
+ */
+export function reconcileAuditVerdict<T extends {
+  status?: string;
+  summary?: string;
+  rules?: Array<{ id?: string; label?: string; pass?: boolean; severity?: string; applicable?: boolean; unconfirmed?: boolean; unreliable?: boolean }>;
+}>(data: T): T {
+  if (!Array.isArray(data.rules) || data.rules.length === 0) return data;
+  const failed = data.rules.filter((r) =>
+    r.pass === false && r.applicable !== false && r.unconfirmed !== true && r.unreliable !== true
+  );
+  const critical = failed.filter((r) => r.severity === "critical");
+  if (critical.length > 0) {
+    data.status = "fail";
+    const names = critical.map((r) => r.id ?? r.label ?? "неизвестное правило").join(", ");
+    data.summary = `Есть критические нарушения (${names}). Текущий OKR не соответствует требованиям проверки. Необходимо устранить указанные нарушения; формальная перефразировка без изменения результата недостаточна.`;
+  } else if (failed.length > 0) {
+    data.status = "warn";
+    const names = failed.map((r) => r.id ?? r.label ?? "неизвестное правило").join(", ");
+    data.summary = `Есть замечания (${names}). OKR требует доработки по этим правилам.`;
+  } else {
+    data.status = "pass";
+  }
+  return data;
+}
+
 /** Провал без цитаты (pass=false, grounded=false) — unconfirmed, в score не идёт. */
 export function markUnconfirmed(rules: any[]): any[] {
   return rules.map((r: any) =>
@@ -511,6 +540,7 @@ export const handler = async (req: Request) => {
 
     // Оценка всегда считается сервером — после контекста правил и проверки цитат.
     applyScoreRecompute(finalData, h);
+    reconcileAuditVerdict(finalData);
 
     return json(finalData);
   } catch (e) {

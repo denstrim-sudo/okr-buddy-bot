@@ -4,7 +4,10 @@ on:
   pull_request:
   push:
     branches:
-      - fix/audit-versioning
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   test-and-build:
@@ -15,8 +18,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: 'Install dependencies (temporary lockfile workaround)'
-        run: npm install --no-package-lock
+      - name: Install dependencies
+        run: npm ci
       - name: Run unit tests
         run: npm test
       - name: Build

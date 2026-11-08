@@ -1,5 +1,5 @@
 /**
- * Курируемый каталог моделей AIAI.BY (сверен с /models 08.11.2026).
+ * Курируемый каталог моделей AIAI.BY (сверен с /models 08.11.2026; claude-sonnet-5.5 исключена — AIAI.BY отклоняет tool calling).
  * slow = reasoning-модель: отвечает дольше, получает больший бюджет первой попытки.
  */
 export interface CuratedModel { id: string; label: string; hint: string; slow?: boolean }
@@ -13,8 +13,7 @@ export const CURATED_MODELS: CuratedModel[] = [
   { id: "gpt-5.4-mini", label: "GPT-5.4 mini", hint: "OpenAI, баланс цены и качества" },
   { id: "gpt-4.1", label: "GPT-4.1", hint: "OpenAI, без рассуждений, быстро" },
   { id: "claude-opus-5.5", label: "Claude Opus 5.5", hint: "Anthropic, премиум-качество" + SLOW, slow: true },
-  { id: "claude-sonnet-5.5", label: "Claude Sonnet 5.5", hint: "Anthropic, силён в аудите текста" },
-  { id: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", hint: "Anthropic, проверенный" },
+  { id: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", hint: "Anthropic, силён в аудите текста" },
   { id: "claude-haiku-5.5", label: "Claude Haiku 5.5", hint: "Anthropic, быстрый и дешёвый" },
   { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", hint: "Google, топ-модель" + SLOW, slow: true },
   { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", hint: "Google, новейший быстрый" },

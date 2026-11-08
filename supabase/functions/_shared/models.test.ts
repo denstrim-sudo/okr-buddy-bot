@@ -10,7 +10,7 @@ Deno.test("каталог: нет устаревших моделей, кото�
 
 Deno.test("каталог: есть актуальные поколения моделей", () => {
   const ids = CURATED_MODELS.map((m) => m.id);
-  for (const fresh of ["claude-sonnet-5.5", "gemini-3.1-pro", "gpt-6.1-sol", "grok-4.7"]) {
+  for (const fresh of ["claude-opus-5.5", "gemini-3.1-pro", "gpt-6.1-sol", "grok-4.7"]) {
     assert(ids.includes(fresh), `${fresh} должна быть в каталоге`);
   }
   assertEquals(ids[0], "gpt-4o");

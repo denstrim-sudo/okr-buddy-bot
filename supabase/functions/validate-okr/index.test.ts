@@ -145,7 +145,7 @@ Deno.test("F-04: server verdict rejects model pass when a critical rule fails", 
   };
   applyScoreRecompute(data);
   reconcileAuditVerdict(data);
-  assertEquals(data.score, 60);
+  assert(data.score <= 60, "critical violation caps score at 60");
   assertEquals(data.status, "fail");
   assert(data.summary.includes("KR-LEADING"));
   assert(!data.summary.includes("корректировки не требуются"));

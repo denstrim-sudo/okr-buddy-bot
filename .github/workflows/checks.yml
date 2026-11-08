@@ -11,12 +11,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - name: 'Install dependencies (temporary lockfile workaround)'
         run: npm install --no-package-lock
+      - name: Verify F-01 regression tests fail against baseline code (RED)
+        shell: bash
+        run: |
+          cp src/components/aimbot/OkrValidator.tsx /tmp/OkrValidator.fixed.tsx
+          git show a007cc9bc23f58883c8849148760c9c8ada8e43a:src/components/aimbot/OkrValidator.tsx > src/components/aimbot/OkrValidator.tsx
+          if npx vitest run src/components/aimbot/__tests__/OkrValidator.test.tsx -t 'F-01' > /tmp/f01-red.log 2>&1; then
+            cat /tmp/f01-red.log
+            echo "Regression tests unexpectedly passed on baseline"
+            exit 1
+          fi
+          grep -q 'failed' /tmp/f01-red.log || { cat /tmp/f01-red.log; exit 1; }
+          echo "RED confirmed against baseline:"
+          grep -E 'Test Files|Tests  ' /tmp/f01-red.log || true
+          cp /tmp/OkrValidator.fixed.tsx src/components/aimbot/OkrValidator.tsx
       - name: Run unit tests
         run: npm test
       - name: Build

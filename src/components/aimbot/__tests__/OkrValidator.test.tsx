@@ -517,6 +517,7 @@ describe("F-02: KR text and structured metadata stay consistent", () => {
     const saved = JSON.parse(localStorage.getItem("aimbot.savedOkrs.v1")!);
     const results = saved[0].plan.key_results;
     expect(results[0]).toMatchObject({ text: draft.key_results[0] + " в новом сегменте", baseline: "", target: "", metric: "" });
+    expect(results[0].kr_type).toBeUndefined();
     expect(results[1]).toMatchObject({ text: draft.key_results[1], baseline: "8", target: "4", metric: "Минуты ожидания", kr_type: "leading" });
   });
 

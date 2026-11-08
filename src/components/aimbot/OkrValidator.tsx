@@ -286,7 +286,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         baseline: f?.baseline ?? "",
         target: f?.target ?? "",
         metric: f?.metric ?? "",
-        kr_type: f?.kr_type ?? "leading",
+        kr_type: f?.kr_type,
         solutions: [],
       };
     }).filter((k) => k.text.length > 0),

@@ -101,6 +101,11 @@ export const KrPerspectives: React.FC<Props> = ({ keyResults, perspectives }) =>
               )}
               <span className="flex-1 text-xs text-muted-foreground">
                 {kr}
+                {p.rationale?.trim() && (
+                  <span data-testid={`kr-rationale-${i}`} className="mt-1 block text-[11px] text-muted-foreground">
+                    Почему этот ракурс: {p.rationale}
+                  </span>
+                )}
                 {p.perspective === "О" && p.guards_against?.trim() && (
                   <span data-testid={`kr-guards-${i}`} className="block text-[10px] text-muted-foreground/80">защищает от: {p.guards_against}</span>
                 )}

@@ -88,6 +88,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [pendingAudit, setPendingAudit] = useState<{ signature: string; requestId: number } | null>(null);
   const [fixing, setFixing] = useState(false);
   const [reportState, setReportState] = useState<{ signature: string; value: ValidationReport } | null>(null);
+  // The previous audit is retained only as a revision reference, never as current approval.
+  const [revision, setRevision] = useState<{
+    report: ValidationReport;
+    objective: string;
+    krs: string[];
+  } | null>(null);
+  const [scoreComparison, setScoreComparison] = useState<{ before: number; after: number } | null>(null);
   const [sourceOkrId, setSourceOkrId] = useState<string | undefined>(undefined);
   const [saveParentLink, setSaveParentLink] = useState<{ parentOkrId: string; parentKrIndex: number } | null>(null);
   const { buildContext } = useDocs();
@@ -113,6 +120,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
 
   // An earlier report is never presented as an assessment of edited inputs.
   const report = reportState?.signature === auditSignature ? reportState.value : null;
+  const reviewReport = revision?.report ?? report;
+  const historicalAudit = Boolean(revision && !report);
   const setReport = (next: React.SetStateAction<ValidationReport | null>) => {
     const signature = auditSignature;
     setReportState((previous) => {
@@ -135,6 +144,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     setOwner(draft.owner ?? "");
     setWayKnown(draft.wayKnown !== false);
     setReport(null);
+    setRevision(null);
+    setScoreComparison(null);
     setSourceOkrId(draft.sourceOkrId);
     setSaveParentLink(null);
   }, [draft]);
@@ -181,6 +192,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       setReport(data as ValidationReport);
+      setScoreComparison(revision ? { before: revision.report.score, after: (data as ValidationReport).score } : null);
+      setRevision(null);
       toast.success(`Аудит готов · оценка ${(data as ValidationReport).score}/100`);
     } catch (e: any) {
       if (signatureRef.current === signature && auditRequestRef.current === requestId) {
@@ -217,13 +230,17 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
-      setReport((p) => p ? {
-        ...p,
-        rewritten_objective: d.rewritten_objective ?? "",
-        rewritten_key_results: d.rewritten_key_results ?? [],
-        rewritten_objective_warning: d.rewritten_objective_warning,
-        editor_note: d.editor_note,
-      } : p);
+      setRevision({
+        objective,
+        krs: [...krs],
+        report: {
+          ...report,
+          rewritten_objective: d.rewritten_objective ?? "",
+          rewritten_key_results: d.rewritten_key_results ?? [],
+          rewritten_objective_warning: d.rewritten_objective_warning,
+          editor_note: d.editor_note,
+        },
+      });
       toast.success("AI-предложения по улучшению готовы");
     } catch (e: any) {
       if (signatureRef.current === signature) {
@@ -235,44 +252,64 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     }
   };
 
+  const reviseSuggestions = (transform: (value: ValidationReport) => ValidationReport) => {
+    setRevision((previous) => previous ? { ...previous, report: transform(previous.report) } : previous);
+  };
+
+  const staleObjectiveSuggestion = Boolean(revision && objective.trim() !== revision.objective.trim());
+  const staleKrSuggestion = (index: number): boolean =>
+    Boolean(revision && krs[index]?.trim() !== revision.krs[index]?.trim());
+
   const acceptObjective = () => {
-    if (!report?.rewritten_objective) return;
-    setObjective(report.rewritten_objective);
-    setReport((p) => (p ? { ...p, rewritten_objective: "" } : p));
+    const candidate = revision?.report.rewritten_objective;
+    if (!candidate || staleObjectiveSuggestion) return;
+    setObjective(candidate);
+    reviseSuggestions((value) => ({ ...value, rewritten_objective: "" }));
     toast.success("Новая формулировка Objective принята");
   };
 
   const rejectObjective = () => {
-    setReport((p) => (p ? { ...p, rewritten_objective: "" } : p));
+    reviseSuggestions((value) => ({ ...value, rewritten_objective: "" }));
     toast.message("Оставлена исходная формулировка Objective");
   };
 
   const acceptKr = (idx: number) => {
-    if (!report?.rewritten_key_results?.[idx]) return;
-    const newText = report.rewritten_key_results[idx];
-    updateKr(idx, newText);
-    setReport((p) =>
-      p ? { ...p, rewritten_key_results: p.rewritten_key_results.map((x, i) => (i === idx ? "" : x)) } : p,
-    );
+    const candidate = revision?.report.rewritten_key_results?.[idx];
+    if (!candidate || staleKrSuggestion(idx)) return;
+    updateKr(idx, candidate);
+    reviseSuggestions((value) => ({
+      ...value,
+      rewritten_key_results: value.rewritten_key_results?.map((x, i) => (i === idx ? "" : x)),
+    }));
     toast.success(`KR${idx + 1}: новая формулировка принята`);
   };
 
   const rejectKr = (idx: number) => {
-    setReport((p) =>
-      p ? { ...p, rewritten_key_results: p.rewritten_key_results.map((x, i) => (i === idx ? "" : x)) } : p,
-    );
+    reviseSuggestions((value) => ({
+      ...value,
+      rewritten_key_results: value.rewritten_key_results?.map((x, i) => (i === idx ? "" : x)),
+    }));
   };
 
-  const applyAllAndRevalidate = () => {
-    if (!report) return;
-    const newObjective = report.rewritten_objective || objective;
-    const newKrs = report.rewritten_key_results?.map((k, i) => (k && k.trim() ? k : (krs[i] ?? ""))) ?? krs;
+  // Apply safe, still-relevant suggestions, but let the user initiate the audit.
+  // No synchronous re-audit: React must commit all edits before the next audit signature.
+  const acceptRemaining = () => {
+    if (!revision) return;
+    const suggestedObjective = revision.report.rewritten_objective;
+    const newObjective = suggestedObjective && !staleObjectiveSuggestion ? suggestedObjective : objective;
+    const newKrs = krs.map((text, index) => {
+      const suggestion = revision.report.rewritten_key_results?.[index];
+      return suggestion && !staleKrSuggestion(index) ? suggestion : text;
+    });
     setObjective(newObjective);
     setKrs(newKrs);
-    setKrsFull((p) => p ? newKrs.map((text, i) => reconcileKrMetadata(p[i], text)) : null);
-    setReport(null);
-    toast.success("Все предложения приняты. Запускаю повторный аудит...");
-    validate(newObjective, newKrs);
+    setKrsFull((previous) => previous ? newKrs.map((text, i) => reconcileKrMetadata(previous[i], text)) : null);
+    reviseSuggestions((value) => ({
+      ...value,
+      rewritten_objective: suggestedObjective && !staleObjectiveSuggestion ? "" : suggestedObjective,
+      rewritten_key_results: value.rewritten_key_results?.map((text, i) => text && !staleKrSuggestion(i) ? "" : text),
+    }));
+    toast.success("Доступные исправления приняты. Проверьте OKR перед повторным аудитом.");
   };
 
   const buildPlanFromCurrent = (): GeneratedPlan => ({
@@ -324,9 +361,9 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const statusLabel =
     report?.status === "pass" ? "Соответствует" : report?.status === "warn" ? "Требует доработки" : report?.status === "fail" ? "Не соответствует" : null;
 
-  const hasRewrites = report && (
-    (report.rewritten_objective && report.rewritten_objective.trim()) ||
-    report.rewritten_key_results?.some((x) => x && x.trim())
+  const hasRewrites = reviewReport && (
+    (reviewReport.rewritten_objective && reviewReport.rewritten_objective.trim()) ||
+    reviewReport.rewritten_key_results?.some((x) => x && x.trim())
   );
 
   return (
@@ -485,11 +522,31 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         )}
       </Button>
 
-      {(report || loading) && (
+      {scoreComparison && report && (
+        <div data-testid="audit-score-comparison" className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          Повторный аудит: {scoreComparison.before}/100 → {scoreComparison.after}/100
+          <span className="ml-2 font-semibold">
+            ({scoreComparison.after - scoreComparison.before > 0 ? "+" : ""}{scoreComparison.after - scoreComparison.before})
+          </span>
+        </div>
+      )}
+      {revision && (
+        <div className="space-y-2 rounded-lg border border-warning/40 bg-warning-soft/30 p-3">
+          {historicalAudit && (
+            <p data-testid="historical-audit-warning" className="text-xs text-warning">
+              Предыдущий аудит: {revision.report.score}/100. Оценка устарела и не подтверждает текущий OKR.
+            </p>
+          )}
+          <Button type="button" onClick={() => validate()} disabled={loading} className="w-full" data-testid="finish-revision-button">
+            {loading ? "Идёт повторный аудит..." : "Завершить исправления и перепроверить"}
+          </Button>
+        </div>
+      )}
+      {(reviewReport || loading) && (
         <div className="rounded-xl border border-border bg-secondary/30 p-4">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Отчёт валидации</p>
-            {statusLabel && (
+            {statusLabel && !historicalAudit && (
               <span
                 className={cn(
                   "text-xs font-medium",
@@ -509,9 +566,9 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             </div>
           )}
 
-          {report && (
+          {reviewReport && (
             <>
-              {report.audit_unreliable && (
+              {reviewReport.audit_unreliable && (
                 <div
                   role="alert"
                   data-testid="audit-unreliable-warning"
@@ -520,17 +577,17 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   ⚠ Аудит может быть ненадёжным — модель не справилась с форматом дважды. Попробуйте GPT-4o.
                 </div>
               )}
-              {report.model_used && (
+              {reviewReport.model_used && (
                 <p
                   data-testid="model-used-badge"
                   className="mb-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
                 >
-                  Модель: {report.model_used}
+                  Модель: {reviewReport.model_used}
                 </p>
               )}
-              {report.summary && <p className="mb-3 text-sm text-foreground">{report.summary}</p>}
+              {reviewReport.summary && <p className="mb-3 text-sm text-foreground">{reviewReport.summary}</p>}
               {(() => {
-                const failed = report.rules.filter((r) => !r.pass);
+                const failed = reviewReport.rules.filter((r) => !r.pass);
                 const counts = {
                   critical: failed.filter((r) => (r.severity ?? "important") === "critical").length,
                   important: failed.filter((r) => (r.severity ?? "important") === "important").length,
@@ -557,9 +614,9 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   </div>
                 );
               })()}
-              <RuleList rules={report.rules} />
-              {report.kr_perspectives && report.kr_perspectives.length > 0 && (
-                <KrPerspectives keyResults={krs} perspectives={report.kr_perspectives} />
+              <RuleList rules={reviewReport.rules} />
+              {reviewReport.kr_perspectives && reviewReport.kr_perspectives.length > 0 && (
+                <KrPerspectives keyResults={revision?.krs ?? krs} perspectives={reviewReport.kr_perspectives} />
               )}
             </>
           )}
@@ -567,7 +624,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       )}
 
       {/* Кнопка "Предложить исправления" — только если есть провалы и мы ещё не запросили fix */}
-      {report && failedRules.length > 0 && !hasRewrites && (
+      {report && !revision && failedRules.length > 0 && !hasRewrites && (
         <Button
           type="button"
           onClick={requestFix}
@@ -679,28 +736,28 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">AI-предложения по улучшению</p>
           </div>
 
-          {report?.editor_note && (
+          {reviewReport?.editor_note && (
             <p
               data-testid="editor-note"
               className="rounded-md border border-primary/20 bg-background/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground"
             >
               <span className="font-semibold text-primary">Коуч: </span>
-              {report.editor_note}
+              {reviewReport.editor_note}
             </p>
           )}
 
 
-          {report?.rewritten_objective && report.rewritten_objective.trim() && report.rewritten_objective.trim() !== objective.trim() && (
+          {reviewReport?.rewritten_objective && reviewReport.rewritten_objective.trim() && reviewReport.rewritten_objective.trim() !== objective.trim() && (
             <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Objective</p>
               <div className="space-y-1 text-sm">
-                <p className="text-muted-foreground line-through">{objective}</p>
+                <p className="text-muted-foreground line-through">{revision?.objective ?? objective}</p>
                 <div className="flex items-start gap-1.5">
                   <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                  <p className="font-medium text-foreground">{renderWithPlaceholders(report.rewritten_objective)}</p>
+                  <p className="font-medium text-foreground">{renderWithPlaceholders(reviewReport.rewritten_objective)}</p>
                 </div>
               </div>
-              {report.rewritten_objective_warning && (
+              {reviewReport.rewritten_objective_warning && (
                 <p
                   role="status"
                   data-testid="rewritten-objective-warning"
@@ -709,8 +766,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                   ⚠ Переписанная версия всё ещё может содержать цифру — проверьте вручную.
                 </p>
               )}
+              {staleObjectiveSuggestion && (
+                <p data-testid="objective-recommendation-stale" className="text-xs text-warning">
+                  Objective изменён вручную. Эта рекомендация относится к прежней формулировке; применить её автоматически нельзя.
+                </p>
+              )}
               <div className="flex gap-2 pt-1">
-                <Button size="sm" onClick={acceptObjective} className="h-8 bg-success text-success-foreground hover:bg-success/90">
+                <Button size="sm" disabled={staleObjectiveSuggestion} onClick={acceptObjective} className="h-8 bg-success text-success-foreground hover:bg-success/90">
                   <Check className="mr-1 h-3.5 w-3.5" /> Принять новую
                 </Button>
                 <Button size="sm" variant="outline" onClick={rejectObjective} className="h-8">
@@ -720,8 +782,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
             </div>
           )}
 
-          {report?.rewritten_key_results?.map((newKr, i) => {
-            const oldKr = krs[i] ?? "";
+          {reviewReport?.rewritten_key_results?.map((newKr, i) => {
+            const oldKr = revision?.krs[i] ?? krs[i] ?? "";
             if (!newKr || !newKr.trim() || newKr.trim() === oldKr.trim()) return null;
             return (
               <div key={i} className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
@@ -733,8 +795,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
                     <p className="font-medium text-foreground">{renderWithPlaceholders(newKr)}</p>
                   </div>
                 </div>
+                {staleKrSuggestion(i) && (
+                  <p data-testid={`kr-recommendation-stale-${i}`} className="text-xs text-warning">
+                    KR изменён вручную. Рекомендация относится к прежней формулировке; автоматическое применение отключено.
+                  </p>
+                )}
                 <div className="flex gap-2 pt-1">
-                  <Button size="sm" onClick={() => acceptKr(i)} className="h-8 bg-success text-success-foreground hover:bg-success/90">
+                  <Button size="sm" disabled={staleKrSuggestion(i)} onClick={() => acceptKr(i)} className="h-8 bg-success text-success-foreground hover:bg-success/90">
                     <Check className="mr-1 h-3.5 w-3.5" /> Принять новую
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => rejectKr(i)} className="h-8">
@@ -746,13 +813,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           })}
 
           <Button
-            onClick={applyAllAndRevalidate}
+            onClick={acceptRemaining}
             disabled={loading}
             variant="outline"
             size="sm"
             className="w-full border-primary/30 text-primary hover:bg-accent"
           >
-            <Wand2 className="mr-2 h-3.5 w-3.5" /> Принять все и перепроверить
+            <Wand2 className="mr-2 h-3.5 w-3.5" /> Принять остальные исправления
           </Button>
         </div>
       )}

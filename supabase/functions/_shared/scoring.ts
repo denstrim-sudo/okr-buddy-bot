@@ -70,10 +70,13 @@ export function toCtx(x?: string | RuleCtx): NormalizedCtx {
   return { horizon: typeof x === "string" ? x : undefined, okr_type: undefined, okr_status: "regular", okr_origin: "regular", owner: "", way_known: true };
 }
 
-/** Обязательные ракурсы по происхождению OKR (тип на них не влияет). */
+/** Обязательные ракурсы по происхождению. Для защитного направления [О]
+ * условен: применяется при конкретном риске, а не по факту происхождения.
+ * Если [О] присутствует, KR-RISK-NAMED проверяет названный риск.
+ */
 export function requiredAnglesFor(origin?: OkrOrigin): AngleMark[] {
   if (origin === "growth_direction") return ["К", "У"];
-  if (origin === "protection_direction") return ["К", "О", "У"];
+  if (origin === "protection_direction") return ["К", "У"];
   return ["К", "О"];
 }
 

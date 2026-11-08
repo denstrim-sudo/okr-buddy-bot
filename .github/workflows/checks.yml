@@ -4,7 +4,11 @@ on:
   pull_request:
   push:
     branches:
-      - fix/audit-versioning
+      - main
+      - chore/lockfile-ci
+
+permissions:
+  contents: write
 
 jobs:
   test-and-build:
@@ -15,9 +19,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: 'Install dependencies (temporary lockfile workaround)'
-        run: npm install --no-package-lock
+      - name: Regenerate stale lockfile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Install reproducibly
+        run: npm ci
       - name: Run unit tests
         run: npm test
       - name: Build
         run: npm run build
+      - name: Commit repaired lockfile to feature branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/chore/lockfile-ci'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git diff --cached --quiet || { git commit -m "chore: synchronize npm lockfile"; git push; }

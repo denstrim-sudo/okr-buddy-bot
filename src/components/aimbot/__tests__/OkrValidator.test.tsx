@@ -546,3 +546,72 @@ describe("F-02: KR text and structured metadata stay consistent", () => {
     expect(auditCalls.at(-1)![1].body.key_results_full[0]).toEqual({ text: "Доля завершённых операций выше 99%" });
   });
 });
+
+
+describe("F-03: complete an edit session before re-auditing", () => {
+  const draft = { objective: "Сократить усилия клиентов", key_results: ["KR старый один", "KR старый два"] };
+  const revised = { rewritten_objective: "Снизить усилия клиентов", rewritten_key_results: ["KR новый один", "KR новый два"], editor_note: "Проверить эффект" };
+  const start = async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    invokeMock.mockResolvedValueOnce({ data: revised, error: null });
+    renderWithProviders(<OkrValidator draft={draft} onSendToSolutions={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    await userEvent.click(screen.getByTestId("request-fix-button"));
+    await screen.findByText("KR новый два");
+  };
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("retains remaining recommendations and historical score after accepting Objective and one KR", async () => {
+    await start();
+    await userEvent.click(screen.getAllByRole("button", { name: /Принять новую/i })[0]);
+    expect(screen.getByText("KR новый один")).toBeInTheDocument();
+    expect(screen.getByText("KR новый два")).toBeInTheDocument();
+    expect(screen.getByTestId("historical-audit-warning")).toHaveTextContent("85/100");
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("save-as-new-button")).not.toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: /Принять новую/i })[0]);
+    expect(screen.getByText("KR новый два")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Завершить исправления и перепроверить/i })).toBeInTheDocument();
+  });
+
+  it("on successful re-audit shows before/after and restores current actions", async () => {
+    await start();
+    await userEvent.click(screen.getAllByRole("button", { name: /Принять новую/i })[0]);
+    invokeMock.mockResolvedValueOnce({ data: { ...validReport, score: 91 }, error: null });
+    await userEvent.click(screen.getByRole("button", { name: /Завершить исправления и перепроверить/i }));
+    await screen.findByTestId("audit-score-comparison");
+    expect(screen.getByTestId("audit-score-comparison")).toHaveTextContent("85");
+    expect(screen.getByTestId("audit-score-comparison")).toHaveTextContent("91");
+    expect(screen.queryByTestId("historical-audit-warning")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Передать в Решения/i })).toBeEnabled();
+  });
+
+  it("keeps edits and recommendations on audit failure; allows retry", async () => {
+    await start();
+    await userEvent.click(screen.getAllByRole("button", { name: /Принять новую/i })[0]);
+    invokeMock.mockResolvedValueOnce({ data: null, error: new Error("Timeout") });
+    await userEvent.click(screen.getByRole("button", { name: /Завершить исправления и перепроверить/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("KR новый один")).toBeInTheDocument();
+    expect(screen.getByTestId("historical-audit-warning")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(revised.rewritten_objective)).toBeInTheDocument();
+    invokeMock.mockResolvedValueOnce({ data: { ...validReport, score: 89 }, error: null });
+    await userEvent.click(screen.getByRole("button", { name: /Завершить исправления и перепроверить/i }));
+    await screen.findByTestId("audit-score-comparison");
+  });
+
+  it("preserves manual edits without applying a stale KR recommendation", async () => {
+    await start();
+    await userEvent.clear(screen.getByDisplayValue(draft.key_results[0]));
+    await userEvent.type(screen.getByPlaceholderText(/Поднять NPS/i), "Ручной текст KR");
+    expect(screen.getByTestId("kr-recommendation-stale-0")).toBeInTheDocument();
+    expect(screen.getByText("KR новый два")).toBeInTheDocument();
+    expect(screen.queryByTestId("historical-audit-warning")).toBeInTheDocument();
+  });
+});

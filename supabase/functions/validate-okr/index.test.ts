@@ -1,6 +1,6 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, markUnconfirmed, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
+import { handler, sanitizeRewrittenObjective, buildSystemPrompt, applyScoreRecompute, reconcileAuditVerdict, markUnconfirmed, isAuditSuspicious, DOCS_HEADER } from "./index.ts";
 import { callHandler, RUN_AI } from "../_shared/test_utils.ts";
 import { containsDigits } from "../_shared/textGuards.ts";
 
@@ -130,6 +130,58 @@ Deno.test("sanitize: если redo бросает — initial помечаетс
   });
   assertEquals(result.rewritten_objective_warning, true);
   assertEquals(result.rewritten_objective, "Удвоить выручку к 2026 году");
+});
+
+
+Deno.test("F-04: server verdict rejects model pass when a critical rule fails", () => {
+  const data = {
+    score: 96,
+    status: "pass",
+    summary: "Отличный OKR, корректировки не требуются.",
+    rules: [
+      { id: "KR-LEADING", label: "Есть опережающий KR", pass: false, severity: "critical" },
+      { id: "KR-MEASURABLE", label: "Измеримый KR", pass: true, severity: "critical" },
+    ],
+  };
+  applyScoreRecompute(data);
+  reconcileAuditVerdict(data);
+  assert(data.score <= 60, "critical violation caps score at 60");
+  assertEquals(data.status, "fail");
+  assert(data.summary.includes("KR-LEADING"));
+  assert(!data.summary.includes("корректировки не требуются"));
+});
+
+Deno.test("F-04: noncritical failures yield warn rather than pass", () => {
+  const data = {
+    score: 100,
+    status: "pass",
+    summary: "Всё идеально.",
+    rules: [
+      { id: "KR-BASELINE-TARGET", pass: false, severity: "important" },
+      { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+    ],
+  };
+  applyScoreRecompute(data);
+  reconcileAuditVerdict(data);
+  assertEquals(data.status, "warn");
+  assert(data.summary.includes("KR-BASELINE-TARGET"));
+  assert(!data.summary.includes("Всё идеально"));
+});
+
+Deno.test("F-04: no confirmed violations allow pass and preserve useful summary", () => {
+  const data = {
+    score: 100,
+    status: "fail",
+    summary: "Метрики наблюдаемы.",
+    rules: [
+      { id: "KR-LEADING", pass: false, severity: "critical", unconfirmed: true },
+      { id: "KR-MEASURABLE", pass: true, severity: "critical" },
+    ],
+  };
+  applyScoreRecompute(data);
+  reconcileAuditVerdict(data);
+  assertEquals(data.status, "pass");
+  assertEquals(data.summary, "Метрики наблюдаемы.");
 });
 
 // --- applyScoreRecompute: чистая логика серверного пересчёта ---
@@ -1124,6 +1176,9 @@ Deno.test("handler: growth_direction без [У] → KR-REQUIRED-ANGLES fail о�
     assertEquals(a[0].pass, false);
     assertEquals(a[0].missing, ["У"]);
     assertEquals(a[0].unconfirmed, undefined);
+    assertEquals(data.status, "fail", "server must override the model's pass verdict");
+    assert(data.summary.includes("KR-REQUIRED-ANGLES"));
+    assert(!data.summary.includes("корректировки не требуются"));
     const c = data.rules.find((x: any) => x.id === "KR-COUNT");
     assertEquals(c.pass, true, "2 KR в OKR из направления — в диапазоне 2–4 (О11)");
     assertEquals(c.checklist_ref, "О11");

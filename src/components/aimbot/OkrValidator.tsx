@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ShieldCheck, Loader2, Plus, Trash2, Wand2, Check, X, ArrowRight, Sparkles, BookmarkPlus, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,14 +76,42 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const effectiveType: OkrType | undefined = fromDirection ? "aspirational" : okrType;
   const ctxBody = { okr_type: effectiveType, okr_origin: okrOrigin, owner: owner.trim(), way_known: okrOrigin === "regular" ? wayKnown : undefined };
   const metaToSave = { okrType: effectiveType, okrOrigin, owner: owner.trim() || undefined, wayKnown: okrOrigin === "regular" ? wayKnown : undefined };
-  const [loading, setLoading] = useState(false);
+  const [pendingAudit, setPendingAudit] = useState<{ signature: string; requestId: number } | null>(null);
   const [fixing, setFixing] = useState(false);
-  const [report, setReport] = useState<ValidationReport | null>(null);
+  const [reportState, setReportState] = useState<{ signature: string; value: ValidationReport } | null>(null);
   const [sourceOkrId, setSourceOkrId] = useState<string | undefined>(undefined);
   const [saveParentLink, setSaveParentLink] = useState<{ parentOkrId: string; parentKrIndex: number } | null>(null);
   const { buildContext } = useDocs();
   const { model } = useAiModel();
   const { items: savedItems, save: saveOkr, replace: replaceOkr } = useSavedOkrs();
+
+  // An audit is valid only for the exact inputs supplied to the AI.
+  // Include the document context: changing methodology must invalidate the result too.
+  const auditContext = buildContext(["methodology", "okr_context"]);
+  const auditSignature = JSON.stringify({
+    objective: objective.trim(),
+    key_results: krs.map((k) => k.trim()).filter(Boolean),
+    key_results_full: krsFull,
+    horizon,
+    ...ctxBody,
+    model,
+    extra_context: auditContext,
+  });
+  const signatureRef = useRef(auditSignature);
+  signatureRef.current = auditSignature;
+  const auditRequestRef = useRef(0);
+  const loading = pendingAudit?.signature === auditSignature;
+
+  // An earlier report is never presented as an assessment of edited inputs.
+  const report = reportState?.signature === auditSignature ? reportState.value : null;
+  const setReport = (next: React.SetStateAction<ValidationReport | null>) => {
+    const signature = auditSignature;
+    setReportState((previous) => {
+      const current = previous?.signature === signature ? previous.value : null;
+      const value = typeof next === "function" ? next(current) : next;
+      return value ? { signature, value } : null;
+    });
+  };
 
   useEffect(() => {
     if (!draft) return;
@@ -133,21 +161,26 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           .filter(Boolean) as ValidationKR[]
       : undefined;
 
-    setLoading(true);
+    const signature = auditSignature;
+    const requestId = ++auditRequestRef.current;
+    setPendingAudit({ signature, requestId });
     setReport(null);
     try {
-      const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
-        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context, model, ...ctxBody },
+        body: { mode: "audit", objective: obj, key_results: cleaned, key_results_full: fullCleaned, horizon, extra_context: auditContext, model, ...ctxBody },
       });
+      // Discard responses for an edited OKR or a superseded request.
+      if (signatureRef.current !== signature || auditRequestRef.current !== requestId) return;
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       setReport(data as ValidationReport);
       toast.success(`Аудит готов · оценка ${(data as ValidationReport).score}/100`);
     } catch (e: any) {
-      toast.error(e?.message || "Ошибка валидации");
+      if (signatureRef.current === signature && auditRequestRef.current === requestId) {
+        toast.error(e?.message || "Ошибка валидации");
+      }
     } finally {
-      setLoading(false);
+      setPendingAudit((current) => current?.requestId === requestId ? null : current);
     }
   };
 
@@ -158,9 +191,9 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     if (!report || failedRules.length === 0) return;
     const cleaned = krs.map((k) => k.trim()).filter(Boolean);
     if (cleaned.length === 0) return toast.error("Добавьте хотя бы один Key Result");
+    const signature = auditSignature;
     setFixing(true);
     try {
-      const extra_context = buildContext(["methodology", "okr_context"]);
       const { data, error } = await supabase.functions.invoke("validate-okr", {
         body: {
           mode: "fix",
@@ -169,10 +202,11 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           horizon,
           ...ctxBody,
           failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why })),
-          extra_context,
+          extra_context: auditContext,
           model,
         },
       });
+      if (signatureRef.current !== signature) return;
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
       const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
@@ -185,8 +219,10 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       } : p);
       toast.success("AI-предложения по улучшению готовы");
     } catch (e: any) {
-      const msg = e?.message || "Не удалось получить исправления";
-      toast.error(msg);
+      if (signatureRef.current === signature) {
+        const msg = e?.message || "Не удалось получить исправления";
+        toast.error(msg);
+      }
     } finally {
       setFixing(false);
     }

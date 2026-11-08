@@ -413,3 +413,67 @@ describe("renderWithPlaceholders (unit)", () => {
     expect(vi.mocked(toast.message)).toHaveBeenCalledWith("Проверьте происхождение OKR: рост или защита");
   });
 });
+
+
+describe("F-01: audit is tied to the exact OKR input", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("invalidates the report and disables handoff when Objective changes", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    const onSend = vi.fn();
+    renderWithProviders(<OkrValidator draft={{ objective: "Первый Objective", key_results: ["Рост конверсии с 20 до 30%"] }} onSendToSolutions={onSend} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+    await userEvent.clear(screen.getByDisplayValue("Первый Objective"));
+    await userEvent.type(screen.getByPlaceholderText(/напр. Увеличить количество/), "Другой Objective");
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Оценка 85\/100/)).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the report on a KR edit and on changes to audit parameters", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Цель", key_results: ["Рост конверсии с 20 до 30%"] }} onSendToSolutions={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+    await userEvent.type(screen.getByDisplayValue("Рост конверсии с 20 до 30%"), " в Q1");
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+    await userEvent.click(screen.getByRole("button", { name: /Квартал · 3 мес/i }));
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+    await userEvent.type(screen.getByTestId("okr-owner-input"), "Иван Иванов");
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+  });
+
+  it("ignores a delayed response for an older Objective", async () => {
+    let resolveFirst!: (value: { data: typeof validReport; error: null }) => void;
+    invokeMock.mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }));
+    const onSend = vi.fn();
+    renderWithProviders(<OkrValidator draft={{ objective: "Исходный", key_results: ["Рост конверсии с 20 до 30%"] }} onSendToSolutions={onSend} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    await userEvent.type(screen.getByDisplayValue("Исходный"), " исправлен");
+    resolveFirst({ data: validReport, error: null });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("accepts a fresh audit after editing the OKR", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Исходный", key_results: ["Рост конверсии с 20 до 30%"] }} onSendToSolutions={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+    await userEvent.type(screen.getByDisplayValue("Исходный"), " исправлен");
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByRole("button", { name: /Передать в Решения/i });
+  });
+});

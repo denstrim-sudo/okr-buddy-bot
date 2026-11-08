@@ -752,6 +752,14 @@ Deno.test("buildEditorParameters содержит rewritten_* и опциона�
     "editor_note.description должен упоминать плейсхолдеры X/Y");
 });
 
+Deno.test("F-04.3: auditing asks for meaning-based KR perspectives, independently of wording and form", () => {
+  const prompt = buildSystemPrompt("block_12m", { okr_origin: "protection_direction" });
+  assert(prompt.includes("Ракурс определяется назначением измеряемого результата, а НЕ формулой"));
+  assert(prompt.includes("Снижение количества критических инцидентов"));
+  assert(prompt.includes("Раннее обнаружение отклонений не является обучением само по себе"));
+  assert(prompt.includes("для каждого KR обоснуй"));
+});
+
 Deno.test("buildEditorPrompt содержит инструкцию 'закрой ВСЕ проваленные правила разом' и список проваленных правил", () => {
   const p = buildEditorPrompt(
     "Стать лидером",

@@ -627,3 +627,34 @@ describe("F-03: complete an edit session before re-auditing", () => {
     expect(screen.queryByTestId("historical-audit-warning")).toBeInTheDocument();
   });
 });
+
+
+describe("F-04.2: server returns guidance instead of cosmetic rewrites", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("shows required owner decision, passes perspectives, and avoids an empty re-audit cycle", async () => {
+    invokeMock.mockResolvedValueOnce({ data: { ...validReport, score: 60, kr_perspectives: [
+      { index: 0, perspective: "К", timing: "lagging", rationale: "" },
+      { index: 1, perspective: "О", timing: "lagging", rationale: "" },
+    ] }, error: null });
+    invokeMock.mockResolvedValueOnce({ data: {
+      rewritten_objective: "Снизить отказы",
+      rewritten_key_results: ["KR one", "KR two"],
+      editor_note: "О13: согласуйте опережающий [К], сохранив [О].",
+      fix_status: "requires_input",
+    }, error: null });
+    renderWithProviders(<OkrValidator draft={{ objective: "Снизить отказы", key_results: ["KR one", "KR two"] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByTestId("request-fix-button");
+    await userEvent.click(screen.getByTestId("request-fix-button"));
+    expect(await screen.findByTestId("editor-actionable-guidance")).toHaveTextContent("О13");
+    expect(screen.queryByRole("button", { name: /Принять новую/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Завершить исправления и перепроверить/i })).not.toBeInTheDocument();
+    expect(invokeMock.mock.calls[1][1].body.kr_perspectives).toHaveLength(2);
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+});

@@ -54,6 +54,15 @@ describe("KrPerspectives", () => {
     expect(screen.queryByTestId("kr-perspectives-missing")).toBeNull();
   });
 
+  it("показывает объяснение ракурса непосредственно на экране, а не только в tooltip", () => {
+    render(<KrPerspectives keyResults={KRS} perspectives={[
+      { index: 0, perspective: "К", rationale: "Метрика описывает результат для клиента", timing: "lagging" },
+      { index: 1, perspective: "О", rationale: "Метрика контролирует риск массовых сбоев", timing: "leading" },
+    ]} />);
+    expect(screen.getByTestId("kr-rationale-0")).toHaveTextContent("Метрика описывает результат для клиента");
+    expect(screen.getByTestId("kr-rationale-1")).toHaveTextContent("Метрика контролирует риск массовых сбоев");
+  });
+
   it("ничего не рендерит без данных", () => {
     const { container } = render(<KrPerspectives keyResults={KRS} perspectives={[]} />);
     expect(container).toBeEmptyDOMElement();

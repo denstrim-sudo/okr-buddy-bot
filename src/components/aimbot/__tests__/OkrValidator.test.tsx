@@ -580,6 +580,18 @@ describe("F-03: complete an edit session before re-auditing", () => {
     expect(screen.getByRole("button", { name: /Завершить исправления и перепроверить/i })).toBeInTheDocument();
   });
 
+  it("does not automatically re-audit when accepting remaining suggestions", async () => {
+    await start();
+    await userEvent.click(screen.getByRole("button", { name: /Принять остальные исправления/i }));
+    expect(screen.getByDisplayValue(revised.rewritten_objective)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(revised.rewritten_key_results[0])).toBeInTheDocument();
+    expect(screen.getByDisplayValue(revised.rewritten_key_results[1])).toBeInTheDocument();
+    expect(screen.getByTestId("historical-audit-warning")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Передать в Решения/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("save-as-new-button")).not.toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+
   it("on successful re-audit shows before/after and restores current actions", async () => {
     await start();
     await userEvent.click(screen.getAllByRole("button", { name: /Принять новую/i })[0]);

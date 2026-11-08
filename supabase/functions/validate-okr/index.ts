@@ -139,6 +139,8 @@ ${failedBlock}
 - rewritten_key_results ДОЛЖНЫ идти в том же порядке и количестве, что и исходные KR.
 - Если конкретный KR уже хорош — верни его исходную формулировку без изменений.
 - Не смешивай имя правила (OBJ-*, KR-*) с номером KR: имена правил — это ярлыки аудита, а не позиции KR.
+- Для направления сохраняй обязательные ракурсы: [К], [У], а для защитного также [О]. Не заменяй единственный [О] или [У] на [К] ради KR-LEADING (О13).
+- Если проблема структурная и без новых подтверждённых данных исправление невозможно, НЕ имитируй улучшение косметическими заменами. Сохрани исходные KR и в editor_note объясни, какой ведущий [К] нужно определить совместно с владельцем результата.
 - Все rewritten_* и editor_note — на русском.
 
 editor_note: 1-2 предложения о том, что изменено, что сохранено от оригинала, и откуда пользователю взять реальные значения для плейсхолдеров X/Y.
@@ -339,7 +341,7 @@ export function isAuditSuspicious(data: any): boolean {
 // ---------------------------------------------------------------------------
 
 async function runFixMode(req: Request, body: any): Promise<Response> {
-  const { objective, key_results, failed_rules, horizon, extra_context, model, okr_type, okr_status, okr_origin, owner, way_known } = body;
+  const { objective, key_results, failed_rules, kr_perspectives, horizon, extra_context, model, okr_type, okr_status, okr_origin, owner, way_known } = body;
   if (!objective || typeof objective !== "string" || objective.trim().length < 3) {
     return errorJson("Objective is required (min 3 chars)", 400);
   }
@@ -349,6 +351,25 @@ async function runFixMode(req: Request, body: any): Promise<Response> {
   const h: string = horizon === "strategic_3y" || horizon === "block_12m" || horizon === "quarter_3m" ? horizon : "block_12m";
   const krTexts = (key_results as string[]).map((t) => String(t));
   const failed = Array.isArray(failed_rules) ? failed_rules : [];
+  const origin = normalizeOkrOrigin(okr_origin, okr_status);
+  const direction = origin === "growth_direction" || origin === "protection_direction";
+  const hasLeadingGap = direction && failed.some((r: { id?: string }) => r?.id === "KR-LEADING");
+  const perspectives = Array.isArray(kr_perspectives) ? kr_perspectives : [];
+  const completePerspectives = perspectives.length === krTexts.length &&
+    perspectives.every((p: any, i: number) =>
+      p && p.index === i && ["К", "О", "У"].includes(p.perspective) &&
+      ["leading", "lagging"].includes(p.timing)
+    );
+  // Structural gaps need the result owner's input, not an AI-generated rephrasing.
+  // This is deliberately limited to the fully classified single-violation case.
+  if (hasLeadingGap && failed.length === 1 && completePerspectives) {
+    return json({
+      rewritten_objective: String(objective),
+      rewritten_key_results: krTexts,
+      fix_status: "requires_input",
+      editor_note: "О13: нужен опережающий [К] — показатель, который изменится до итогового клиентского результата. Согласуйте с владельцем результата конкретный драйвер и квартальные контрольные точки. Не заменяйте существующий [О] (риски) или [У] (обучение) ради формального прохождения аудита. Если текущий [К] уже является ведущим по смыслу, проверьте его классификацию.",
+    });
+  }
 
   const systemPrompt = buildEditorPrompt(String(objective), krTexts, failed, h, {
     okr_type: normalizeOkrType(okr_type), okr_origin: normalizeOkrOrigin(okr_origin, okr_status),
@@ -387,10 +408,26 @@ async function runFixMode(req: Request, body: any): Promise<Response> {
     return await r.json();
   });
 
+  // Do not silently remove the only risk/learning KR to manufacture a leading [К].
+  // We cannot infer a revised KR's perspective reliably from text alone.
+  // Conservatively preserve unique [О]/[У] statements in this structural case.
+  if (hasLeadingGap && completePerspectives && Array.isArray((finalData as any).rewritten_key_results)) {
+    const protectedIndices = perspectives
+      .filter((p: any) => (p.perspective === "О" || p.perspective === "У") &&
+        perspectives.filter((other: any) => other.perspective === p.perspective).length === 1)
+      .map((p: any) => p.index as number);
+    const corrected = [...(finalData as any).rewritten_key_results];
+    const changes = protectedIndices.filter((i: number) => typeof corrected[i] === "string" && corrected[i].trim() !== krTexts[i].trim());
+    for (const i of changes) corrected[i] = krTexts[i];
+    if (changes.length) {
+      (finalData as any).rewritten_key_results = corrected;
+      (finalData as any).editor_note = [(finalData as any).editor_note, "Сохранены обязательные ракурсы [О] и [У]: предлагаемая замена единственного KR этого ракурса отклонена. О13 требует отдельного опережающего [К], а не подмены риска или обучения."].filter(Boolean).join(" ");
+    }
+  }
+
   const modelUsed = typeof (finalData as any).__model_used === "string"
     ? (finalData as any).__model_used
     : undefined;
-  delete (finalData as any).__model_used;
   if (modelUsed) (finalData as any).model_used = modelUsed;
 
   return json(finalData);

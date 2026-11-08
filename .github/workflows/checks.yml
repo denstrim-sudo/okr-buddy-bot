@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install dependencies (temporary: lockfile is out of sync)
+      - name: 'Install dependencies (temporary lockfile workaround)'
         run: npm install --no-package-lock
       - name: Run unit tests
         run: npm test

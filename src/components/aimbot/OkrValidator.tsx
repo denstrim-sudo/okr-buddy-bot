@@ -366,10 +366,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const statusLabel =
     report?.status === "pass" ? "Соответствует" : report?.status === "warn" ? "Требует доработки" : report?.status === "fail" ? "Не соответствует" : null;
 
-  const hasRewrites = reviewReport && (
-    (reviewReport.rewritten_objective && reviewReport.rewritten_objective.trim()) ||
-    reviewReport.rewritten_key_results?.some((x) => x && x.trim())
-  );
+  // A repeated original statement is guidance, not a proposed correction.
+  const hasRewrites = Boolean(reviewReport && (
+    (reviewReport.rewritten_objective?.trim() && reviewReport.rewritten_objective.trim() !== (revision?.objective ?? objective).trim()) ||
+    reviewReport.rewritten_key_results?.some((text, i) =>
+      text?.trim() && text.trim() !== (revision?.krs[i] ?? krs[i] ?? "").trim()
+    )
+  ));
 
   return (
     <Card data-testid="okr-validator" className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">

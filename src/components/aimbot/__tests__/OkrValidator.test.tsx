@@ -540,7 +540,8 @@ describe("F-02: KR text and structured metadata stay consistent", () => {
     await screen.findByText("Доля завершённых операций выше 99%");
     await userEvent.click(screen.getAllByRole("button", { name: /Принять/i }).at(-1)!);
     await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(3));
-    expect(invokeMock.mock.calls[2][1].body.key_results_full[0]).toEqual({ text: "Доля завершённых операций выше 99%" });
+    await waitFor(() => expect(invokeMock.mock.calls.filter((args) => args[1]?.body?.mode === "audit").length).toBe(2));
+    const auditCalls = invokeMock.mock.calls.filter((args) => args[1]?.body?.mode === "audit");
+    expect(auditCalls.at(-1)![1].body.key_results_full[0]).toEqual({ text: "Доля завершённых операций выше 99%" });
   });
 });

@@ -44,7 +44,11 @@ export function okrOriginLabel(o?: OkrOrigin): string {
 }
 
 function anglesLine(o?: OkrOrigin): string {
-  return `Для OKR «${okrOriginLabel(o)}» обязательны ракурсы: ${requiredAnglesFor(o).map((a) => `[${a}]`).join(" и ")} (тип OKR на ракурсы не влияет).`;
+  const required = requiredAnglesFor(o).map((a) => `[${a}]`).join(" и ");
+  const optionalRisk = o === "protection_direction"
+    ? " Ракурс [О] — условный: добавляется, когда есть конкретный риск, который необходимо ограничить; если [О] выбран, риск должен быть назван. Отсутствие [О] само по себе не является нарушением."
+    : "";
+  return `Для OKR «${okrOriginLabel(o)}» обязательны ракурсы: ${required} (тип OKR на ракурсы не влияет).${optionalRisk}`;
 }
 
 const ID_NOTE = `ВАЖНО: идентификаторы правил ниже (OBJ-*, KR-*) — это ИМЕНА ПРАВИЛ АУДИТА, а НЕ номера ключевых результатов пользователя. Когда ссылаешься на конкретный KR пользователя в hint/reasoning — указывай его по позиции ("второй KR", "KR №2"), а имя правила пиши как есть (KR-OUTCOME, KR-LEADING).`;

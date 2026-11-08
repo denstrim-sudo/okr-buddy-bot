@@ -252,9 +252,19 @@ Deno.test("computeRequiredAngles: тип mixed не влияет — regular К,
   assertEquals(r.pass, false);
   assertEquals(r.missing, ["О"]);
 });
-Deno.test("computeRequiredAngles: protection_direction К,К,У → fail, missing О (N10)", () => {
+Deno.test("computeRequiredAngles: protection_direction К,К,У → pass без условного [О]", () => {
   const r = computeRequiredAngles(P("К", "К", "У"), 3, { okr_origin: "protection_direction" });
-  assertEquals(r.missing, ["О"]);
+  assertEquals(r.pass, true);
+  assertEquals(r.missing, []);
+});
+Deno.test("computeRequiredAngles: protection_direction К,О,У → pass с ракурсом риска", () => {
+  const r = computeRequiredAngles(P("К", "О", "У"), 3, { okr_origin: "protection_direction" });
+  assertEquals(r.pass, true);
+});
+Deno.test("computeRequiredAngles: protection_direction К,К,О → fail без обязательного [У]", () => {
+  const r = computeRequiredAngles(P("К", "К", "О"), 3, { okr_origin: "protection_direction" });
+  assertEquals(r.pass, false);
+  assertEquals(r.missing, ["У"]);
 });
 Deno.test("computeRequiredAngles: разметка неполная (3 из 4) → unreliable", () => {
   const r = computeRequiredAngles(P("К", "К", "О"), 4, { okr_type: "committed" });
@@ -448,7 +458,7 @@ Deno.test("OKR-TYPE-DECLARED: для OKR из направления pass без
 });
 Deno.test("requiredAnglesFor по происхождению", () => {
   assertEquals(requiredAnglesFor("growth_direction"), ["К", "У"]);
-  assertEquals(requiredAnglesFor("protection_direction"), ["К", "О", "У"]);
+  assertEquals(requiredAnglesFor("protection_direction"), ["К", "У"]);
   assertEquals(requiredAnglesFor("regular"), ["К", "О"]);
 });
 Deno.test("KR-COUNT: growth/protection 2–4 (О11), regular 3–5 (О15)", () => {

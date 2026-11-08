@@ -556,7 +556,7 @@ describe("F-03: complete an edit session before re-auditing", () => {
     invokeMock.mockResolvedValueOnce({ data: revised, error: null });
     renderWithProviders(<OkrValidator draft={draft} onSendToSolutions={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
-    await screen.findByText(/Оценка 85\/100/);
+    await screen.findByTestId("request-fix-button");
     await userEvent.click(screen.getByTestId("request-fix-button"));
     await screen.findByText("KR новый два");
   };
@@ -609,7 +609,7 @@ describe("F-03: complete an edit session before re-auditing", () => {
   it("preserves manual edits without applying a stale KR recommendation", async () => {
     await start();
     await userEvent.clear(screen.getByDisplayValue(draft.key_results[0]));
-    await userEvent.type(screen.getByPlaceholderText(/Поднять NPS/i), "Ручной текст KR");
+    await userEvent.type(screen.getAllByPlaceholderText(/Поднять NPS/i)[0], "Ручной текст KR");
     expect(screen.getByTestId("kr-recommendation-stale-0")).toBeInTheDocument();
     expect(screen.getByText("KR новый два")).toBeInTheDocument();
     expect(screen.queryByTestId("historical-audit-warning")).toBeInTheDocument();

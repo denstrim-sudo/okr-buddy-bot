@@ -221,7 +221,8 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           key_results: cleaned,
           horizon,
           ...ctxBody,
-          failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why })),
+          failed_rules: failedRules.map((r) => ({ id: r.id, label: r.label, hint: r.hint, why: r.why, reasoning: r.reasoning, evidence: r.evidence })),
+          kr_perspectives: report.kr_perspectives ?? [],
           extra_context: auditContext,
           model,
         },
@@ -229,7 +230,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       if (signatureRef.current !== signature) return;
       if (error || (data as any)?.error) throw new Error(describeInvokeError(error, data));
       notifyModelFallback(data);
-      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string };
+      const d = data as { rewritten_objective?: string; rewritten_key_results?: string[]; rewritten_objective_warning?: boolean; editor_note?: string; model_used?: string; fix_status?: "requires_input" };
       setRevision({
         objective,
         krs: [...krs],
@@ -241,7 +242,11 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           editor_note: d.editor_note,
         },
       });
-      toast.success("AI-предложения по улучшению готовы");
+      if (d.fix_status === "requires_input") {
+        toast.message("Нужно содержательное решение: автоматическая перефразировка не поможет");
+      } else {
+        toast.success("AI-предложения по улучшению готовы");
+      }
     } catch (e: any) {
       if (signatureRef.current === signature) {
         const msg = e?.message || "Не удалось получить исправления";
@@ -361,10 +366,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const statusLabel =
     report?.status === "pass" ? "Соответствует" : report?.status === "warn" ? "Требует доработки" : report?.status === "fail" ? "Не соответствует" : null;
 
-  const hasRewrites = reviewReport && (
-    (reviewReport.rewritten_objective && reviewReport.rewritten_objective.trim()) ||
-    reviewReport.rewritten_key_results?.some((x) => x && x.trim())
-  );
+  // A repeated original statement is guidance, not a proposed correction.
+  const hasRewrites = Boolean(reviewReport && (
+    (reviewReport.rewritten_objective?.trim() && reviewReport.rewritten_objective.trim() !== (revision?.objective ?? objective).trim()) ||
+    reviewReport.rewritten_key_results?.some((text, i) =>
+      text?.trim() && text.trim() !== (revision?.krs[i] ?? krs[i] ?? "").trim()
+    )
+  ));
 
   return (
     <Card data-testid="okr-validator" className="flex flex-col gap-5 border-border/60 bg-card p-6 shadow-md">
@@ -530,7 +538,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           </span>
         </div>
       )}
-      {revision && (
+      {revision && historicalAudit && (
         <div className="space-y-2 rounded-lg border border-warning/40 bg-warning-soft/30 p-3">
           {historicalAudit && (
             <p data-testid="historical-audit-warning" className="text-xs text-warning">
@@ -729,6 +737,12 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
         </div>
       )}
 
+      {revision && !hasRewrites && revision.report.editor_note && (
+        <div data-testid="editor-actionable-guidance" className="rounded-xl border border-warning/40 bg-warning-soft/30 p-4 text-sm">
+          <p className="mb-1 font-semibold">Для исправления нужны дополнительные решения или данные</p>
+          <p>{revision.report.editor_note}</p>
+        </div>
+      )}
       {hasRewrites && (
         <div className="space-y-3 rounded-xl border border-primary/20 bg-accent/30 p-4">
           <div className="flex items-center gap-2">

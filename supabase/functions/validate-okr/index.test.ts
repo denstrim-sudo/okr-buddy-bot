@@ -1138,6 +1138,64 @@ Deno.test({
   },
 });
 
+
+Deno.test("F-04.2: structural leading [К] gap returns actionable guidance without an AI call", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const history = queueAiResponses([{ rewritten_objective: "Просто перефразировано", rewritten_key_results: ["Подменить К", "Подменить О", "Подменить У"] }]);
+  const original = [
+    "Доля неуспешных операций с 1,8% до 0,5%",
+    "Критических инцидентов с 12 до 4",
+    "Доля обнаружения отклонений с 45% до 85%",
+  ];
+  try {
+    const { status, data } = await callHandler(handler, {
+      ...baseBody, mode: "fix", okr_origin: "protection_direction",
+      key_results: original,
+      failed_rules: [{ id: "KR-LEADING", hint: "О13: нужен опережающий [К]" }],
+      kr_perspectives: [
+        { index: 0, perspective: "К", timing: "lagging" },
+        { index: 1, perspective: "О", timing: "lagging" },
+        { index: 2, perspective: "У", timing: "leading" },
+      ],
+    });
+    assertEquals(status, 200);
+    assertEquals(history().length, 0, "do not spend tokens on an unfixable structural gap");
+    assertEquals(data.fix_status, "requires_input");
+    assertEquals(data.rewritten_key_results, original);
+    assert(data.editor_note.includes("О13"));
+    assert(data.editor_note.includes("[К]"));
+    assert(data.editor_note.includes("[О]"));
+  } finally { _restoreFetch(); }
+});
+
+Deno.test("F-04.2: preserve unique [О] KR when AI would replace it to satisfy leading [К]", async () => {
+  Deno.env.set("AIAI_API_KEY", "test-key");
+  const original = ["Доля отказов 1,8%→0,5%", "Критических инцидентов 12→4", "Выявления до жалоб 45%→85%"];
+  const history = queueAiResponses([{
+    rewritten_objective: "Надёжное обслуживание",
+    rewritten_key_results: [original[0], "Доля обнаружения инцидентов X→Y", original[2]],
+    editor_note: "KR2 заменён для опережающего [К]",
+  }]);
+  try {
+    const { data } = await callHandler(handler, {
+      ...baseBody, mode: "fix", okr_origin: "protection_direction",
+      key_results: original,
+      failed_rules: [
+        { id: "KR-LEADING", hint: "О13" },
+        { id: "KR-BASELINE-TARGET", hint: "уточнить" },
+      ],
+      kr_perspectives: [
+        { index: 0, perspective: "К", timing: "lagging" },
+        { index: 1, perspective: "О", timing: "lagging" },
+        { index: 2, perspective: "У", timing: "leading" },
+      ],
+    });
+    assertEquals(history().length, 1);
+    assertEquals(data.rewritten_key_results[1], original[1]);
+    assert(data.editor_note.includes("[О]"));
+  } finally { _restoreFetch(); }
+});
+
 Deno.test("handler: mode=fix — температура по умолчанию 0.4 (не 0)", async () => {
   Deno.env.set("AIAI_API_KEY", "test-key");
   const getHistory = queueAiResponses([{ rewritten_objective: "Клиент доволен", rewritten_key_results: ["a", "b"] }]);

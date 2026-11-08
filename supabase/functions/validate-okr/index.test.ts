@@ -757,7 +757,7 @@ Deno.test("F-04.3: auditing asks for meaning-based KR perspectives, independentl
   assert(prompt.includes("Ракурс определяется назначением измеряемого результата, а НЕ формулой"));
   assert(prompt.includes("Снижение количества критических инцидентов"));
   assert(prompt.includes("Раннее обнаружение отклонений не является обучением само по себе"));
-  assert(prompt.includes("для каждого KR обоснуй"));
+  assert(prompt.includes("Для каждого KR обоснуй"));
 });
 
 Deno.test("buildEditorPrompt содержит инструкцию 'закрой ВСЕ проваленные правила разом' и список проваленных правил", () => {

@@ -78,7 +78,8 @@ export interface GeneratedKR {
   baseline: string;
   target: string;
   metric: string;
-  kr_type: "leading" | "lagging";
+  /** May be unknown after a KR statement is edited. */
+  kr_type?: "leading" | "lagging";
   solutions: GeneratedSolution[];
 }
 

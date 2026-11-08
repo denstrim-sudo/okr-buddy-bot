@@ -535,7 +535,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
           </span>
         </div>
       )}
-      {revision && (
+      {revision && historicalAudit && (
         <div className="space-y-2 rounded-lg border border-warning/40 bg-warning-soft/30 p-3">
           {historicalAudit && (
             <p data-testid="historical-audit-warning" className="text-xs text-warning">

@@ -62,6 +62,15 @@ export const renderWithPlaceholders = (text: string): React.ReactNode => {
   return parts.length ? parts : text;
 };
 
+/**
+ * KR metadata is valid for its original statement, not for a rewritten one.
+ * Whitespace-only edits preserve the statement and its structured fields.
+ */
+const reconcileKrMetadata = (previous: ValidationKR | undefined, text: string): ValidationKR =>
+  previous && previous.text.trim() === text.trim()
+    ? { ...previous, text }
+    : { text };
+
 export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const [objective, setObjective] = useState(DEFAULT_DRAFT.objective);
   const [krs, setKrs] = useState<string[]>(DEFAULT_DRAFT.key_results);
@@ -132,7 +141,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
 
   const updateKr = (i: number, v: string) => {
     setKrs((p) => p.map((x, idx) => (idx === i ? v : x)));
-    setKrsFull((p) => (p ? p.map((x, idx) => (idx === i ? { ...x, text: v } : x)) : p));
+    setKrsFull((p) => (p ? p.map((x, idx) => (idx === i ? reconcileKrMetadata(x, v) : x)) : p));
   };
   const addKr = () => {
     setKrs((p) => [...p, ""]);
@@ -154,9 +163,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
       ? sourceKrs
           .map((text, i) => {
             const t = text.trim();
-            if (!t) return null;
-            const f = krsFull[i];
-            return f && f.text.trim() === t ? { ...f, text: t } : { text: t };
+            return t ? reconcileKrMetadata(krsFull[i], t) : null;
           })
           .filter(Boolean) as ValidationKR[]
       : undefined;
@@ -243,8 +250,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
   const acceptKr = (idx: number) => {
     if (!report?.rewritten_key_results?.[idx]) return;
     const newText = report.rewritten_key_results[idx];
-    setKrs((p) => p.map((x, i) => (i === idx ? newText : x)));
-    setKrsFull((p) => (p ? p.map((x, i) => (i === idx ? { ...x, text: newText } : x)) : p));
+    updateKr(idx, newText);
     setReport((p) =>
       p ? { ...p, rewritten_key_results: p.rewritten_key_results.map((x, i) => (i === idx ? "" : x)) } : p,
     );
@@ -263,6 +269,7 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     const newKrs = report.rewritten_key_results?.map((k, i) => (k && k.trim() ? k : (krs[i] ?? ""))) ?? krs;
     setObjective(newObjective);
     setKrs(newKrs);
+    setKrsFull((p) => p ? newKrs.map((text, i) => reconcileKrMetadata(p[i], text)) : null);
     setReport(null);
     toast.success("Все предложения приняты. Запускаю повторный аудит...");
     validate(newObjective, newKrs);
@@ -273,13 +280,13 @@ export const OkrValidator = ({ draft, onSendToSolutions }: Props) => {
     score: report?.score ?? 0,
     horizon,
     key_results: krs.map((text, i) => {
-      const f = krsFull?.[i];
+      const f = krsFull?.[i] && krsFull[i].text.trim() === text.trim() ? krsFull[i] : undefined;
       return {
         text: text.trim(),
         baseline: f?.baseline ?? "",
         target: f?.target ?? "",
         metric: f?.metric ?? "",
-        kr_type: f?.kr_type ?? "leading",
+        kr_type: f?.kr_type,
         solutions: [],
       };
     }).filter((k) => k.text.length > 0),

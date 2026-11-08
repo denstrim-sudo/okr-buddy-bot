@@ -477,3 +477,72 @@ describe("F-01: audit is tied to the exact OKR input", () => {
     await screen.findByRole("button", { name: /Передать в Решения/i });
   });
 });
+
+
+describe("F-02: KR text and structured metadata stay consistent", () => {
+  const draft = {
+    objective: "Повысить устойчивость клиентских операций",
+    key_results: ["Увеличить долю успешных операций с 90% до 97%", "Сократить время ожидания с 8 до 4 минут"],
+    key_results_full: [
+      { text: "Увеличить долю успешных операций с 90% до 97%", baseline: "90%", target: "97%", metric: "Успешные операции", kr_type: "lagging" as const },
+      { text: "Сократить время ожидания с 8 до 4 минут", baseline: "8", target: "4", metric: "Минуты ожидания", kr_type: "leading" as const },
+    ],
+  };
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("sends original metadata for an unchanged KR but discards it for an edited KR", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={draft} />);
+    await userEvent.type(screen.getByDisplayValue(draft.key_results[0]), " в новом сегменте");
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.key_results_full).toEqual([
+      { text: draft.key_results[0] + " в новом сегменте" },
+      draft.key_results_full[1],
+    ]);
+  });
+
+  it("persists no stale baseline, target, metric or KR type after text edits", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={draft} />);
+    await userEvent.type(screen.getByDisplayValue(draft.key_results[0]), " в новом сегменте");
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    await userEvent.click(await screen.findByTestId("save-as-new-button"));
+    const saved = JSON.parse(localStorage.getItem("aimbot.savedOkrs.v1")!);
+    const results = saved[0].plan.key_results;
+    expect(results[0]).toMatchObject({ text: draft.key_results[0] + " в новом сегменте", baseline: "", target: "", metric: "" });
+    expect(results[0].kr_type).toBeUndefined();
+    expect(results[1]).toMatchObject({ text: draft.key_results[1], baseline: "8", target: "4", metric: "Минуты ожидания", kr_type: "leading" });
+  });
+
+  it("retains valid metadata for whitespace-only edits", async () => {
+    invokeMock.mockResolvedValue({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={draft} />);
+    await userEvent.type(screen.getByDisplayValue(draft.key_results[0]), "  ");
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock.mock.calls[0][1].body.key_results_full[0]).toEqual(draft.key_results_full[0]);
+  });
+
+  it("drops old KR metadata when accepting an AI-rewritten KR", async () => {
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    invokeMock.mockResolvedValueOnce({ data: { rewritten_objective: "", rewritten_key_results: ["Доля завершённых операций выше 99%", ""] }, error: null });
+    invokeMock.mockResolvedValueOnce({ data: validReport, error: null });
+    renderWithProviders(<OkrValidator draft={draft} />);
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await screen.findByText(/Оценка 85\/100/);
+    await userEvent.click(screen.getByTestId("request-fix-button"));
+    await screen.findByText("Доля завершённых операций выше 99%");
+    await userEvent.click(screen.getByRole("button", { name: /^Принять новую$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Запустить аудит/i }));
+    await waitFor(() => expect(invokeMock.mock.calls.filter((args) => args[1]?.body?.mode === "audit").length).toBe(2));
+    const auditCalls = invokeMock.mock.calls.filter((args) => args[1]?.body?.mode === "audit");
+    expect(auditCalls.at(-1)![1].body.key_results_full[0]).toEqual({ text: "Доля завершённых операций выше 99%" });
+  });
+});
